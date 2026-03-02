@@ -216,6 +216,7 @@ export default function KnowledgeBase() {
 
   if (!user || user.role !== "admin") {
     return (
+      <DashboardLayout>
       <div className="min-h-screen flex flex-col" dir={dir}>
 <main className="flex-1 flex items-center justify-center">
           <Card className="max-w-md mx-auto text-center p-8">
@@ -234,6 +235,7 @@ export default function KnowledgeBase() {
           </Card>
         </main>
       </div>
+      </DashboardLayout>
     );
   }
 
@@ -242,6 +244,7 @@ export default function KnowledgeBase() {
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen flex flex-col bg-background" dir={dir}>
 <main className="flex-1 py-8">
         <div className="container max-w-7xl">
@@ -577,5 +580,6 @@ export default function KnowledgeBase() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </DashboardLayout>
   );
 }
