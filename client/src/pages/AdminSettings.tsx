@@ -18,7 +18,7 @@ import {
   Settings, Image, Palette, DollarSign, FileText, Users, Shield, BarChart3,
   ArrowRight, ArrowLeft, Save, Upload, RefreshCw, Globe, MapPin, BookOpen, Building2,
   ChevronDown, ChevronUp, Eye, Trash2, Plus, Search, MessageCircle, Phone,
-  CreditCard, LayoutGrid, Home as HomeIcon, Video, UserCog, Calendar, Clock, HelpCircle, ToggleLeft, ToggleRight
+  CreditCard, LayoutGrid, Home as HomeIcon, Video, Calendar, Clock, HelpCircle, ToggleLeft, ToggleRight
 } from "lucide-react";
 
 export default function AdminSettings() {
@@ -282,7 +282,6 @@ export default function AdminSettings() {
             <TabsTrigger value="homepage" className="gap-2"><HomeIcon className="h-4 w-4" />{lang === "ar" ? "الصفحة الرئيسية" : "Homepage"}</TabsTrigger>
             <TabsTrigger value="payment" className="gap-2"><CreditCard className="h-4 w-4" />{lang === "ar" ? "الدفع" : "Payment"}</TabsTrigger>
             <TabsTrigger value="whatsapp" className="gap-2"><MessageCircle className="h-4 w-4" />{lang === "ar" ? "واتساب" : "WhatsApp"}</TabsTrigger>
-            <TabsTrigger value="managers" className="gap-2"><UserCog className="h-4 w-4" />{lang === "ar" ? "مدراء العقارات" : "Managers"}</TabsTrigger>
             <TabsTrigger value="inspections" className="gap-2"><Calendar className="h-4 w-4" />{lang === "ar" ? "طلبات المعاينة" : "Inspections"}</TabsTrigger>
             <TabsTrigger value="faq" className="gap-2"><HelpCircle className="h-4 w-4" />{lang === "ar" ? "الأسئلة الشائعة" : "FAQ"}</TabsTrigger>
             <TabsTrigger value="maintenance" className="gap-2"><Shield className="h-4 w-4" />{lang === "ar" ? "وضع الصيانة" : "Maintenance Mode"}</TabsTrigger>
@@ -1469,74 +1468,7 @@ export default function AdminSettings() {
             </Card>
           </TabsContent>
 
-          {/* Property Managers */}
-          <TabsContent value="managers">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserCog className="h-5 w-5" />
-                  {lang === "ar" ? "إدارة مدراء العقارات" : "Property Managers"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <p className="text-sm text-muted-foreground">
-                  {lang === "ar" 
-                    ? "أضف مدراء العقارات وعيّن كل مدير لمجموعة من الشقق. سيظهر اسم المدير وصورته وأرقام تواصله في صفحة العقار." 
-                    : "Add property managers and assign each to a group of properties. Manager name, photo, and contact info will appear on the property page."}
-                </p>
 
-                {/* Add New Manager Form */}
-                <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
-                  <h3 className="font-semibold">{lang === "ar" ? "إضافة مدير جديد" : "Add New Manager"}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <SettingField label={lang === "ar" ? "الاسم (عربي)" : "Name (Arabic)"} settingKey="newManager.nameAr" />
-                    <SettingField label={lang === "ar" ? "الاسم (إنجليزي)" : "Name (English)"} settingKey="newManager.name" />
-                    <SettingField label={lang === "ar" ? "الهاتف" : "Phone"} settingKey="newManager.phone" />
-                    <SettingField label={lang === "ar" ? "واتساب" : "WhatsApp"} settingKey="newManager.whatsapp" />
-                    <SettingField label={lang === "ar" ? "البريد" : "Email"} settingKey="newManager.email" />
-                    <SettingField label={lang === "ar" ? "المسمى الوظيفي (عربي)" : "Title (Arabic)"} settingKey="newManager.titleAr" />
-                    <SettingField label={lang === "ar" ? "المسمى الوظيفي (إنجليزي)" : "Title (English)"} settingKey="newManager.title" />
-                    <SettingField label={lang === "ar" ? "رابط الصورة" : "Photo URL"} settingKey="newManager.photoUrl" />
-                  </div>
-                  <BilingualField labelAr={lang === "ar" ? "نبذة" : "Bio"} labelEn={lang === "ar" ? "نبذة" : "Bio"} keyAr="newManager.bioAr" keyEn="newManager.bio" type="textarea" />
-                  <Button onClick={() => {
-                    const s = settings;
-                    if (!s["newManager.name"] || !s["newManager.nameAr"] || !s["newManager.phone"]) {
-                      toast.error(lang === "ar" ? "الاسم والهاتف مطلوبان" : "Name and phone are required");
-                      return;
-                    }
-                    // Use tRPC to create manager
-                    fetch('/api/trpc/propertyManager.create', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ json: {
-                        name: s["newManager.name"], nameAr: s["newManager.nameAr"],
-                        phone: s["newManager.phone"], whatsapp: s["newManager.whatsapp"] || "",
-                        email: s["newManager.email"] || "", photoUrl: s["newManager.photoUrl"] || "",
-                        bio: s["newManager.bio"] || "", bioAr: s["newManager.bioAr"] || "",
-                        title: s["newManager.title"] || "", titleAr: s["newManager.titleAr"] || "",
-                      }})
-                    }).then(() => {
-                      toast.success(lang === "ar" ? "تم إضافة المدير" : "Manager added");
-                      // Clear form
-                      const cleared = { ...settings };
-                      Object.keys(cleared).filter(k => k.startsWith('newManager.')).forEach(k => delete cleared[k]);
-                      setSettings(cleared);
-                    }).catch(() => toast.error("Error"));
-                  }}>
-                    <Plus className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
-                    {lang === "ar" ? "إضافة مدير" : "Add Manager"}
-                  </Button>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  {lang === "ar" 
-                    ? "لتعيين مدير لعقارات محددة، استخدم صفحة إدارة العقارات واختر المدير لكل عقار." 
-                    : "To assign a manager to specific properties, use the property management page and select the manager for each property."}
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           {/* Inspection Requests */}
           <TabsContent value="inspections">
