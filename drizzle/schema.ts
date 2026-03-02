@@ -935,3 +935,35 @@ export const geocodeCache = mysqlTable("geocode_cache", {
 });
 export type GeocodeCache = typeof geocodeCache.$inferSelect;
 export type InsertGeocodeCache = typeof geocodeCache.$inferInsert;
+
+// ─── CMS Content Versions ──────────────────────────────────────────
+export const cmsContentVersions = mysqlTable("cms_content_versions", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("settingKey", { length: 100 }).notNull(),
+  value: text("value"),
+  status: mysqlEnum("status", ["draft", "published", "archived"]).notNull().default("draft"),
+  version: int("version").notNull().default(1),
+  changedBy: int("changedBy"),
+  changedByName: varchar("changedByName", { length: 255 }),
+  changeNote: text("changeNote"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CmsContentVersion = typeof cmsContentVersions.$inferSelect;
+export type InsertCmsContentVersion = typeof cmsContentVersions.$inferInsert;
+
+// ─── CMS Media Library ─────────────────────────────────────────────
+export const cmsMedia = mysqlTable("cms_media", {
+  id: int("id").autoincrement().primaryKey(),
+  url: text("url").notNull(),
+  filename: varchar("filename", { length: 500 }).notNull(),
+  contentType: varchar("contentType", { length: 100 }).notNull(),
+  size: int("size"),
+  alt: varchar("alt", { length: 500 }),
+  altAr: varchar("altAr", { length: 500 }),
+  uploadedBy: int("uploadedBy"),
+  uploadedByName: varchar("uploadedByName", { length: 255 }),
+  folder: varchar("folder", { length: 100 }).default("general"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CmsMedia = typeof cmsMedia.$inferSelect;
+export type InsertCmsMedia = typeof cmsMedia.$inferInsert;

@@ -23,6 +23,7 @@ import {
   maintenanceUpdates, InsertMaintenanceUpdate,
   aiDocuments, InsertAiDocument,
   propertySubmissions, InsertPropertySubmission, submissionPhotos, InsertSubmissionPhoto,
+  cmsContentVersions, InsertCmsContentVersion, cmsMedia, InsertCmsMedia,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -388,6 +389,43 @@ export async function getDb() {
           }
         }
       }
+       // Auto-migrate: ensure cms_content_versions table exists
+      try {
+        await _pool.execute(`CREATE TABLE IF NOT EXISTS cms_content_versions (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          settingKey VARCHAR(100) NOT NULL,
+          value TEXT,
+          status ENUM('draft','published','archived') NOT NULL DEFAULT 'draft',
+          version INT NOT NULL DEFAULT 1,
+          changedBy INT,
+          changedByName VARCHAR(255),
+          changeNote TEXT,
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_cms_key_status (settingKey, status),
+          INDEX idx_cms_key_version (settingKey, version)
+        )`);
+      } catch (e: any) {
+        if (e?.errno !== 1050) console.warn("[Database] cms_content_versions migration note:", e?.message?.substring(0, 120));
+      }
+      // Auto-migrate: ensure cms_media table exists
+      try {
+        await _pool.execute(`CREATE TABLE IF NOT EXISTS cms_media (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          url TEXT NOT NULL,
+          filename VARCHAR(500) NOT NULL,
+          contentType VARCHAR(100) NOT NULL,
+          size INT,
+          alt VARCHAR(500),
+          altAr VARCHAR(500),
+          uploadedBy INT,
+          uploadedByName VARCHAR(255),
+          folder VARCHAR(100) DEFAULT 'general',
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_cms_media_folder (folder)
+        )`);
+      } catch (e: any) {
+        if (e?.errno !== 1050) console.warn("[Database] cms_media migration note:", e?.message?.substring(0, 120));
+      }
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -395,7 +433,6 @@ export async function getDb() {
   }
   return _db;
 }
-
 export function getPool() { return _pool; }
 
 // ─── Transaction Helper ──────────────────────────────────────────────

@@ -3639,5 +3639,148 @@ export const appRouter = router({
         return { items: rows as any[], total: (countRows as any[])[0]?.total ?? 0 };
       }),
   }),
+  // ─── CMS Content Management ──
+  cms: router({
+    history: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .input(z.object({ key: z.string() }))
+      .query(async ({ input }) => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) return [];
+        const [rows] = await pool.execute(
+          `SELECT * FROM cms_content_versions WHERE settingKey = ? ORDER BY version DESC LIMIT 50`,
+          [input.key]
+        );
+        return rows as any[];
+      }),
+    pendingDrafts: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .query(async () => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) return [];
+        const [rows] = await pool.execute(
+          `SELECT cv.* FROM cms_content_versions cv INNER JOIN (SELECT settingKey, MAX(version) as maxVer FROM cms_content_versions WHERE status='draft' GROUP BY settingKey) latest ON cv.settingKey = latest.settingKey AND cv.version = latest.maxVer ORDER BY cv.createdAt DESC`
+        );
+        return rows as any[];
+      }),
+    saveDraft: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .input(z.object({ key: z.string(), value: z.string(), note: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) throw new Error('No DB');
+        const [maxRows] = await pool.execute(`SELECT COALESCE(MAX(version), 0) as maxVer FROM cms_content_versions WHERE settingKey = ?`, [input.key]);
+        const nextVersion = ((maxRows as any[])[0]?.maxVer ?? 0) + 1;
+        await pool.execute(
+          `INSERT INTO cms_content_versions (settingKey, value, status, version, changedBy, changedByName, changeNote) VALUES (?, ?, 'draft', ?, ?, ?, ?)`,
+          [input.key, input.value, nextVersion, ctx.user?.id ?? null, ctx.user?.name ?? 'System', input.note ?? null]
+        );
+        return { success: true, version: nextVersion };
+      }),
+    publish: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .input(z.object({ key: z.string(), versionId: z.number().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) throw new Error('No DB');
+        let versionRow: any;
+        if (input.versionId) {
+          const [rows] = await pool.execute(`SELECT * FROM cms_content_versions WHERE id = ?`, [input.versionId]);
+          versionRow = (rows as any[])[0];
+        } else {
+          const [rows] = await pool.execute(`SELECT * FROM cms_content_versions WHERE settingKey = ? AND status = 'draft' ORDER BY version DESC LIMIT 1`, [input.key]);
+          versionRow = (rows as any[])[0];
+        }
+        if (!versionRow) throw new Error('No draft found to publish');
+        await pool.execute(`UPDATE cms_content_versions SET status = 'archived' WHERE settingKey = ? AND status = 'published'`, [input.key]);
+        await pool.execute(`UPDATE cms_content_versions SET status = 'published' WHERE id = ?`, [versionRow.id]);
+        await db.setSetting(input.key, versionRow.value ?? '');
+        cache.invalidatePrefix('settings:');
+        return { success: true, publishedVersion: versionRow.version };
+      }),
+    bulkPublish: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .input(z.object({ keys: z.array(z.string()) }))
+      .mutation(async ({ ctx, input }) => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) throw new Error('No DB');
+        let published = 0;
+        for (const key of input.keys) {
+          const [rows] = await pool.execute(`SELECT * FROM cms_content_versions WHERE settingKey = ? AND status = 'draft' ORDER BY version DESC LIMIT 1`, [key]);
+          const draft = (rows as any[])[0];
+          if (!draft) continue;
+          await pool.execute(`UPDATE cms_content_versions SET status = 'archived' WHERE settingKey = ? AND status = 'published'`, [key]);
+          await pool.execute(`UPDATE cms_content_versions SET status = 'published' WHERE id = ?`, [draft.id]);
+          await db.setSetting(key, draft.value ?? '');
+          published++;
+        }
+        cache.invalidatePrefix('settings:');
+        return { success: true, published };
+      }),
+    rollback: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .input(z.object({ versionId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) throw new Error('No DB');
+        const [rows] = await pool.execute(`SELECT * FROM cms_content_versions WHERE id = ?`, [input.versionId]);
+        const target = (rows as any[])[0];
+        if (!target) throw new Error('Version not found');
+        await pool.execute(`UPDATE cms_content_versions SET status = 'archived' WHERE settingKey = ? AND status = 'published'`, [target.settingKey]);
+        const [maxRows] = await pool.execute(`SELECT COALESCE(MAX(version), 0) as maxVer FROM cms_content_versions WHERE settingKey = ?`, [target.settingKey]);
+        const nextVersion = ((maxRows as any[])[0]?.maxVer ?? 0) + 1;
+        await pool.execute(
+          `INSERT INTO cms_content_versions (settingKey, value, status, version, changedBy, changedByName, changeNote) VALUES (?, ?, 'published', ?, ?, ?, ?)`,
+          [target.settingKey, target.value, nextVersion, ctx.user?.id ?? null, ctx.user?.name ?? 'System', `Rollback to v${target.version}`]
+        );
+        await db.setSetting(target.settingKey, target.value ?? '');
+        cache.invalidatePrefix('settings:');
+        return { success: true, newVersion: nextVersion };
+      }),
+    inventory: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .query(async () => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) return { keys: {}, drafts: {} };
+        const allSettings = await db.getAllSettings();
+        const [draftRows] = await pool.execute(`SELECT settingKey, value, version, createdAt, changedByName FROM cms_content_versions WHERE status = 'draft' ORDER BY version DESC`);
+        const drafts: Record<string, any> = {};
+        for (const row of draftRows as any[]) {
+          if (!drafts[row.settingKey]) drafts[row.settingKey] = row;
+        }
+        return { keys: allSettings, drafts };
+      }),
+    mediaList: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .input(z.object({ folder: z.string().optional(), page: z.number().min(1).default(1), limit: z.number().min(1).max(100).default(50) }))
+      .query(async ({ input }) => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) return { items: [], total: 0 };
+        const conditions: string[] = [];
+        const params: unknown[] = [];
+        if (input.folder) { conditions.push('folder = ?'); params.push(input.folder); }
+        const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const offset = (input.page - 1) * input.limit;
+        const [rows] = await pool.execute(`SELECT * FROM cms_media ${where} ORDER BY createdAt DESC LIMIT ${input.limit} OFFSET ${offset}`, params);
+        const [countRows] = await pool.execute(`SELECT COUNT(*) as total FROM cms_media ${where}`, params);
+        return { items: rows as any[], total: (countRows as any[])[0]?.total ?? 0 };
+      }),
+    mediaUpload: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .input(z.object({ base64: z.string(), filename: z.string(), contentType: z.string(), folder: z.string().default('general'), alt: z.string().optional(), altAr: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const ext = input.filename.split('.').pop() || 'png';
+        const key = `cms-media/${input.folder}/${nanoid()}.${ext}`;
+        const buffer = Buffer.from(input.base64, 'base64');
+        const { url } = await storagePut(key, buffer, input.contentType);
+        const pool = (await import('./db')).getPool();
+        if (pool) {
+          await pool.execute(
+            `INSERT INTO cms_media (url, filename, contentType, size, alt, altAr, uploadedBy, uploadedByName, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [url, input.filename, input.contentType, buffer.length, input.alt ?? null, input.altAr ?? null, ctx.user?.id ?? null, ctx.user?.name ?? 'System', input.folder]
+          );
+        }
+        return { url, filename: input.filename };
+      }),
+    mediaDelete: adminWithPermission(PERMISSIONS.MANAGE_CMS)
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const pool = (await import('./db')).getPool();
+        if (!pool) throw new Error('No DB');
+        await pool.execute(`DELETE FROM cms_media WHERE id = ?`, [input.id]);
+        return { success: true };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;
