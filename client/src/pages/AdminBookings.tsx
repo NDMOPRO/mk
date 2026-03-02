@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { CalendarCheck, Search, CheckCircle, XCircle, BanknoteIcon, Clock, Filter, FileText, AlertTriangle, CreditCard, ShieldAlert, MessageCircle } from "lucide-react";
+import { CalendarCheck, Search, CheckCircle, XCircle, BanknoteIcon, Clock, Filter, FileText, AlertTriangle, CreditCard, ShieldAlert, MessageCircle, RotateCcw, Calculator, DollarSign, ArrowRight } from "lucide-react";
 import { SendWhatsAppDialog } from "./AdminWhatsApp";
 
 const STATUS_MAP: Record<string, { label: string; labelAr: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -39,14 +39,28 @@ export default function AdminBookings() {
   const [approveDialog, setApproveDialog] = useState<{ open: boolean; bookingId: number | null }>({ open: false, bookingId: null });
   const [rejectDialog, setRejectDialog] = useState<{ open: boolean; bookingId: number | null }>({ open: false, bookingId: null });
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; bookingId: number | null }>({ open: false, bookingId: null });
+  const [reopenDialog, setReopenDialog] = useState<{ open: boolean; bookingId: number | null; currentStatus: string }>({ open: false, bookingId: null, currentStatus: "" });
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; bookingId: number | null }>({ open: false, bookingId: null });
   const [rejectReason, setRejectReason] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [overridePaymentMethod, setOverridePaymentMethod] = useState<string>("cash");
+  const [reopenTarget, setReopenTarget] = useState<"pending" | "approved">("pending");
+  const [reopenNotes, setReopenNotes] = useState("");
+  const [refundAmount, setRefundAmount] = useState<string>("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refundMethod, setRefundMethod] = useState<string>("bank_transfer");
+  const [refundCancelBooking, setRefundCancelBooking] = useState(false);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   const utils = trpc.useUtils();
   const bookings = trpc.admin.bookings.useQuery({ limit: 200 });
   const overrideEnabled = trpc.admin.isOverrideEnabled.useQuery();
+
+  // Refund calculator query — only fetches when refund dialog is open
+  const refundCalc = trpc.admin.calculateRefund.useQuery(
+    { bookingId: refundDialog.bookingId! },
+    { enabled: refundDialog.open && refundDialog.bookingId !== null }
+  );
 
   const approveBooking = trpc.admin.approveBooking.useMutation({
     onSuccess: () => {
@@ -74,6 +88,30 @@ export default function AdminBookings() {
       setConfirmDialog({ open: false, bookingId: null });
       setOverrideReason("");
       setOverridePaymentMethod("cash");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const reopenBooking = trpc.admin.reopenBooking.useMutation({
+    onSuccess: () => {
+      toast.success(isAr ? "تم إعادة فتح الحجز بنجاح" : "Booking reopened successfully");
+      utils.admin.bookings.invalidate();
+      setReopenDialog({ open: false, bookingId: null, currentStatus: "" });
+      setReopenNotes("");
+      setReopenTarget("pending");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const recordRefund = trpc.admin.recordRefund.useMutation({
+    onSuccess: () => {
+      toast.success(isAr ? "تم تسجيل الاسترداد بنجاح — قم بتحويل المبلغ يدوياً" : "Refund recorded — process the actual transfer manually");
+      utils.admin.bookings.invalidate();
+      setRefundDialog({ open: false, bookingId: null });
+      setRefundAmount("");
+      setRefundReason("");
+      setRefundMethod("bank_transfer");
+      setRefundCancelBooking(false);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -111,14 +149,12 @@ export default function AdminBookings() {
             <p className="text-muted-foreground text-sm mt-1">{isAr ? "إدارة جميع الحجوزات ومتابعة حالتها" : "Manage all bookings and track their status"}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Payment Config Status */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${paymentConfigured ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
               <CreditCard className="h-3.5 w-3.5" />
               {paymentConfigured
                 ? (isAr ? "الدفع الإلكتروني مفعّل" : "Online Payment Active")
                 : (isAr ? "الدفع الإلكتروني غير مفعّل" : "Online Payment Not Configured")}
             </div>
-            {/* Override Status */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${isOverrideOn ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
               <ShieldAlert className="h-3.5 w-3.5" />
               {isOverrideOn
@@ -236,6 +272,7 @@ export default function AdminBookings() {
                     const ledger = b.ledgerEntries?.[0];
                     const ledgerStatus = ledger ? (LEDGER_STATUS_MAP[ledger.status] || LEDGER_STATUS_MAP.DUE) : null;
                     const isExpanded = expandedRow === b.id;
+                    const hasPaidEntries = b.ledgerEntries?.some((e: any) => e.status === "PAID" && e.direction === "IN");
                     return (
                       <>
                         <tr key={b.id} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : b.id)}>
@@ -270,7 +307,8 @@ export default function AdminBookings() {
                             <Badge variant={status.variant} className="text-xs whitespace-nowrap">{isAr ? status.labelAr : status.label}</Badge>
                           </td>
                           <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex gap-1.5">
+                            <div className="flex gap-1.5 flex-wrap">
+                              {/* Pending: Approve + Reject */}
                               {b.status === "pending" && (
                                 <>
                                   <Button
@@ -293,6 +331,7 @@ export default function AdminBookings() {
                                   </Button>
                                 </>
                               )}
+                              {/* Approved: Manual Override */}
                               {b.status === "approved" && isOverrideOn && (
                                 <Button
                                   size="sm"
@@ -307,9 +346,36 @@ export default function AdminBookings() {
                               {b.status === "approved" && !isOverrideOn && (
                                 <span className="text-xs text-muted-foreground italic">{isAr ? "ينتظر الدفع الإلكتروني" : "Awaiting online payment"}</span>
                               )}
-                              {!["pending", "approved"].includes(b.status) && (
-                                <span className="text-xs text-muted-foreground">—</span>
+                              {/* Rejected / Cancelled: Reopen */}
+                              {["rejected", "cancelled"].includes(b.status) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
+                                  onClick={() => setReopenDialog({ open: true, bookingId: b.id, currentStatus: b.status })}
+                                >
+                                  <RotateCcw className="h-3 w-3 me-1" />
+                                  {isAr ? "إعادة فتح" : "Reopen"}
+                                </Button>
                               )}
+                              {/* Active / Completed / Approved with paid entries: Refund */}
+                              {(["active", "completed"].includes(b.status) || (b.status === "approved" && hasPaidEntries)) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs text-purple-600 border-purple-200 hover:bg-purple-50"
+                                  onClick={() => {
+                                    setRefundDialog({ open: true, bookingId: b.id });
+                                    setRefundAmount("");
+                                    setRefundReason("");
+                                    setRefundCancelBooking(false);
+                                  }}
+                                >
+                                  <DollarSign className="h-3 w-3 me-1" />
+                                  {isAr ? "استرداد" : "Refund"}
+                                </Button>
+                              )}
+                              {/* WhatsApp */}
                               <SendWhatsAppDialog
                                 trigger={
                                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600 hover:bg-green-50">
@@ -359,14 +425,19 @@ export default function AdminBookings() {
                                               <span className={`px-2 py-0.5 rounded-full border text-xs ${ls.color}`}>{isAr ? ls.labelAr : ls.label}</span>
                                             </div>
                                             <div><span className="text-muted-foreground">{isAr ? "المبلغ:" : "Amount:"}</span> {Number(le.amount).toLocaleString()} {le.currency}</div>
-                                            <div><span className="text-muted-foreground">{isAr ? "النوع:" : "Type:"}</span> {le.type}</div>
-                                            {le.provider && <div><span className="text-muted-foreground">{isAr ? "المزود:" : "Provider:"}</span> {le.provider === 'manual_override' ? isAr ? '⚠️ تأكيد يدوي' : '⚠️ Manual override' : le.provider}</div>}
+                                            <div><span className="text-muted-foreground">{isAr ? "النوع:" : "Type:"}</span> {le.type}{le.type === "REFUND" ? (isAr ? " ↩ استرداد" : " ↩ Refund") : ""}</div>
+                                            {le.provider && <div><span className="text-muted-foreground">{isAr ? "المزود:" : "Provider:"}</span> {le.provider === 'manual_override' ? isAr ? '⚠️ تأكيد يدوي' : '⚠️ Manual override' : le.provider === 'manual' ? isAr ? '📝 يدوي' : '📝 Manual' : le.provider}</div>}
                                             {le.paidAt && <div><span className="text-muted-foreground">{isAr ? "تاريخ الدفع:" : "Paid At:"}</span> {new Date(le.paidAt).toLocaleDateString(isAr ? "ar-SA" : "en-US")}</div>}
                                             {le.paymentMethod && <div><span className="text-muted-foreground">{isAr ? "طريقة الدفع:" : "Payment Method:"}</span> {le.paymentMethod}</div>}
                                             {le.webhookVerified !== undefined && (
                                               <div>
                                                 <span className="text-muted-foreground">{isAr ? "تحقق الويب هوك:" : "Webhook Verified:"}</span>{" "}
                                                 {le.webhookVerified ? <span className="text-green-600">{isAr ? "نعم ✓" : "Yes ✓"}</span> : <span className="text-amber-600">{isAr ? "لا (يدوي)" : "No (manual)"}</span>}
+                                              </div>
+                                            )}
+                                            {le.notes && le.notes.includes("REFUND") && (
+                                              <div className="mt-1 p-1.5 bg-purple-50 border border-purple-200 rounded text-purple-700 text-xs">
+                                                {le.notes}
                                               </div>
                                             )}
                                           </div>
@@ -376,7 +447,6 @@ export default function AdminBookings() {
                                   ) : (
                                     <p className="text-xs text-muted-foreground">{isAr ? "لا توجد سجلات مالية" : "No ledger entries"}</p>
                                   )}
-                                  {/* Payment Config Warning */}
                                   {b.status === "approved" && !b.paymentConfigured && (
                                     <div className="flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-amber-700 text-xs">
                                       <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -474,7 +544,6 @@ export default function AdminBookings() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Warning Banner */}
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
@@ -489,12 +558,9 @@ export default function AdminBookings() {
                 </div>
               </div>
             </div>
-
             <p className="text-sm text-muted-foreground">
               {isAr ? `الحجز #${confirmDialog.bookingId} — سيتم تفعيله وتحديث السجل المالي إلى "مدفوع" مع تسجيل التجاوز.` : `Booking #${confirmDialog.bookingId} — will be activated and ledger marked as paid with override logged.`}
             </p>
-
-            {/* Payment Method */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium">{isAr ? "طريقة الدفع" : "Payment Method"}</label>
               <Select value={overridePaymentMethod} onValueChange={setOverridePaymentMethod}>
@@ -507,8 +573,6 @@ export default function AdminBookings() {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Override Reason */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium">{isAr ? "سبب التأكيد اليدوي (مطلوب)" : "Override Reason (required)"}</label>
               <Textarea
@@ -536,6 +600,215 @@ export default function AdminBookings() {
             >
               <ShieldAlert className="h-4 w-4 me-1" />
               {confirmPayment.isPending ? "جارٍ..." : isAr ? "تأكيد يدوي (مسجّل)" : "Override & Log"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reopen Booking Dialog */}
+      <Dialog open={reopenDialog.open} onOpenChange={(o) => { if (!o) { setReopenDialog({ open: false, bookingId: null, currentStatus: "" }); setReopenNotes(""); setReopenTarget("pending"); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-700">
+              <RotateCcw className="h-5 w-5" />
+              {isAr ? `إعادة فتح الحجز #${reopenDialog.bookingId}` : `Reopen Booking #${reopenDialog.bookingId}`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant="destructive" className="text-xs">{isAr ? (reopenDialog.currentStatus === "rejected" ? "مرفوض" : "ملغي") : reopenDialog.currentStatus}</Badge>
+                <ArrowRight className="h-4 w-4 text-blue-500" />
+                <Badge variant={reopenTarget === "approved" ? "outline" : "secondary"} className="text-xs">
+                  {reopenTarget === "approved" ? (isAr ? "موافق – بانتظار الدفع" : "Approved") : (isAr ? "بانتظار الموافقة" : "Pending")}
+                </Badge>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">{isAr ? "الحالة الجديدة" : "New Status"}</label>
+              <Select value={reopenTarget} onValueChange={(v) => setReopenTarget(v as "pending" | "approved")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">{isAr ? "بانتظار الموافقة (مراجعة)" : "Pending (review again)"}</SelectItem>
+                  <SelectItem value="approved">{isAr ? "موافق مباشرة (بانتظار الدفع)" : "Approved (awaiting payment)"}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">{isAr ? "ملاحظات المسؤول (اختياري)" : "Admin Notes (optional)"}</label>
+              <Textarea
+                placeholder={isAr ? "سبب إعادة الفتح..." : "Reason for reopening..."}
+                value={reopenNotes}
+                onChange={(e) => setReopenNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {isAr
+                ? "سيتم استعادة السجلات المالية الملغاة (VOID → DUE) وإشعار المستأجر."
+                : "Voided ledger entries will be restored (VOID → DUE) and tenant will be notified."}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setReopenDialog({ open: false, bookingId: null, currentStatus: "" }); setReopenNotes(""); }}>{isAr ? "إلغاء" : "Cancel"}</Button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => reopenDialog.bookingId && reopenBooking.mutate({
+                id: reopenDialog.bookingId,
+                targetStatus: reopenTarget,
+                adminNotes: reopenNotes || undefined,
+              })}
+              disabled={reopenBooking.isPending}
+            >
+              <RotateCcw className="h-4 w-4 me-1" />
+              {reopenBooking.isPending ? (isAr ? "جارٍ..." : "Processing...") : isAr ? "إعادة فتح" : "Reopen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Refund Calculator + Record Dialog */}
+      <Dialog open={refundDialog.open} onOpenChange={(o) => { if (!o) { setRefundDialog({ open: false, bookingId: null }); setRefundAmount(""); setRefundReason(""); setRefundCancelBooking(false); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-purple-700">
+              <Calculator className="h-5 w-5" />
+              {isAr ? `حاسبة الاسترداد — الحجز #${refundDialog.bookingId}` : `Refund Calculator — Booking #${refundDialog.bookingId}`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Refund Calculation Summary */}
+            {refundCalc.isLoading ? (
+              <div className="text-center py-4 text-muted-foreground text-sm">{isAr ? "جارٍ حساب الاسترداد..." : "Calculating refund..."}</div>
+            ) : refundCalc.error ? (
+              <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{refundCalc.error.message}</div>
+            ) : refundCalc.data ? (
+              <div className="space-y-3">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2.5 bg-green-50 border border-green-200 rounded text-center">
+                    <p className="text-xs text-green-600 font-medium">{isAr ? "إجمالي المدفوع" : "Total Paid"}</p>
+                    <p className="text-lg font-bold text-green-700">{refundCalc.data.totalPaid.toLocaleString()} {refundCalc.data.currency}</p>
+                  </div>
+                  <div className="p-2.5 bg-purple-50 border border-purple-200 rounded text-center">
+                    <p className="text-xs text-purple-600 font-medium">{isAr ? "أقصى مبلغ قابل للاسترداد" : "Max Refundable"}</p>
+                    <p className="text-lg font-bold text-purple-700">{refundCalc.data.maxRefundable.toLocaleString()} {refundCalc.data.currency}</p>
+                  </div>
+                </div>
+                {/* Prorated Breakdown */}
+                <div className="p-3 bg-muted/50 border rounded space-y-1.5 text-xs">
+                  <div className="flex justify-between"><span className="text-muted-foreground">{isAr ? "إجمالي الأيام:" : "Total Days:"}</span><span className="font-medium">{refundCalc.data.totalDays}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{isAr ? "الأيام المستخدمة:" : "Days Used:"}</span><span className="font-medium">{refundCalc.data.daysUsed}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{isAr ? "الأيام المتبقية:" : "Days Remaining:"}</span><span className="font-medium text-blue-600">{refundCalc.data.daysRemaining}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{isAr ? "السعر اليومي:" : "Daily Rate:"}</span><span className="font-medium">{refundCalc.data.dailyRate.toLocaleString()} {refundCalc.data.currency}</span></div>
+                  <div className="border-t pt-1.5 flex justify-between">
+                    <span className="text-muted-foreground font-medium">{isAr ? "الاسترداد النسبي المقترح:" : "Prorated Refund:"}</span>
+                    <span className="font-bold text-purple-600">{refundCalc.data.proratedRefund.toLocaleString()} {refundCalc.data.currency}</span>
+                  </div>
+                </div>
+                {refundCalc.data.totalRefunded > 0 && (
+                  <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                    {isAr ? `تم استرداد ${refundCalc.data.totalRefunded.toLocaleString()} ${refundCalc.data.currency} مسبقاً` : `Already refunded: ${refundCalc.data.totalRefunded.toLocaleString()} ${refundCalc.data.currency}`}
+                  </div>
+                )}
+                {/* Use prorated amount button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs text-purple-600 border-purple-200"
+                  onClick={() => setRefundAmount(String(refundCalc.data!.proratedRefund))}
+                >
+                  <Calculator className="h-3 w-3 me-1" />
+                  {isAr ? `استخدام المبلغ النسبي: ${refundCalc.data.proratedRefund.toLocaleString()} ${refundCalc.data.currency}` : `Use prorated amount: ${refundCalc.data.proratedRefund.toLocaleString()} ${refundCalc.data.currency}`}
+                </Button>
+              </div>
+            ) : null}
+
+            {/* Manual Refund Form */}
+            <div className="border-t pt-4 space-y-3">
+              <h4 className="text-sm font-semibold">{isAr ? "تسجيل الاسترداد (يدوي)" : "Record Refund (Manual)"}</h4>
+              <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                <AlertTriangle className="h-3 w-3 inline me-1" />
+                {isAr
+                  ? "هذا يسجل الاسترداد في النظام فقط. يجب تحويل المبلغ يدوياً عبر البنك أو نقداً."
+                  : "This only records the refund in the system. You must transfer the money manually via bank or cash."}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium">{isAr ? "مبلغ الاسترداد" : "Refund Amount"} ({refundCalc.data?.currency || "SAR"})</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={refundCalc.data?.maxRefundable || 999999}
+                  placeholder={isAr ? "أدخل المبلغ..." : "Enter amount..."}
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  className="border-purple-200 focus:border-purple-400"
+                />
+                {refundAmount && refundCalc.data && Number(refundAmount) > refundCalc.data.maxRefundable && (
+                  <p className="text-xs text-red-500">{isAr ? `المبلغ يتجاوز الحد الأقصى (${refundCalc.data.maxRefundable})` : `Amount exceeds max refundable (${refundCalc.data.maxRefundable})`}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium">{isAr ? "سبب الاسترداد (مطلوب)" : "Refund Reason (required)"}</label>
+                <Textarea
+                  placeholder={isAr ? "مثال: طلب المستأجر إلغاء مبكر..." : "e.g.: Tenant requested early cancellation..."}
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  rows={2}
+                  className="border-purple-200 focus:border-purple-400"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium">{isAr ? "طريقة الاسترداد" : "Refund Method"}</label>
+                <Select value={refundMethod} onValueChange={setRefundMethod}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bank_transfer">{isAr ? "تحويل بنكي" : "Bank Transfer"}</SelectItem>
+                    <SelectItem value="cash">{isAr ? "نقدي" : "Cash"}</SelectItem>
+                    <SelectItem value="original_payment_method">{isAr ? "نفس طريقة الدفع الأصلية" : "Original Payment Method"}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="cancelBooking"
+                  checked={refundCancelBooking}
+                  onChange={(e) => setRefundCancelBooking(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <label htmlFor="cancelBooking" className="text-xs">
+                  {isAr ? "إلغاء الحجز بعد الاسترداد" : "Cancel booking after refund"}
+                </label>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRefundDialog({ open: false, bookingId: null }); setRefundAmount(""); setRefundReason(""); }}>{isAr ? "إلغاء" : "Cancel"}</Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              onClick={() => refundDialog.bookingId && recordRefund.mutate({
+                bookingId: refundDialog.bookingId,
+                amount: Number(refundAmount),
+                reason: refundReason,
+                refundMethod: refundMethod as any,
+                cancelBooking: refundCancelBooking,
+              })}
+              disabled={
+                recordRefund.isPending ||
+                !refundAmount ||
+                Number(refundAmount) <= 0 ||
+                refundReason.trim().length < 5 ||
+                (refundCalc.data ? Number(refundAmount) > refundCalc.data.maxRefundable : false)
+              }
+            >
+              <DollarSign className="h-4 w-4 me-1" />
+              {recordRefund.isPending ? (isAr ? "جارٍ..." : "Processing...") : isAr ? "تسجيل الاسترداد" : "Record Refund"}
             </Button>
           </DialogFooter>
         </DialogContent>

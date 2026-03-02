@@ -1539,6 +1539,220 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // ── Reopen Booking (rejected/cancelled → pending or approved) ────
+    reopenBooking: adminWithPermission(PERMISSIONS.MANAGE_BOOKINGS)
+      .input(z.object({
+        id: z.number(),
+        targetStatus: z.enum(['pending', 'approved']),
+        adminNotes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const booking = await db.getBookingById(input.id);
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        if (!['rejected', 'cancelled'].includes(booking.status)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `Cannot reopen a booking with status "${booking.status}". Only rejected or cancelled bookings can be reopened.` });
+        }
+        // Update booking status
+        await db.updateBooking(input.id, {
+          status: input.targetStatus,
+          landlordNotes: input.adminNotes ? `${booking.landlordNotes || ''}\n[Reopened] ${input.adminNotes}` : booking.landlordNotes,
+          rejectionReason: null as any,
+        });
+        // Un-void DUE/PENDING ledger entries (restore them from VOID back to DUE)
+        try {
+          const { getPool } = await import('./finance-registry.js');
+          const pool = getPool();
+          if (pool) {
+            await pool.execute(
+              `UPDATE payment_ledger SET status = 'DUE', notes = CONCAT(COALESCE(notes,''), '\n[Reopened by admin]') WHERE bookingId = ? AND status = 'VOID'`,
+              [input.id]
+            );
+          }
+        } catch { /* ledger restore is best-effort */ }
+        // Re-create availability block if moving to approved
+        if (input.targetStatus === 'approved') {
+          try {
+            const { createBookingBlock } = await import('./availability-blocks.js');
+            const prop = await db.getPropertyById(booking.propertyId);
+            await createBookingBlock({
+              propertyId: booking.propertyId,
+              unitId: (booking as any).unitId || undefined,
+              bookingId: input.id,
+              startDate: new Date(booking.moveInDate).toISOString().split('T')[0],
+              endDate: new Date(booking.moveOutDate).toISOString().split('T')[0],
+            });
+          } catch { /* block creation is best-effort */ }
+          // Create payment record if approving directly
+          try {
+            await db.createPayment({
+              bookingId: input.id,
+              tenantId: booking.tenantId,
+              landlordId: booking.landlordId,
+              type: 'rent',
+              amount: String(booking.totalAmount),
+              status: 'pending',
+              description: `Payment for booking #${input.id} (reopened)`,
+              descriptionAr: `دفعة الحجز رقم #${input.id} (أعيد فتحه)`,
+            });
+          } catch { /* payment creation is best-effort */ }
+        }
+        // Notify tenant
+        await db.createNotification({
+          userId: booking.tenantId,
+          type: 'booking_approved',
+          titleEn: input.targetStatus === 'approved' ? 'Booking Reopened & Approved' : 'Booking Reopened',
+          titleAr: input.targetStatus === 'approved' ? 'تم إعادة فتح الحجز والموافقة عليه' : 'تم إعادة فتح الحجز',
+          contentEn: `Your booking #${input.id} has been reopened by admin.`,
+          contentAr: `تم إعادة فتح حجزك رقم #${input.id} بواسطة المسؤول.`,
+          relatedId: input.id,
+          relatedType: 'booking',
+        });
+        // Audit log
+        try {
+          const { logAudit } = await import('./audit-log.js');
+          await logAudit({
+            userId: ctx.user?.id, userName: ctx.user?.name || ctx.user?.email || 'admin',
+            action: 'UPDATE', entityType: 'BOOKING', entityId: input.id,
+            entityLabel: `Booking #${input.id}`,
+            metadata: { previousStatus: booking.status, newStatus: input.targetStatus, adminNotes: input.adminNotes },
+          });
+        } catch { /* audit is best-effort */ }
+        await notifyOwner({ title: `تم إعادة فتح الحجز #${input.id}`, content: `الحالة الجديدة: ${input.targetStatus}${input.adminNotes ? `\nملاحظات: ${input.adminNotes}` : ''}` });
+        return { success: true };
+      }),
+
+    // ── Calculate Refund (read-only, no side effects) ────────────────
+    calculateRefund: adminWithPermission(PERMISSIONS.MANAGE_PAYMENTS)
+      .input(z.object({ bookingId: z.number() }))
+      .query(async ({ input }) => {
+        const booking = await db.getBookingById(input.id);
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        // Get all PAID ledger entries for this booking
+        let ledgerEntries: any[] = [];
+        try {
+          const { getLedgerByBookingId } = await import('./finance-registry.js');
+          ledgerEntries = await getLedgerByBookingId(input.bookingId);
+        } catch { /* no ledger */ }
+        const paidEntries = ledgerEntries.filter((e: any) => e.status === 'PAID' && e.direction === 'IN');
+        const totalPaid = paidEntries.reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+        const refundedEntries = ledgerEntries.filter((e: any) => e.type === 'REFUND');
+        const totalRefunded = refundedEntries.reduce((sum: number, e: any) => sum + Math.abs(Number(e.amount)), 0);
+        // Calculate prorated refund based on days used
+        const moveIn = new Date(booking.moveInDate);
+        const moveOut = new Date(booking.moveOutDate);
+        const now = new Date();
+        const totalDays = Math.max(1, Math.ceil((moveOut.getTime() - moveIn.getTime()) / (1000 * 60 * 60 * 24)));
+        const daysUsed = now < moveIn ? 0 : Math.min(totalDays, Math.ceil((now.getTime() - moveIn.getTime()) / (1000 * 60 * 60 * 24)));
+        const daysRemaining = totalDays - daysUsed;
+        const dailyRate = totalPaid / totalDays;
+        const proratedRefund = Math.round(dailyRate * daysRemaining * 100) / 100;
+        const maxRefundable = Math.max(0, totalPaid - totalRefunded);
+        // Price breakdown from booking if available
+        const breakdown = (booking as any).priceBreakdown || null;
+        return {
+          bookingId: input.bookingId,
+          bookingStatus: booking.status,
+          totalAmount: Number(booking.totalAmount),
+          totalPaid,
+          totalRefunded,
+          maxRefundable,
+          moveInDate: booking.moveInDate,
+          moveOutDate: booking.moveOutDate,
+          totalDays,
+          daysUsed,
+          daysRemaining,
+          dailyRate: Math.round(dailyRate * 100) / 100,
+          proratedRefund: Math.min(proratedRefund, maxRefundable),
+          breakdown,
+          paidEntries: paidEntries.map((e: any) => ({ id: e.id, invoiceNumber: e.invoiceNumber, amount: Number(e.amount), type: e.type, paidAt: e.paidAt })),
+          refundedEntries: refundedEntries.map((e: any) => ({ id: e.id, invoiceNumber: e.invoiceNumber, amount: Number(e.amount), createdAt: e.createdAt })),
+          currency: breakdown?.currency || 'SAR',
+        };
+      }),
+
+    // ── Record Refund (manual — creates ledger entry only, no API call) ──
+    recordRefund: adminWithPermission(PERMISSIONS.MANAGE_PAYMENTS)
+      .input(z.object({
+        bookingId: z.number(),
+        amount: z.number().positive(),
+        reason: z.string().min(5, 'Refund reason must be at least 5 characters'),
+        refundMethod: z.enum(['bank_transfer', 'cash', 'original_payment_method']).default('bank_transfer'),
+        cancelBooking: z.boolean().default(false),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const booking = await db.getBookingById(input.bookingId);
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        // Validate refund amount against max refundable
+        let totalPaid = 0;
+        let totalRefunded = 0;
+        try {
+          const { getLedgerByBookingId } = await import('./finance-registry.js');
+          const entries = await getLedgerByBookingId(input.bookingId);
+          totalPaid = entries.filter((e: any) => e.status === 'PAID' && e.direction === 'IN').reduce((s: number, e: any) => s + Number(e.amount), 0);
+          totalRefunded = entries.filter((e: any) => e.type === 'REFUND').reduce((s: number, e: any) => s + Math.abs(Number(e.amount)), 0);
+        } catch { /* ignore */ }
+        const maxRefundable = totalPaid - totalRefunded;
+        if (input.amount > maxRefundable + 0.01) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `Refund amount (${input.amount}) exceeds max refundable (${maxRefundable.toFixed(2)})` });
+        }
+        // Create REFUND ledger entry (direction: OUT)
+        let refundLedgerId: number | undefined;
+        try {
+          const { createLedgerEntry } = await import('./finance-registry.js');
+          refundLedgerId = await createLedgerEntry({
+            bookingId: input.bookingId,
+            unitId: (booking as any).unitId || undefined,
+            unitNumber: undefined,
+            buildingId: (booking as any).buildingId || undefined,
+            propertyDisplayName: undefined,
+            type: 'REFUND',
+            direction: 'OUT',
+            amount: String(input.amount),
+            currency: (booking as any).priceBreakdown?.currency || 'SAR',
+            status: 'PAID',
+            paymentMethod: input.refundMethod === 'original_payment_method' ? undefined : (input.refundMethod === 'bank_transfer' ? 'BANK_TRANSFER' : 'CASH') as any,
+            provider: 'manual' as any,
+            paidAt: new Date(),
+            dueAt: new Date(),
+            createdBy: ctx.user?.id,
+            notes: `REFUND: ${input.reason} (recorded by ${ctx.user?.name || ctx.user?.email || 'admin'})`,
+          });
+        } catch (e) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `Failed to create refund ledger entry: ${(e as Error).message}` });
+        }
+        // Optionally cancel the booking
+        if (input.cancelBooking) {
+          await db.updateBooking(input.bookingId, { status: 'cancelled' });
+          try {
+            const { cancelBookingBlock } = await import('./availability-blocks.js');
+            await cancelBookingBlock(input.bookingId, `Refund processed: ${input.reason}`);
+          } catch { /* best-effort */ }
+        }
+        // Audit log
+        try {
+          const { logAudit } = await import('./audit-log.js');
+          await logAudit({
+            userId: ctx.user?.id, userName: ctx.user?.name || ctx.user?.email || 'admin',
+            action: 'CREATE', entityType: 'PAYMENT', entityId: refundLedgerId || input.bookingId,
+            entityLabel: `Refund for Booking #${input.bookingId}`,
+            metadata: { amount: input.amount, reason: input.reason, method: input.refundMethod, cancelBooking: input.cancelBooking },
+          });
+        } catch { /* audit is best-effort */ }
+        // Notify tenant
+        await db.createNotification({
+          userId: booking.tenantId,
+          type: 'booking_approved',
+          titleEn: 'Refund Processed',
+          titleAr: 'تم معالجة الاسترداد',
+          contentEn: `A refund of ${input.amount} SAR has been recorded for booking #${input.bookingId}. The refund will be processed via ${input.refundMethod.replace('_', ' ')}.`,
+          contentAr: `تم تسجيل استرداد بمبلغ ${input.amount} ر.س للحجز رقم #${input.bookingId}. سيتم معالجة الاسترداد عبر ${input.refundMethod === 'bank_transfer' ? 'تحويل بنكي' : input.refundMethod === 'cash' ? 'نقدي' : 'طريقة الدفع الأصلية'}.`,
+          relatedId: input.bookingId,
+          relatedType: 'booking',
+        });
+        await notifyOwner({ title: `تم تسجيل استرداد للحجز #${input.bookingId}`, content: `المبلغ: ${input.amount} ر.س\nالسبب: ${input.reason}\nالطريقة: ${input.refundMethod}` });
+        return { success: true, refundLedgerId };
+      }),
+
     // Check if payment override is enabled (for admin UI)
     isOverrideEnabled: adminWithPermission(PERMISSIONS.MANAGE_PAYMENTS)
       .query(async () => {
