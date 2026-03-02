@@ -920,3 +920,61 @@
 - [ ] B: Implement Helmet or equivalent for document.title + meta tags
 - [ ] A: WhatsApp + AI FAB: organized, RTL-aware, safe spacing from iOS bottom bar
 - [ ] E: Tests for i18n title switching
+
+
+## Verification + Booking Workflow + KYC Readiness (Phase 2026-03)
+
+### Phase 2: Database Schema + Migration
+- [ ] Add emailVerified, phoneVerified, emailVerifiedAt, phoneVerifiedAt to users in schema.ts
+- [ ] Add kycStatus, kycVerifiedAt, kycLevel, kycProvider, kycProviderRef, kycRejectionReason to users
+- [ ] Add kyc_requests table to schema.ts
+- [ ] Add kyc_documents table to schema.ts
+- [ ] Extend audit_log enums for KYC_REVIEW and SETTINGS_CHANGE
+- [ ] Add MANAGE_KYC and MANAGE_INTEGRATIONS permissions
+- [ ] Write SQL migration 0025_verification_kyc.sql
+- [ ] Migration must protect root admin record
+
+### Phase 3: Core Safety Infrastructure
+- [ ] Create server/breakglass.ts (env-var-only bypass, never reads DB)
+- [ ] Create server/encryption.ts (AES-256-GCM with SETTINGS_ENCRYPTION_KEY)
+- [ ] Create server/feature-flags.ts (centralized reader with defaults and caching)
+- [ ] Update server/_core/env.ts with SETTINGS_ENCRYPTION_KEY, BREAKGLASS env vars
+
+### Phase 4: OTP Provider Routing + Integration Settings + Audit
+- [ ] Add sendSmsWithFallback to server/otp-providers.ts
+- [ ] Update server/otp.ts to use routing when flag is on
+- [ ] Create server/integration-settings.ts (encrypted credential CRUD)
+- [ ] Extend server/audit-log.ts for settings and KYC events
+
+### Phase 5: KYC Data Model + Adapter + Admin API
+- [ ] Create server/kyc-adapter.ts (interface + ManualReviewProvider)
+- [ ] Create server/kyc-routers.ts (tRPC routes)
+- [ ] Add KYC DB helpers in server/db.ts
+
+### Phase 6: Verification Gates
+- [ ] Add isVerified check in booking.create for instantBook (server/routers.ts)
+- [ ] Add isVerified check in createPayment (server/finance-routers.ts)
+- [ ] Both gates must call isBreakglassAdmin before blocking
+
+### Phase 7: Frontend
+- [ ] Create VerificationGate component
+- [ ] Create VerificationBadges component
+- [ ] Update PaymentPage.tsx with verification gate
+- [ ] Update BookingFlow.tsx with verification gate for instant book
+- [ ] Create admin IntegrationSettings page
+- [ ] Create admin KycReview page
+- [ ] Update App.tsx with new routes
+- [ ] Update user profile with verification and KYC badges
+
+### Phase 8: Testing + Verification
+- [ ] Root admin bypass test cases (all flags ON, providers misconfigured)
+- [ ] Feature flag safety test cases (all OFF = no change)
+- [ ] Verification gate test cases
+- [ ] SMS routing test cases
+
+### Root Admin Safety Checklist
+- [ ] breakglass.ts reads ONLY from process.env, never DB
+- [ ] Every verification gate calls isBreakglassAdmin before blocking
+- [ ] Every KYC gate calls isBreakglassAdmin before blocking
+- [ ] Migration does not alter root admin isVerified or role
+- [ ] Frontend gates check break-glass status from backend user object

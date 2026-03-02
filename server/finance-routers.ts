@@ -13,6 +13,8 @@ import { PERMISSIONS } from "./permissions";
 import * as finance from "./finance-registry";
 import * as occupancy from "./occupancy";
 import * as renewal from "./renewal";
+import { isBreakglassAdmin } from "./breakglass";
+import { isFlagOn } from "./feature-flags";
 import { logAudit, computeChanges, getAuditLog } from "./audit-log";
 
 /** Helper to get userName from ctx, converting null to undefined */
@@ -665,7 +667,27 @@ export const financeRouter = router({
         if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Linked booking not found' });
         if (booking.status !== 'approved') throw new TRPCError({ code: 'BAD_REQUEST', message: `Booking status is ${booking.status}, expected approved` });
         if (booking.tenantId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the tenant can pay for this booking' });
-        
+
+        // ─── Verification gate for payment ───
+        // When flag is ON, user must be verified before paying.
+        // Break-glass admins and root admins bypass this gate.
+        const requireVerificationForPayment = await isFlagOn("verification.requireForPayment");
+        if (requireVerificationForPayment) {
+          const bgBypass = isBreakglassAdmin({ email: ctx.user.email, userId: ctx.user.userId });
+          const isAdmin = ctx.user.role === "admin";
+          if (!bgBypass && !isAdmin) {
+            const { getUserById } = await import("./db");
+            const fullUser = await getUserById(ctx.user.id);
+            const isFullyVerified = fullUser?.emailVerified && fullUser?.phoneVerified;
+            if (!isFullyVerified) {
+              throw new TRPCError({
+                code: 'FORBIDDEN',
+                message: 'Payment requires email and phone verification. Please verify your account first. / الدفع يتطلب التحقق من البريد والهاتف. يرجى توثيق حسابك أولاً.',
+              });
+            }
+          }
+        }
+
         // Payment config must be active
         const { isPaymentConfigured } = await import("./finance-registry");
         const pc = await isPaymentConfigured();

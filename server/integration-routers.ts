@@ -394,4 +394,128 @@ export const integrationRouter = router({
 
       return testResult;
     }),
+
+  // ─── Integration Credentials (encrypted) ───────────────────────────
+  credentials: router({
+    list: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+      .query(async () => {
+        const { getAllIntegrationSettings } = await import("./integration-settings");
+        return getAllIntegrationSettings();
+      }),
+
+    update: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+      .input(z.object({
+        integrationKey: z.string(),
+        config: z.record(z.string()),
+        isEnabled: z.boolean(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Write lock check
+        const writeEnabled = process.env.ENABLE_INTEGRATION_PANEL_WRITE === "true";
+        if (!writeEnabled) {
+          return { success: false, error: "Integration panel write is disabled. Set ENABLE_INTEGRATION_PANEL_WRITE=true to enable." };
+        }
+        const { updateIntegrationCredential } = await import("./integration-settings");
+        return updateIntegrationCredential({
+          integrationKey: input.integrationKey,
+          config: input.config,
+          isEnabled: input.isEnabled,
+          updatedBy: ctx.user.id,
+          updatedByName: ctx.user.displayName || ctx.user.email || "admin",
+        });
+      }),
+  }),
+
+  // ─── KYC Admin Routes ──────────────────────────────────────────────
+  kyc: router({
+    list: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+      .input(z.object({
+        status: z.string().optional(),
+        userId: z.number().optional(),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const { getKycRequests } = await import("./kyc-adapter");
+        return getKycRequests(input || undefined);
+      }),
+
+    documents: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+      .input(z.object({ requestId: z.number() }))
+      .query(async ({ input }) => {
+        const { getKycDocuments } = await import("./kyc-adapter");
+        return getKycDocuments(input.requestId);
+      }),
+
+    approve: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+      .input(z.object({
+        requestId: z.number(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { approveKycRequest } = await import("./kyc-adapter");
+        return approveKycRequest({
+          requestId: input.requestId,
+          reviewerId: ctx.user.id,
+          reviewerName: ctx.user.displayName || ctx.user.email || "admin",
+          notes: input.notes,
+        });
+      }),
+
+    reject: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+      .input(z.object({
+        requestId: z.number(),
+        reason: z.string(),
+        reasonCode: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { rejectKycRequest } = await import("./kyc-adapter");
+        return rejectKycRequest({
+          requestId: input.requestId,
+          reviewerId: ctx.user.id,
+          reviewerName: ctx.user.displayName || ctx.user.email || "admin",
+          reason: input.reason,
+          reasonCode: input.reasonCode,
+        });
+      }),
+  }),
+
+  // ─── Feature Flags Admin ───────────────────────────────────────────
+  flags: router({
+    list: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+      .query(async () => {
+        const { getAllFlags } = await import("./feature-flags");
+        return getAllFlags();
+      }),
+
+    update: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+      .input(z.object({
+        key: z.string(),
+        value: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getPool: getP } = await import("./db");
+        const p = getP();
+        if (!p) return { success: false, error: "Database unavailable" };
+        await p.execute(
+          `INSERT INTO platform_settings (settingKey, settingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE settingValue = VALUES(settingValue)`,
+          [input.key, input.value]
+        );
+        // Invalidate cache
+        const { invalidateFlagCache } = await import("./feature-flags");
+        invalidateFlagCache();
+        // Audit
+        const { logAudit: la } = await import("./audit-log");
+        await la({
+          userId: ctx.user.id,
+          userName: ctx.user.displayName || ctx.user.email || "admin",
+          action: "UPDATE",
+          entityType: "FEATURE_FLAG",
+          entityId: 0,
+          entityLabel: input.key,
+          changes: { value: { old: "unknown", new: input.value } },
+        });
+        return { success: true };
+      }),
+  }),
 });

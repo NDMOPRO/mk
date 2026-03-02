@@ -197,3 +197,42 @@ export function getEmailOtpProvider(): EmailOtpProvider {
       return new DevEmailOtpProvider();
   }
 }
+
+// ─── Smart SMS Routing (behind feature flag) ────────────────────────
+// When verification.smsRoutingEnabled is ON:
+//   +966 numbers → Unifonic (primary), Twilio (fallback)
+//   All others   → Twilio (primary), Unifonic (fallback)
+// When OFF: uses the single provider from SMS_PROVIDER env var (existing behavior).
+
+function isSaudiNumber(phone: string): boolean {
+  const normalized = phone.replace(/\s+/g, "");
+  return normalized.startsWith("+966") || normalized.startsWith("966") || normalized.startsWith("05");
+}
+
+/**
+ * Send SMS with smart routing and cross-fallback.
+ * Only called when verification.smsRoutingEnabled flag is ON.
+ * Falls back to the alternate provider if the primary fails.
+ */
+export async function sendSmsWithRouting(to: string, message: string): Promise<SendResult> {
+  const saudi = isSaudiNumber(to);
+  const primary = saudi ? new UnifonicSmsProvider() : new TwilioSmsProvider();
+  const fallback = saudi ? new TwilioSmsProvider() : new UnifonicSmsProvider();
+  const primaryName = saudi ? "Unifonic" : "Twilio";
+  const fallbackName = saudi ? "Twilio" : "Unifonic";
+
+  console.log(`[SMS-Routing] ${to} → primary: ${primaryName}, fallback: ${fallbackName}`);
+
+  const result = await primary.send(to, message);
+  if (result.success) return result;
+
+  console.warn(`[SMS-Routing] ${primaryName} failed for ${to}: ${result.error}. Trying ${fallbackName}...`);
+  const fallbackResult = await fallback.send(to, message);
+  if (fallbackResult.success) {
+    console.log(`[SMS-Routing] ${fallbackName} succeeded for ${to}`);
+    return fallbackResult;
+  }
+
+  console.error(`[SMS-Routing] Both providers failed for ${to}`);
+  return { success: false, error: `Both ${primaryName} and ${fallbackName} failed. Primary: ${result.error}. Fallback: ${fallbackResult.error}` };
+}

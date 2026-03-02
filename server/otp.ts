@@ -14,7 +14,8 @@ import { getDb } from "./db";
 import { otpCodes } from "../drizzle/schema";
 import { eq, and, desc, gte } from "drizzle-orm";
 import { rateLimiter, getClientIP } from "./rate-limiter";
-import { getSmsProvider, getEmailOtpProvider } from "./otp-providers";
+import { getSmsProvider, getEmailOtpProvider, sendSmsWithRouting } from "./otp-providers";
+import { isFlagOn } from "./feature-flags";
 
 // ─── Constants ───────────────────────────────────────────────────────
 const OTP_LENGTH = 6;
@@ -115,15 +116,28 @@ export async function sendOtp(params: {
   // Send via provider
   try {
     if (channel === "phone") {
-      const smsProvider = getSmsProvider();
       const message = lang === "ar"
         ? `رمز التحقق الخاص بك في المفتاح الشهري: ${code}\nصالح لمدة 5 دقائق.`
         : `Your Monthly Key verification code: ${code}\nValid for 5 minutes.`;
-      const result = await smsProvider.send(destination, message);
+      // Use smart routing if flag is ON, otherwise use single provider from env
+      const useRouting = await isFlagOn("verification.smsRoutingEnabled");
+      const smsEnabled = await isFlagOn("SMS_ENABLED");
+      if (!smsEnabled) {
+        console.warn("[OTP] SMS_ENABLED flag is OFF — skipping SMS send");
+        return { success: false, error: "SMS sending is disabled", errorAr: "إرسال الرسائل النصية معطل" };
+      }
+      const result = useRouting
+        ? await sendSmsWithRouting(destination, message)
+        : await getSmsProvider().send(destination, message);
       if (!result.success) {
         return { success: false, error: result.error || "SMS send failed", errorAr: "فشل إرسال الرسالة النصية" };
       }
     } else {
+      const emailEnabled = await isFlagOn("EMAIL_OTP_ENABLED");
+      if (!emailEnabled) {
+        console.warn("[OTP] EMAIL_OTP_ENABLED flag is OFF — skipping email send");
+        return { success: false, error: "Email OTP is disabled", errorAr: "إرسال رمز البريد الإلكتروني معطل" };
+      }
       const emailProvider = getEmailOtpProvider();
       const subject = lang === "ar" ? "رمز التحقق - المفتاح الشهري" : "Verification Code - Monthly Key";
       const html = `

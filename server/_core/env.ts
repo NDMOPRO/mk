@@ -192,4 +192,9 @@ export const ENV = {
   smsApiKey: process.env.SMS_API_KEY ?? "",
   emailProvider: process.env.EMAIL_PROVIDER ?? "dev",
   emailApiKey: process.env.EMAIL_API_KEY ?? "",
+  // Encryption key for integration credentials stored in DB (64 hex chars = 32 bytes)
+  settingsEncryptionKey: process.env.SETTINGS_ENCRYPTION_KEY ?? "",
+  // Break-glass admin bypass (comma-separated, env-only, never from DB)
+  breakglassAdminEmails: process.env.BREAKGLASS_ADMIN_EMAILS ?? "",
+  breakglassAdminUserIds: process.env.BREAKGLASS_ADMIN_USER_IDS ?? "",
 };

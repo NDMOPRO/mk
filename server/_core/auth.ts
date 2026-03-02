@@ -486,6 +486,49 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
+      // Update emailVerified/phoneVerified for ANY purpose (registration, verification, etc.)
+      // This ensures the granular verification fields are always kept in sync.
+      {
+        const verifyUser = channel === "phone"
+          ? await db.getUserByPhone(destination)
+          : await db.getUserByEmail(destination);
+        if (verifyUser) {
+          const updates: Record<string, any> = {};
+          if (channel === "email" && !verifyUser.emailVerified) {
+            updates.emailVerified = true;
+            updates.emailVerifiedAt = new Date();
+          }
+          if (channel === "phone" && !verifyUser.phoneVerified) {
+            updates.phoneVerified = true;
+            updates.phoneVerifiedAt = new Date();
+          }
+          // Derive isVerified: both email and phone must be verified
+          const emailOk = channel === "email" ? true : !!verifyUser.emailVerified;
+          const phoneOk = channel === "phone" ? true : !!verifyUser.phoneVerified;
+          if (emailOk && phoneOk) {
+            updates.isVerified = true;
+          }
+          if (Object.keys(updates).length > 0) {
+            await db.updateUserProfile(verifyUser.id, updates as any);
+            // Audit log for verification event
+            try {
+              const { logAudit } = await import("../audit-log");
+              await logAudit({
+                userId: verifyUser.id,
+                userName: verifyUser.displayName || verifyUser.name || verifyUser.userId || "User",
+                action: "UPDATE" as any,
+                entityType: "USER_VERIFICATION" as any,
+                entityId: verifyUser.id,
+                entityLabel: channel === "email" ? destination : `phone:${destination}`,
+                changes: updates,
+                metadata: { purpose, channel },
+                ipAddress: ip,
+              });
+            } catch (e) { /* audit should not break flow */ }
+          }
+        }
+      }
+
       // If purpose is registration, update user verification status
       if (purpose === "registration") {
         const user = channel === "phone"
@@ -493,7 +536,7 @@ export function registerAuthRoutes(app: Express) {
           : await db.getUserByEmail(destination);
 
         if (user) {
-          // Mark user as verified after OTP confirmation
+          // Mark user as verified after OTP confirmation (legacy field)
           await db.updateUserProfile(user.id, { isVerified: true } as any);
 
           // Auto-login after verification with configurable TTL

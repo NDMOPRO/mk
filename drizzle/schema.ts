@@ -40,6 +40,20 @@ export const users = mysqlTable("users", {
   recoveryEmail: varchar("recoveryEmail", { length: 320 }),
   preferredLang: mysqlEnum("preferredLang", ["ar", "en"]).default("ar"),
   isVerified: boolean("isVerified").default(false),
+  // Granular verification fields (added 2026-03)
+  emailVerified: boolean("emailVerified").default(false),
+  phoneVerified: boolean("phoneVerified").default(false),
+  emailVerifiedAt: timestamp("emailVerifiedAt"),
+  phoneVerifiedAt: timestamp("phoneVerifiedAt"),
+  // KYC fields (added 2026-03)
+  kycStatus: mysqlEnum("kycStatus", ["none", "pending", "submitted", "verified", "rejected", "expired"]).default("none"),
+  kycVerifiedAt: timestamp("kycVerifiedAt"),
+  kycLevel: varchar("kycLevel", { length: 20 }),
+  kycProvider: varchar("kycProvider", { length: 50 }),
+  kycProviderRef: varchar("kycProviderRef", { length: 255 }),
+  kycRejectionReason: varchar("kycRejectionReason", { length: 100 }),
+  // Break-glass admin flag (derived from env, cached in user object for frontend)
+  isBreakglassAdmin: boolean("isBreakglassAdmin").default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -834,8 +848,8 @@ export const auditLog = mysqlTable("audit_log", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId"),
   userName: varchar("userName", { length: 255 }),
-  action: mysqlEnum("action", ["CREATE", "UPDATE", "ARCHIVE", "RESTORE", "DELETE", "LINK_BEDS24", "UNLINK_BEDS24", "PUBLISH", "UNPUBLISH", "CONVERT", "TEST", "ENABLE", "DISABLE", "SEND"]).notNull(),
-  entityType: mysqlEnum("entityType", ["BUILDING", "UNIT", "BEDS24_MAP", "LEDGER", "EXTENSION", "PAYMENT_METHOD", "PROPERTY", "SUBMISSION", "INTEGRATION", "WHATSAPP_MESSAGE", "WHATSAPP_TEMPLATE"]).notNull(),
+  action: mysqlEnum("action", ["CREATE", "UPDATE", "ARCHIVE", "RESTORE", "DELETE", "LINK_BEDS24", "UNLINK_BEDS24", "PUBLISH", "UNPUBLISH", "CONVERT", "TEST", "ENABLE", "DISABLE", "SEND", "APPROVE", "REJECT", "REVIEW"]).notNull(),
+  entityType: mysqlEnum("entityType", ["BUILDING", "UNIT", "BEDS24_MAP", "LEDGER", "EXTENSION", "PAYMENT_METHOD", "PROPERTY", "SUBMISSION", "INTEGRATION", "WHATSAPP_MESSAGE", "WHATSAPP_TEMPLATE", "KYC_REQUEST", "INTEGRATION_CREDENTIAL", "FEATURE_FLAG", "USER_VERIFICATION"]).notNull(),
   entityId: int("entityId").notNull(),
   entityLabel: varchar("entityLabel", { length: 255 }),
   changes: json("changes").$type<Record<string, { old: unknown; new: unknown }>>(),
@@ -967,3 +981,64 @@ export const cmsMedia = mysqlTable("cms_media", {
 });
 export type CmsMedia = typeof cmsMedia.$inferSelect;
 export type InsertCmsMedia = typeof cmsMedia.$inferInsert;
+
+// ─── KYC Requests ───────────────────────────────────────────────────
+export const kycRequests = mysqlTable("kyc_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  status: mysqlEnum("status", ["pending", "submitted", "under_review", "verified", "rejected", "expired"]).default("pending").notNull(),
+  level: varchar("level", { length: 20 }).default("basic"),
+  provider: varchar("provider", { length: 50 }).default("manual"),
+  providerRef: varchar("providerRef", { length: 255 }),
+  submittedAt: timestamp("submittedAt"),
+  reviewedAt: timestamp("reviewedAt"),
+  reviewedBy: int("reviewedBy"),
+  reviewerName: varchar("reviewerName", { length: 255 }),
+  rejectionReason: text("rejectionReason"),
+  rejectionReasonCode: varchar("rejectionReasonCode", { length: 50 }),
+  notes: text("notes"),
+  metadata: json("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type KycRequest = typeof kycRequests.$inferSelect;
+export type InsertKycRequest = typeof kycRequests.$inferInsert;
+
+// ─── KYC Documents ──────────────────────────────────────────────────
+export const kycDocuments = mysqlTable("kyc_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  kycRequestId: int("kycRequestId").notNull(),
+  userId: int("userId").notNull(),
+  documentType: mysqlEnum("documentType", ["national_id", "passport", "driving_license", "residence_permit", "selfie", "proof_of_address", "other"]).notNull(),
+  storageKey: text("storageKey").notNull(), // Internal S3 key or encrypted path, NOT a public URL
+  originalFilename: varchar("originalFilename", { length: 500 }),
+  mimeType: varchar("mimeType", { length: 100 }),
+  fileSizeBytes: int("fileSizeBytes"),
+  uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
+  verifiedAt: timestamp("verifiedAt"),
+  expiresAt: timestamp("expiresAt"),
+  metadata: json("metadata").$type<Record<string, unknown>>(),
+});
+export type KycDocument = typeof kycDocuments.$inferSelect;
+export type InsertKycDocument = typeof kycDocuments.$inferInsert;
+
+// ─── Integration Credentials (encrypted) ────────────────────────────
+// Stores AES-256-GCM encrypted provider credentials.
+// configJson is encrypted — never store plaintext secrets here.
+// The existing integration_configs table is for display/status only;
+// this table holds the actual encrypted credentials separately.
+export const integrationCredentials = mysqlTable("integration_credentials", {
+  id: int("id").autoincrement().primaryKey(),
+  integrationKey: varchar("integrationKey", { length: 50 }).notNull().unique(),
+  providerName: varchar("providerName", { length: 100 }).notNull(),
+  encryptedConfig: text("encryptedConfig"), // AES-256-GCM encrypted JSON
+  configHash: varchar("configHash", { length: 64 }), // SHA-256 of plaintext for integrity
+  isEnabled: boolean("isEnabled").default(false).notNull(),
+  lastTestedAt: timestamp("lastTestedAt"),
+  lastTestResult: varchar("lastTestResult", { length: 50 }),
+  updatedBy: int("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type IntegrationCredential = typeof integrationCredentials.$inferSelect;
+export type InsertIntegrationCredential = typeof integrationCredentials.$inferInsert;

@@ -432,6 +432,35 @@ export default function TenantDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Verification Status Badges */}
+                <div className="bg-muted/20 rounded-xl p-4 border">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2 text-sm">
+                    <CheckCircle className="h-4 w-4 text-[#3ECFC0]" />
+                    {lang === "ar" ? "حالة التحقق" : "Verification Status"}
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant={(user as any)?.emailVerified ? "default" : "secondary"} className="text-xs gap-1">
+                      <Mail className="w-3 h-3" />
+                      {lang === "ar" ? "البريد" : "Email"} {(user as any)?.emailVerified ? "✓" : "✗"}
+                    </Badge>
+                    <Badge variant={(user as any)?.phoneVerified ? "default" : "secondary"} className="text-xs gap-1">
+                      <Phone className="w-3 h-3" />
+                      {lang === "ar" ? "الهاتف" : "Phone"} {(user as any)?.phoneVerified ? "✓" : "✗"}
+                    </Badge>
+                    {user?.isVerified && (
+                      <Badge className="text-xs gap-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        <CheckCircle className="w-3 h-3" />
+                        {lang === "ar" ? "موثق بالكامل" : "Fully Verified"}
+                      </Badge>
+                    )}
+                    {(user as any)?.kycStatus === "verified" && (
+                      <Badge className="text-xs gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                        <CheckCircle className="w-3 h-3" />
+                        {lang === "ar" ? "هوية موثقة" : "Identity Verified"}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
                 {/* Avatar Upload Section */}
                 <div className="bg-muted/30 rounded-xl p-6 border border-dashed border-[#3ECFC0]/30">
                   <h4 className="font-semibold mb-4 flex items-center gap-2 text-sm">

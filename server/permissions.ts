@@ -24,6 +24,8 @@ export const PERMISSIONS = {
   MANAGE_AI: "manage_ai",
   MANAGE_PAYMENTS_OVERRIDE: "manage_payments_override",
   MANAGE_WHATSAPP: "manage_whatsapp",
+  MANAGE_KYC: "manage_kyc",
+  MANAGE_INTEGRATIONS: "manage_integrations",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -71,6 +73,18 @@ export const PERMISSION_CATEGORIES = [
     labelAr: "إدارة واتساب",
     labelEn: "WhatsApp Management",
     permissions: [PERMISSIONS.MANAGE_WHATSAPP],
+  },
+  {
+    key: "kyc",
+    labelAr: "إدارة التحقق من الهوية",
+    labelEn: "KYC Management",
+    permissions: [PERMISSIONS.MANAGE_KYC],
+  },
+  {
+    key: "integrations",
+    labelAr: "إدارة التكاملات",
+    labelEn: "Integration Management",
+    permissions: [PERMISSIONS.MANAGE_INTEGRATIONS],
   },
 ];
 

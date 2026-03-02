@@ -18,6 +18,8 @@ import { optimizeImage, optimizeAvatar } from "./image-optimizer";
 import { generateLeaseContractHTML } from "./lease-contract";
 import { createPayPalOrder, capturePayPalOrder, getPayPalSettings } from "./paypal";
 import { notifyOwner } from "./_core/notification";
+import { isBreakglassAdmin } from "./breakglass";
+import { isFlagOn } from "./feature-flags";
 import { calculateBookingTotal, parseCalcSettings } from "./booking-calculator";
 import { sendBookingConfirmation, sendPaymentReceipt, sendMaintenanceUpdate, sendNewMaintenanceAlert, verifySmtpConnection, isSmtpConfigured } from "./email";
 import { savePushSubscription, removePushSubscription, sendPushToUser, sendPushBroadcast, isPushConfigured, getUserSubscriptionCount } from "./push";
@@ -361,6 +363,27 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const prop = await db.getPropertyById(input.propertyId);
         if (!prop) throw new TRPCError({ code: 'NOT_FOUND', message: 'Property not found' });
+
+        // ─── Verification gate for Instant Book ───
+        // When flag is ON and property has instantBook, user must be verified.
+        // Break-glass admins and root admins bypass this gate.
+        if (prop.instantBook) {
+          const requireVerification = await isFlagOn("verification.requireForInstantBook");
+          if (requireVerification) {
+            const bgBypass = isBreakglassAdmin({ email: ctx.user.email, userId: ctx.user.userId });
+            const isAdmin = ctx.user.role === "admin";
+            if (!bgBypass && !isAdmin) {
+              const fullUser = await db.getUserById(ctx.user.id);
+              const isFullyVerified = fullUser?.emailVerified && fullUser?.phoneVerified;
+              if (!isFullyVerified) {
+                throw new TRPCError({
+                  code: 'FORBIDDEN',
+                  message: 'Instant Book requires email and phone verification. Please verify your account first. / الحجز الفوري يتطلب التحقق من البريد والهاتف. يرجى توثيق حسابك أولاً.',
+                });
+              }
+            }
+          }
+        }
 
         // ─── Validation: duration from system settings ───
         const allSettings = await db.getAllSettings();

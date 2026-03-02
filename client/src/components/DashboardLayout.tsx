@@ -28,7 +28,7 @@ import {
   AlertTriangle, BarChart3, Settings, MapPin, KeyRound,
   BookOpen, UserCog, Shield, MessageCircle, Database,
   Building2, Inbox, Plug, CalendarCheck, CreditCard, Hotel,
-  Sun, Moon, Languages, FileText, Newspaper,
+  Sun, Moon, Languages, FileText, Newspaper, Fingerprint, ToggleLeft,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -57,6 +57,8 @@ const menuItems: MenuItem[] = [
   { icon: BookOpen, labelKey: "adminMenu.knowledgeBase", path: "/admin/knowledge-base" },
   { icon: MessageCircle, labelKey: "adminMenu.whatsapp", path: "/admin/whatsapp" },
   { icon: Plug, labelKey: "adminMenu.integrations", path: "/admin/integrations" },
+  { icon: Fingerprint, labelKey: "adminMenu.kyc", path: "/admin/kyc" },
+  { icon: ToggleLeft, labelKey: "adminMenu.featureFlags", path: "/admin/feature-flags" },
   { icon: Shield, labelKey: "adminMenu.hardening", path: "/admin/hardening" },
   { icon: Newspaper, labelKey: "adminMenu.cms", path: "/admin/cms" },
   { icon: FileText, labelKey: "adminMenu.auditLog", path: "/admin/audit-log" },
