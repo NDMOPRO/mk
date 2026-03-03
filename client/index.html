@@ -135,21 +135,13 @@
     }
     </script>
 
-    <!-- Google Analytics (loads only when VITE_GA_MEASUREMENT_ID is set) -->
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-00RH3L5X20"></script>
     <script>
-      (function() {
-        var gaId = '%VITE_GA_MEASUREMENT_ID%';
-        if (!gaId || gaId.indexOf('VITE_GA') !== -1) return;
-        var s = document.createElement('script');
-        s.async = true;
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
-        document.head.appendChild(s);
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        window.gtag = gtag;
-        gtag('js', new Date());
-        gtag('config', gaId);
-      })();
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-00RH3L5X20');
     </script>
 
     <!-- Preconnect to critical origins -->
