@@ -16,7 +16,7 @@ describe("Legal Compliance - Saudi Regulations", () => {
     it("should have all required legal setting keys defined in seed defaults", async () => {
       // Read the routers file to check seed defaults include legal keys
       const fs = await import("fs");
-      const routersContent = fs.readFileSync("./server/routers.ts", "utf-8");
+      const routersContent = fs.readFileSync("./server/routers/cms.router.ts", "utf-8");
       
       for (const key of requiredLegalKeys) {
         expect(routersContent).toContain(`"${key}"`);
