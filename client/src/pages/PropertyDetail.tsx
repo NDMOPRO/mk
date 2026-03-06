@@ -831,21 +831,76 @@ export default function PropertyDetail() {
                     <Separator />
 
                     {/* Hide security deposit when admin has enabled insurance hiding */}
-                    {prop.securityDeposit && !calcConfig.data?.hideInsuranceFromTenant && (
+                    {!calcConfig.data?.hideInsuranceFromTenant && (() => {
+                      const cfg = calcConfig.data;
+                      const rent = Number(prop.monthlyRent);
+                      const depositAmt = cfg
+                        ? (cfg.insuranceMode === "fixed"
+                          ? Math.round(cfg.insuranceFixedAmount || 0)
+                          : Math.round(rent * ((cfg.insuranceRate || 10) / 100)))
+                        : (prop.securityDeposit ? Number(prop.securityDeposit) : 0);
+                      return depositAmt > 0 ? (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            {lang === "ar" ? (cfg?.labels?.insuranceAr || t("property.securityDeposit")) : (cfg?.labels?.insuranceEn || t("property.securityDeposit"))}
+                            {cfg?.insuranceMode === "percentage" && ` (${cfg.insuranceRate}%)`}
+                          </span>
+                          <span className="font-medium text-foreground">{depositAmt.toLocaleString()} {t("payment.sar")}</span>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* Service Fee — from calculator config */}
+                    {calcConfig.data && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{t("property.securityDeposit")}</span>
-                        <span className="font-medium text-foreground">{Number(prop.securityDeposit).toLocaleString()} {t("payment.sar")}</span>
+                        <span className="text-muted-foreground">
+                          {lang === "ar" ? (calcConfig.data.labels?.serviceFeeAr || "رسوم الخدمة") : (calcConfig.data.labels?.serviceFeeEn || "Service Fee")}
+                          {` (${calcConfig.data.serviceFeeRate}%)`}
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {Math.round(Number(prop.monthlyRent) * (calcConfig.data.serviceFeeRate / 100)).toLocaleString()} {t("payment.sar")}
+                        </span>
                       </div>
                     )}
 
+                    {/* VAT — from calculator config */}
+                    {calcConfig.data && calcConfig.data.vatRate > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {lang === "ar" ? (calcConfig.data.labels?.vatAr || "ضريبة القيمة المضافة") : (calcConfig.data.labels?.vatEn || "VAT")}
+                          {` (${calcConfig.data.vatRate}%)`}
+                        </span>
+                        <span className="font-medium text-muted-foreground text-xs">
+                          {lang === "ar" ? "تُحسب عند الحجز" : "Calculated at booking"}
+                        </span>
+                      </div>
+                    )}
+
+                    <Separator className="my-1" />
+
+                    {/* Min/Max Stay — from property data + calcConfig */}
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{lang === "ar" ? "الحد الأدنى للإقامة" : "Min Stay"}</span>
-                      <span className="font-medium text-foreground">1 {lang === "ar" ? "شهر" : "Month"}</span>
+                      <span className="font-medium text-foreground">
+                        {(() => {
+                          const allowed = calcConfig.data?.allowedMonths;
+                          const propMin = prop.minStayMonths || 1;
+                          const min = allowed && allowed.length > 0 ? Math.min(...allowed) : propMin;
+                          return `${min} ${min === 1 ? (lang === "ar" ? "شهر" : "Month") : min === 2 ? (lang === "ar" ? "شهرين" : "Months") : (lang === "ar" ? "أشهر" : "Months")}`;
+                        })()}
+                      </span>
                     </div>
 
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{lang === "ar" ? "الحد الأقصى للإقامة" : "Max Stay"}</span>
-                      <span className="font-medium text-foreground">2 {lang === "ar" ? "أشهر" : "Months"}</span>
+                      <span className="font-medium text-foreground">
+                        {(() => {
+                          const allowed = calcConfig.data?.allowedMonths;
+                          const propMax = prop.maxStayMonths || 12;
+                          const max = allowed && allowed.length > 0 ? Math.max(...allowed) : propMax;
+                          return `${max} ${max === 1 ? (lang === "ar" ? "شهر" : "Month") : max === 2 ? (lang === "ar" ? "شهرين" : "Months") : (lang === "ar" ? "أشهر" : "Months")}`;
+                        })()}
+                      </span>
                     </div>
 
                     {prop.furnishedLevel && (

@@ -17,11 +17,11 @@ import {
   Calendar as CalendarIcon, FileText, CheckCircle, ArrowLeft, ArrowRight,
   Loader2, MapPin, BedDouble, Bath, Maximize2, Clock
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
-import { useSiteSettings } from "@/contexts/SiteSettingsContext";
+// Calculator config is now fetched via trpc.calculator.getConfig
 import { format } from "date-fns";
 import { ar, enUS } from "date-fns/locale";
 
@@ -33,13 +33,38 @@ export default function BookingFlow() {
   const propertyId = Number(params?.id);
 
   const property = trpc.property.getById.useQuery({ id: propertyId }, { enabled: !!propertyId });
-  const { get: setting } = useSiteSettings();
+
+  // Fetch calculator config from backend (allowed months, rates, labels)
+  const calcConfig = trpc.calculator.getConfig.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
 
   const [step, setStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [durationMonths, setDurationMonths] = useState(1);
+  const [durationMonths, setDurationMonths] = useState<number>(0);
   const [tenantNotes, setTenantNotes] = useState("");
   const [dateOpen, setDateOpen] = useState(false);
+
+  // Auto-select first allowed month when config loads
+  useEffect(() => {
+    if (calcConfig.data && calcConfig.data.allowedMonths.length > 0 && durationMonths === 0) {
+      setDurationMonths(calcConfig.data.allowedMonths[0]);
+    }
+  }, [calcConfig.data, durationMonths]);
+
+  // Server-side calculation (same as CostCalculator — uses shared booking-calculator)
+  const calcMutation = trpc.calculator.calculate.useMutation();
+
+  // Trigger server calculation when duration or property changes
+  const monthlyRent = property.data ? Number(property.data.monthlyRent) : 0;
+  useEffect(() => {
+    if (durationMonths > 0 && monthlyRent > 0) {
+      calcMutation.mutate({ monthlyRent, selectedMonths: durationMonths });
+    }
+  }, [durationMonths, monthlyRent]);
+
+  const calcResult = calcMutation.data;
 
   const createBooking = trpc.booking.create.useMutation({
     onSuccess: () => {
@@ -54,26 +79,10 @@ export default function BookingFlow() {
 
   const prop = property.data;
   const BackArrow = dir === "rtl" ? ArrowRight : ArrowLeft;
-
-  // Calculate costs
-  const serviceFeePercent = parseFloat(setting("fees.serviceFeePercent", "5")) || 5;
-  const vatPercent = parseFloat(setting("fees.vatPercent", "15")) || 15;
-  const depositPercent = parseFloat(setting("fees.depositPercent", "10")) || 10;
-  const insuranceMode = setting("calculator.insuranceMode", "percentage");
-  const insuranceFixedAmount = parseFloat(setting("calculator.insuranceFixedAmount", "0")) || 0;
-  const hideInsurance = setting("calculator.hideInsuranceFromTenant", "false") === "true";
-  const monthlyRent = prop ? Number(prop.monthlyRent) : 0;
-  const totalRent = monthlyRent * durationMonths;
-  // Calculate insurance based on mode
-  const securityDeposit = insuranceMode === "fixed"
-    ? Math.round(insuranceFixedAmount)
-    : Math.round(monthlyRent * (depositPercent / 100));
-  const serviceFee = Math.round(monthlyRent * (serviceFeePercent / 100));
-  // When insurance is hidden, merge it into displayed rent and compute VAT on full subtotal
-  const displayedRent = hideInsurance ? totalRent + securityDeposit : totalRent;
-  const subtotalForVat = totalRent + securityDeposit + serviceFee;
-  const vatAmount = Math.round(subtotalForVat * (vatPercent / 100));
-  const totalAmount = totalRent + securityDeposit + serviceFee + vatAmount;
+  const cfg = calcConfig.data;
+  const allowedMonths = cfg?.allowedMonths || [1, 2];
+  const currency = lang === "ar" ? (cfg?.currencySymbolAr || "ر.س") : (cfg?.currencySymbolEn || "SAR");
+  const labels = cfg?.labels;
 
   const moveInDateStr = selectedDate ? format(selectedDate, "yyyy-MM-dd") : "";
   const moveOutDate = useMemo(() => {
@@ -241,8 +250,8 @@ export default function BookingFlow() {
                   <Clock className="h-4 w-4 inline-block me-2 text-primary" />
                   {t("booking.duration")}
                 </Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[1, 2].map(m => (
+                <div className={`grid gap-3 ${allowedMonths.length <= 2 ? 'grid-cols-2' : allowedMonths.length <= 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+                  {allowedMonths.map(m => (
                     <button
                       key={m}
                       onClick={() => setDurationMonths(m)}
@@ -256,7 +265,7 @@ export default function BookingFlow() {
                         {m}
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {m === 1 ? (lang === "ar" ? "شهر واحد" : "Month") : (lang === "ar" ? "شهرين" : "Months")}
+                        {monthLabel(m, lang)}
                       </div>
                       {durationMonths === m && (
                         <div className="absolute top-2 end-2">
@@ -344,44 +353,75 @@ export default function BookingFlow() {
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground text-sm">{t("booking.duration")}</span>
                     <Badge variant="secondary" className="font-medium">
-                      {durationMonths === 1 ? (lang === "ar" ? "شهر واحد" : "1 Month") : (lang === "ar" ? "شهرين" : "2 Months")}
+                      {durationMonths} {monthLabel(durationMonths, lang)}
                     </Badge>
                   </div>
                 </div>
 
                 <Separator />
 
-                {/* Cost breakdown */}
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{t("property.monthlyRent")} x {durationMonths}</span>
-                    <span className="font-medium">{(hideInsurance ? displayedRent : totalRent).toLocaleString()} {t("payment.sar")}</span>
+                {/* Cost breakdown — from server calculator */}
+                {calcMutation.isPending ? (
+                  <div className="space-y-3">
+                    <div className="h-5 w-full bg-muted animate-pulse rounded" />
+                    <div className="h-5 w-full bg-muted animate-pulse rounded" />
+                    <div className="h-5 w-full bg-muted animate-pulse rounded" />
+                    <div className="h-5 w-3/4 bg-muted animate-pulse rounded" />
                   </div>
-                  {!hideInsurance && securityDeposit > 0 && (
+                ) : calcResult ? (
+                  <div className="space-y-3">
+                    {/* Rent total */}
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">
-                        {t("property.securityDeposit")}
-                        {insuranceMode === "percentage" && ` (${depositPercent}%)`}
+                        {t("property.monthlyRent")} x {calcResult.selectedMonths}
                       </span>
-                      <span className="font-medium">{securityDeposit.toLocaleString()} {t("payment.sar")}</span>
+                      <span className="font-medium">{calcResult.rentTotal.toLocaleString()} {currency}</span>
                     </div>
-                  )}
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{t("payment.serviceFee")} ({serviceFeePercent}%)</span>
-                    <span className="font-medium">{serviceFee.toLocaleString()} {t("payment.sar")}</span>
-                  </div>
-                  {vatAmount > 0 && (
+
+                    {/* Insurance/Deposit — hidden when admin enables it */}
+                    {!calcResult.insuranceHidden && calcResult.insuranceAmount > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {lang === "ar" ? (labels?.insuranceAr || t("property.securityDeposit")) : (labels?.insuranceEn || t("property.securityDeposit"))}
+                          {calcResult.appliedRates.insuranceMode === "percentage" && ` (${calcResult.appliedRates.insuranceRate}%)`}
+                        </span>
+                        <span className="font-medium">{calcResult.insuranceAmount.toLocaleString()} {currency}</span>
+                      </div>
+                    )}
+
+                    {/* Service Fee */}
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{lang === "ar" ? `ضريبة القيمة المضافة (${vatPercent}%)` : `VAT (${vatPercent}%)`}</span>
-                      <span className="font-medium">{vatAmount.toLocaleString()} {t("payment.sar")}</span>
+                      <span className="text-muted-foreground">
+                        {lang === "ar" ? (labels?.serviceFeeAr || t("payment.serviceFee")) : (labels?.serviceFeeEn || t("payment.serviceFee"))}
+                        {` (${calcResult.appliedRates.serviceFeeRate}%)`}
+                      </span>
+                      <span className="font-medium">{calcResult.serviceFeeAmount.toLocaleString()} {currency}</span>
                     </div>
-                  )}
-                  <Separator />
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>{t("common.total")}</span>
-                    <span className="text-primary">{totalAmount.toLocaleString()} {t("payment.sar")}</span>
+
+                    {/* VAT */}
+                    {calcResult.vatAmount > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {lang === "ar" ? (labels?.vatAr || "ضريبة القيمة المضافة") : (labels?.vatEn || "VAT")}
+                          {` (${calcResult.appliedRates.vatRate}%)`}
+                        </span>
+                        <span className="font-medium">{calcResult.vatAmount.toLocaleString()} {currency}</span>
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Grand Total */}
+                    <div className="flex justify-between text-lg font-bold">
+                      <span>{t("common.total")}</span>
+                      <span className="text-primary">{calcResult.grandTotal.toLocaleString()} {currency}</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center text-muted-foreground text-sm py-4">
+                    {lang === "ar" ? "جاري حساب التكلفة..." : "Calculating cost..."}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -453,6 +493,17 @@ export default function BookingFlow() {
       <Footer />
     </div>
   );
+}
+
+/** Arabic-aware month label: 1=شهر, 2=شهرين, 3-10=أشهر, 11+=شهر */
+function monthLabel(m: number, lang: string): string {
+  if (lang === "ar") {
+    if (m === 1) return "شهر واحد";
+    if (m === 2) return "شهرين";
+    if (m >= 3 && m <= 10) return "أشهر";
+    return "شهر";
+  }
+  return m === 1 ? "Month" : "Months";
 }
 
 function Skeleton({ className }: { className?: string }) {
