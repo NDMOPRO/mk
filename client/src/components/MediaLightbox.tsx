@@ -104,44 +104,6 @@ export function MediaLightbox({ items, initialIndex = 0, open, onClose, property
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Grid toggle */}
-          <button
-            onClick={() => setViewMode((m) => m === "grid" ? "slideshow" : "grid")}
-            className={`p-2.5 rounded-full transition-colors ${viewMode === "grid" ? "bg-white/25 text-white" : "bg-white/10 hover:bg-white/20 text-white/80"}`}
-            title={lang === "ar" ? "عرض الشبكة" : "Grid View"}
-          >
-            <Grid3X3 className="w-4.5 h-4.5" />
-          </button>
-          {/* Zoom controls */}
-          {!isVideo && viewMode === "slideshow" && (
-            <>
-              <button
-                onClick={() => setZoom((z) => Math.min(z + 0.25, 3))}
-                className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition-colors"
-                title={lang === "ar" ? "تكبير" : "Zoom In"}
-              >
-                <ZoomIn className="w-4.5 h-4.5" />
-              </button>
-              <button
-                onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))}
-                className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition-colors"
-                title={lang === "ar" ? "تصغير" : "Zoom Out"}
-              >
-                <ZoomOut className="w-4.5 h-4.5" />
-              </button>
-            </>
-          )}
-          {/* Download */}
-          <a
-            href={current.url}
-            download
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition-colors"
-            title={lang === "ar" ? "تحميل" : "Download"}
-          >
-            <Download className="w-4.5 h-4.5" />
-          </a>
           {/* Close */}
           <button
             onClick={onClose}
