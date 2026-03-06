@@ -717,7 +717,7 @@ export default function PropertyDetail() {
 
           {/* Sidebar */}
           <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-20 space-y-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:scrollbar-thin lg:scrollbar-thumb-muted-foreground/20 lg:scrollbar-track-transparent lg:pe-1">
+            <div className="lg:sticky lg:top-20 space-y-4">
 
               {/* Booking Card — hidden when calculator is open */}
               {!showCalculator && (
@@ -908,41 +908,39 @@ export default function PropertyDetail() {
               {/* Secure Payment Methods Badges */}
               <PaymentMethodsBadges variant="property" />
 
-              {/* Property Manager Card */}
+              {/* Property Manager Card — integrated inside booking area */}
               {(prop as any).manager && (
                 <Card className="shadow-md border-[#3ECFC0]/20">
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-4 mb-3">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
                       {(prop as any).manager.photoUrl ? (
-                        <img src={normalizeImageUrl((prop as any).manager.photoUrl)} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-[#3ECFC0]/30" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
+                        <img src={normalizeImageUrl((prop as any).manager.photoUrl)} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-[#3ECFC0]/30" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
                       ) : null}
-                      <div className={`w-14 h-14 rounded-full bg-gradient-to-br from-[#3ECFC0] to-[#2ab5a6] flex items-center justify-center text-white font-bold text-lg select-none ${(prop as any).manager.photoUrl ? 'hidden' : ''}`}>
+                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-[#3ECFC0] to-[#2ab5a6] flex items-center justify-center text-white font-bold text-base select-none ${(prop as any).manager.photoUrl ? 'hidden' : ''}`}>
                         {((prop as any).manager.name || '').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || 'PM'}
                       </div>
-                      <div>
-                        <h4 className="font-semibold font-heading text-foreground">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold font-heading text-foreground text-sm truncate">
                           {lang === "ar" ? ((prop as any).manager.nameAr || (prop as any).manager.name) : (prop as any).manager.name}
                         </h4>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground truncate">
                           {lang === "ar" ? ((prop as any).manager.titleAr || "مدير العقار") : ((prop as any).manager.title || "Property Manager")}
                         </p>
                       </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {(prop as any).manager.phone && (
+                          <a href={`tel:${(prop as any).manager.phone}`} className="w-9 h-9 rounded-full bg-[#3ECFC0]/10 hover:bg-[#3ECFC0]/20 flex items-center justify-center text-[#3ECFC0] transition-colors" title={(prop as any).manager.phone}>
+                            <Phone className="h-4 w-4" />
+                          </a>
+                        )}
+                        {(prop as any).manager.whatsapp && (
+                          <a href={`https://wa.me/${(prop as any).manager.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener" className="w-9 h-9 rounded-full bg-green-500/10 hover:bg-green-500/20 flex items-center justify-center text-green-500 transition-colors">
+                            <MessageSquare className="h-4 w-4" />
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      {(prop as any).manager.phone && (
-                        <a href={`tel:${(prop as any).manager.phone}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-[#3ECFC0] transition-colors">
-                          <Phone className="h-4 w-4" />
-                          <span dir="ltr">{(prop as any).manager.phone}</span>
-                        </a>
-                      )}
-                      {(prop as any).manager.whatsapp && (
-                        <a href={`https://wa.me/${(prop as any).manager.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-green-500 transition-colors">
-                          <MessageSquare className="h-4 w-4" />
-                          <span>{lang === "ar" ? "تواصل عبر واتساب" : "Chat on WhatsApp"}</span>
-                        </a>
-                      )}
-                    </div>
-                    <a href={`/agent/${(prop as any).manager.id}`} className="mt-3 block text-center text-sm text-[#3ECFC0] hover:underline">
+                    <a href={`/agent/${(prop as any).manager.id}`} className="mt-2.5 block text-center text-xs text-[#3ECFC0] hover:underline border-t border-border/30 pt-2.5">
                       {lang === "ar" ? "عرض الملف الشخصي" : "View Profile"}
                     </a>
                   </CardContent>
