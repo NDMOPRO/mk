@@ -79,7 +79,7 @@ function getPropertyImage(property: ApiProperty, index = 0): string {
 
 // ─── Tab Types ───
 type TabId = "home" | "search" | "favorites" | "bookings" | "profile";
-type ScreenId = "tabs" | "property-detail" | "booking-flow" | "login" | "notifications-settings" | "twilio-setup" | "profile-completion" | "admin-panel" | "wallet-log" | "wallet-topup";
+type ScreenId = "tabs" | "property-detail" | "booking-flow" | "login" | "notifications-settings" | "twilio-setup" | "profile-completion" | "admin-panel" | "wallet-log" | "wallet-topup" | "faq" | "terms" | "privacy" | "rate-us" | "contact-support" | "invite-friends" | "change-language";
 type SortOption = "default" | "price_asc" | "price_desc" | "newest" | "rating";
 
 const SORT_OPTIONS: { value: SortOption; label: string; icon: typeof ArrowUpDown }[] = [
@@ -333,7 +333,7 @@ export default function MobileApp() {
 
   const goBack = useCallback(() => {
     if (screen === "booking-flow" && bookingStep > 0) { setBookingStep((s) => s - 1); return; }
-    if (screen === "notifications-settings" || screen === "twilio-setup" || screen === "profile-completion" || screen === "admin-panel" || screen === "wallet-log" || screen === "wallet-topup") { setScreen("tabs"); return; }
+    if (screen === "notifications-settings" || screen === "twilio-setup" || screen === "profile-completion" || screen === "admin-panel" || screen === "wallet-log" || screen === "wallet-topup" || screen === "faq" || screen === "terms" || screen === "privacy" || screen === "rate-us" || screen === "contact-support" || screen === "invite-friends" || screen === "change-language") { setScreen("tabs"); return; }
     setScreen("tabs");
     setSelectedPropertyId(null);
     setSelectedPropertyData(null);
@@ -475,6 +475,13 @@ export default function MobileApp() {
                       onOpenAdmin={() => setScreen("admin-panel")}
                       onOpenWalletLog={() => setScreen("wallet-log")}
                       onOpenWalletTopup={() => setScreen("wallet-topup")}
+                      onOpenFAQ={() => setScreen("faq")}
+                      onOpenTerms={() => setScreen("terms")}
+                      onOpenPrivacy={() => setScreen("privacy")}
+                      onOpenRateUs={() => setScreen("rate-us")}
+                      onOpenContact={() => setScreen("contact-support")}
+                      onOpenInvite={() => setScreen("invite-friends")}
+                      onOpenLanguage={() => setScreen("change-language")}
                       userBookingsCount={userBookings.length}
                       isAdmin={isAdmin}
                       walletBalance={walletBalance}
@@ -569,6 +576,48 @@ export default function MobileApp() {
             {screen === "wallet-topup" && (
               <motion.div key="wallet-topup" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
                 <WalletTopupScreen onBack={goBack} paymentConfig={paymentConfig} onSuccess={refreshWalletBalance} />
+              </motion.div>
+            )}
+
+            {screen === "faq" && (
+              <motion.div key="faq" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <FAQScreen onBack={goBack} />
+              </motion.div>
+            )}
+
+            {screen === "terms" && (
+              <motion.div key="terms" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <TermsScreen onBack={goBack} />
+              </motion.div>
+            )}
+
+            {screen === "privacy" && (
+              <motion.div key="privacy" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <PrivacyScreen onBack={goBack} />
+              </motion.div>
+            )}
+
+            {screen === "rate-us" && (
+              <motion.div key="rate-us" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <RateUsScreen onBack={goBack} />
+              </motion.div>
+            )}
+
+            {screen === "contact-support" && (
+              <motion.div key="contact-support" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <ContactSupportScreen onBack={goBack} />
+              </motion.div>
+            )}
+
+            {screen === "invite-friends" && (
+              <motion.div key="invite-friends" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <InviteFriendsScreen onBack={goBack} />
+              </motion.div>
+            )}
+
+            {screen === "change-language" && (
+              <motion.div key="change-language" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <ChangeLanguageScreen onBack={goBack} />
               </motion.div>
             )}
 
@@ -1784,6 +1833,7 @@ function ProfileTab({
   isLoggedIn, onLogin, onLogout, userName, userEmail, userInitials,
   onOpenNotifications, onOpenTwilioSetup, onOpenProfile, onOpenAdmin,
   onOpenWalletLog, onOpenWalletTopup,
+  onOpenFAQ, onOpenTerms, onOpenPrivacy, onOpenRateUs, onOpenContact, onOpenInvite, onOpenLanguage,
   userBookingsCount, isAdmin, walletBalance, walletLoading,
 }: {
   isLoggedIn: boolean; onLogin: () => void; onLogout: () => void;
@@ -1791,6 +1841,8 @@ function ProfileTab({
   onOpenNotifications: () => void; onOpenTwilioSetup: () => void;
   onOpenProfile: () => void; onOpenAdmin: () => void;
   onOpenWalletLog: () => void; onOpenWalletTopup: () => void;
+  onOpenFAQ: () => void; onOpenTerms: () => void; onOpenPrivacy: () => void;
+  onOpenRateUs: () => void; onOpenContact: () => void; onOpenInvite: () => void; onOpenLanguage: () => void;
   userBookingsCount: number; isAdmin: boolean;
   walletBalance: number; walletLoading: boolean;
 }) {
@@ -1799,10 +1851,10 @@ function ProfileTab({
   // Guest menu items (shown when not logged in)
   const guestMenuItems: { label: string; icon: React.ReactNode; action?: () => void; requiresAuth?: boolean }[] = [
     { label: "استضف معنا (سجّل عقارك)", icon: <Building2 className="w-5 h-5" />, action: () => setShowHostSheet(true) },
-    { label: "الأسئلة الشائعة", icon: <HelpCircle className="w-5 h-5" />, action: () => toast.info("قريباً") },
-    { label: "شروط الاستخدام", icon: <FileText className="w-5 h-5" />, action: () => toast.info("قريباً") },
-    { label: "سياسة الخصوصية", icon: <Shield className="w-5 h-5" />, action: () => toast.info("قريباً") },
-    { label: "تغيير اللغة", icon: <Globe className="w-5 h-5" />, action: () => toast.info("قريباً") },
+    { label: "الأسئلة الشائعة", icon: <HelpCircle className="w-5 h-5" />, action: onOpenFAQ },
+    { label: "شروط الاستخدام", icon: <FileText className="w-5 h-5" />, action: onOpenTerms },
+    { label: "سياسة الخصوصية", icon: <Shield className="w-5 h-5" />, action: onOpenPrivacy },
+    { label: "تغيير اللغة", icon: <Globe className="w-5 h-5" />, action: onOpenLanguage },
   ];
 
   if (!isLoggedIn) {
@@ -1900,15 +1952,15 @@ function ProfileTab({
   const menuItems: { label: string; icon: React.ReactNode; action?: () => void; value?: string; divider?: boolean }[] = [
     { label: "الملف الشخصي", icon: <User className="w-5 h-5" />, action: onOpenProfile },
     { label: "سجل المحفظة", icon: <Wallet className="w-5 h-5" />, action: onOpenWalletLog },
-    { label: "قيّمنا", icon: <ThumbsUp className="w-5 h-5" />, action: () => toast.info("قريباً") },
+    { label: "قيّمنا", icon: <ThumbsUp className="w-5 h-5" />, action: onOpenRateUs },
     { label: "استضف معنا (سجّل عقارك)", icon: <Building2 className="w-5 h-5" />, action: () => setShowHostSheet(true) },
     { label: "شحن المحفظة", icon: <CreditCard className="w-5 h-5" />, action: onOpenWalletTopup },
-    { label: "تواصل مع تجربة الضيف", icon: <Mail className="w-5 h-5" />, action: () => toast.info("قريباً") },
-    { label: "دعوة أصدقاء", icon: <Share2 className="w-5 h-5" />, action: () => toast.info("قريباً") },
-    { label: "الأسئلة الشائعة", icon: <HelpCircle className="w-5 h-5" />, action: () => toast.info("قريباً") },
-    { label: "شروط الاستخدام", icon: <FileText className="w-5 h-5" />, action: () => toast.info("قريباً") },
-    { label: "سياسة الخصوصية", icon: <Shield className="w-5 h-5" />, action: () => toast.info("قريباً") },
-    { label: "تغيير اللغة", icon: <Globe className="w-5 h-5" />, action: () => toast.info("قريباً") },
+    { label: "تواصل مع تجربة الضيف", icon: <Mail className="w-5 h-5" />, action: onOpenContact },
+    { label: "دعوة أصدقاء", icon: <Share2 className="w-5 h-5" />, action: onOpenInvite },
+    { label: "الأسئلة الشائعة", icon: <HelpCircle className="w-5 h-5" />, action: onOpenFAQ },
+    { label: "شروط الاستخدام", icon: <FileText className="w-5 h-5" />, action: onOpenTerms },
+    { label: "سياسة الخصوصية", icon: <Shield className="w-5 h-5" />, action: onOpenPrivacy },
+    { label: "تغيير اللغة", icon: <Globe className="w-5 h-5" />, action: onOpenLanguage },
     { label: "الإشعارات", icon: <Bell className="w-5 h-5" />, action: onOpenNotifications },
     { label: "إعداد SMS (Twilio)", icon: <Phone className="w-5 h-5" />, action: onOpenTwilioSetup },
     ...(isAdmin ? [{ label: "لوحة التحكم", icon: <ShieldCheck className="w-5 h-5" />, action: onOpenAdmin }] : []),
@@ -2137,7 +2189,7 @@ function ProfileCompletionScreen({ onBack, userId }: { onBack: () => void; userI
           <ChevronRight className="w-5 h-5" />
         </button>
         <h1 className="text-base font-bold" style={{ color: "#6B21A8" }}>الملف الشخصي</h1>
-        <button onClick={() => toast.info("حذف الحساب — قريباً")} className="p-2 -mr-2">
+        <button onClick={() => toast.info("لحذف حسابك، يرجى التواصل مع الدعم")} className="p-2 -mr-2">
           <Trash2 className="w-5 h-5 text-muted-foreground" />
         </button>
       </div>
@@ -2589,23 +2641,25 @@ function AdminPanel({ onBack }: { onBack: () => void }) {
         <div className="w-9" />
       </div>
 
-      {/* Section Tabs */}
-      <div className="flex overflow-x-auto gap-1 px-3 py-2 border-b border-border/20 no-scrollbar">
-        {sections.map(sec => (
-          <button
-            key={sec.id}
-            onClick={() => setActiveSection(sec.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-              activeSection === sec.id
-                ? "text-white"
-                : "text-muted-foreground bg-card/50"
-            }`}
-            style={activeSection === sec.id ? { background: "linear-gradient(135deg, #6B21A8, #7C3AED)" } : {}}
-          >
-            {sec.icon}
-            {sec.label}
-          </button>
-        ))}
+      {/* Section Tabs - scrollable with proper sizing */}
+      <div className="overflow-x-auto border-b border-border/20" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className="flex min-w-max px-3 py-2 gap-1.5">
+          {sections.map(sec => (
+            <button
+              key={sec.id}
+              onClick={() => setActiveSection(sec.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+                activeSection === sec.id
+                  ? "text-white shadow-md"
+                  : "text-muted-foreground bg-card/50 hover:bg-card/80"
+              }`}
+              style={activeSection === sec.id ? { background: "linear-gradient(135deg, #6B21A8, #7C3AED)" } : {}}
+            >
+              <span className="w-4 h-4 flex-shrink-0 [&>svg]:w-4 [&>svg]:h-4">{sec.icon}</span>
+              {sec.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-24">
@@ -3060,6 +3114,328 @@ function WalletTopupScreen({ onBack, paymentConfig, onSuccess }: {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── FAQ Screen ───
+function FAQScreen({ onBack }: { onBack: () => void }) {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const faqs = [
+    { q: "كيف أحجز عقار؟", a: "اختر العقار المناسب من الصفحة الرئيسية أو البحث، ثم اضغط على 'احجز الآن' واتبع خطوات الحجز. ستحتاج لتحديد تاريخ الدخول والخروج وإتمام الدفع." },
+    { q: "ما هي طرق الدفع المتاحة؟", a: "ندعم الدفع عبر بطاقات mada وVisa وMastercard وApple Pay. يمكنك أيضاً استخدام رصيد المحفظة للدفع." },
+    { q: "كيف أشحن محفظتي؟", a: "اذهب إلى 'شحن المحفظة' من قائمة المزيد، اختر المبلغ وأتمّ الدفع عبر بوابة الدفع الآمنة." },
+    { q: "هل يمكنني إلغاء الحجز؟", a: "نعم، يمكنك إلغاء الحجز من صفحة 'حجوزاتي'. تطبق سياسة الإلغاء الخاصة بكل عقار. قد يتم خصم رسوم إلغاء حسب توقيت الإلغاء." },
+    { q: "كيف أسجل عقاري للإيجار؟", a: "اضغط على 'استضف معنا' من القائمة، وسيتم توجيهك لتسجيل عقارك عبر تطبيق المفتاح الشهري للأعمال." },
+    { q: "هل العقارات مرخصة؟", a: "نعم، جميع العقارات المعروضة على المنصة مرخصة من وزارة السياحة وتخضع للرقابة والتدقيق." },
+    { q: "كيف أتواصل مع الدعم؟", a: "يمكنك التواصل معنا عبر 'تواصل مع تجربة الضيف' من القائمة، أو عبر البريد الإلكتروني support@monthlykey.com أو الاتصال على 920033225." },
+    { q: "هل يمكنني تعديل الحجز بعد التأكيد؟", a: "لا يمكن تعديل الحجز مباشرة، لكن يمكنك إلغاء الحجز الحالي وإنشاء حجز جديد بالتواريخ المطلوبة." },
+  ];
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 pt-14 pb-3 border-b border-border/30">
+        <button onClick={onBack} className="p-2 -ml-2"><ChevronRight className="w-5 h-5" /></button>
+        <h1 className="text-base font-bold" style={{ color: "#6B21A8" }}>الأسئلة الشائعة</h1>
+        <div className="w-9" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 space-y-2">
+        {faqs.map((faq, i) => (
+          <div key={i} className="rounded-xl border border-border/30 bg-card/50 overflow-hidden">
+            <button
+              onClick={() => setOpenIndex(openIndex === i ? null : i)}
+              className="w-full flex items-center justify-between p-4 text-right"
+            >
+              <span className="text-sm font-medium flex-1">{faq.q}</span>
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${openIndex === i ? "rotate-180" : ""}`} />
+            </button>
+            {openIndex === i && (
+              <div className="px-4 pb-4">
+                <p className="text-xs text-muted-foreground leading-relaxed">{faq.a}</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Terms of Use Screen ───
+function TermsScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 pt-14 pb-3 border-b border-border/30">
+        <button onClick={onBack} className="p-2 -ml-2"><ChevronRight className="w-5 h-5" /></button>
+        <h1 className="text-base font-bold" style={{ color: "#6B21A8" }}>شروط الاستخدام</h1>
+        <div className="w-9" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 space-y-4">
+        {[
+          { title: "1. المقدمة", content: "مرحباً بك في تطبيق المفتاح الشهري. باستخدامك لهذا التطبيق، فإنك توافق على الالتزام بهذه الشروط والأحكام. يرجى قراءتها بعناية." },
+          { title: "2. الخدمات", content: "يوفر التطبيق منصة لحجز الوحدات السكنية المفروشة للإيجار الشهري في المملكة العربية السعودية. نحن وسيط بين المستأجرين والمضيفين (الملاك)." },
+          { title: "3. الحجز والدفع", content: "يتم تأكيد الحجز بعد إتمام الدفع بنجاح. جميع المبالغ بالريال السعودي وتشمل ضريبة القيمة المضافة (15%). الأسعار المعروضة قد تتغير حسب الموسم والطلب." },
+          { title: "4. سياسة الإلغاء", content: "يمكن إلغاء الحجز قبل 48 ساعة من موعد الدخول مع استرداد كامل. الإلغاء خلال 24-48 ساعة يخضع لرسوم 50%. الإلغاء خلال أقل من 24 ساعة غير قابل للاسترداد." },
+          { title: "5. التزامات المستخدم", content: "يلتزم المستخدم بتقديم معلومات صحيحة ودقيقة عند التسجيل والحجز. يجب الحفاظ على العقار وإعادته بحالة جيدة. أي أضرار يتحملها المستأجر." },
+          { title: "6. الترخيص", content: "المفتاح الشهري مرخص من وزارة السياحة برقم 73102999. السجل التجاري: 7007384501. جميع العقارات المعروضة مرخصة ومعتمدة." },
+          { title: "7. التعديلات", content: "نحتفظ بالحق في تعديل هذه الشروط في أي وقت. سيتم إشعارك بأي تغييرات جوهرية عبر التطبيق أو البريد الإلكتروني." },
+        ].map((section, i) => (
+          <div key={i}>
+            <h3 className="text-sm font-bold mb-1" style={{ color: "#6B21A8" }}>{section.title}</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">{section.content}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Privacy Policy Screen ───
+function PrivacyScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 pt-14 pb-3 border-b border-border/30">
+        <button onClick={onBack} className="p-2 -ml-2"><ChevronRight className="w-5 h-5" /></button>
+        <h1 className="text-base font-bold" style={{ color: "#6B21A8" }}>سياسة الخصوصية</h1>
+        <div className="w-9" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 space-y-4">
+        {[
+          { title: "جمع البيانات", content: "نجمع البيانات الشخصية التي تقدمها عند التسجيل (الاسم، البريد الإلكتروني، رقم الهاتف، رقم الهوية) وبيانات الاستخدام (سجل الحجوزات، المعاملات المالية، الموقع الجغرافي)." },
+          { title: "استخدام البيانات", content: "نستخدم بياناتك لتقديم الخدمة، معالجة المدفوعات، إرسال إشعارات الحجز، تحسين تجربة المستخدم، والتواصل معك بخصوص حسابك." },
+          { title: "حماية البيانات", content: "نستخدم تشفير SSL وإجراءات أمنية متقدمة لحماية بياناتك. لا نشارك بياناتك الشخصية مع أطراف خارجية إلا بموافقتك أو بموجب القانون." },
+          { title: "حقوقك", content: "لك الحق في الوصول إلى بياناتك الشخصية، تصحيحها، أو طلب حذفها عبر التواصل مع فريق الدعم على support@monthlykey.com." },
+          { title: "ملفات تعريف الارتباط", content: "نستخدم ملفات تعريف الارتباط (Cookies) لتحسين تجربتك وتحليل استخدام التطبيق. يمكنك إدارة تفضيلات الكوكيز من إعدادات المتصفح." },
+        ].map((section, i) => (
+          <div key={i}>
+            <h3 className="text-sm font-bold mb-1" style={{ color: "#6B21A8" }}>{section.title}</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">{section.content}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Rate Us Screen ───
+function RateUsScreen({ onBack }: { onBack: () => void }) {
+  const [rating, setRating] = useState(0);
+  const [feedback, setFeedback] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 pt-14 pb-3 border-b border-border/30">
+        <button onClick={onBack} className="p-2 -ml-2"><ChevronRight className="w-5 h-5" /></button>
+        <h1 className="text-base font-bold" style={{ color: "#6B21A8" }}>قيّمنا</h1>
+        <div className="w-9" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-6 pb-24">
+        {submitted ? (
+          <div className="text-center py-12">
+            <CheckCircle2 className="w-16 h-16 mx-auto mb-4" style={{ color: "#10B981" }} />
+            <h2 className="text-lg font-bold mb-2">شكراً لتقييمك!</h2>
+            <p className="text-sm text-muted-foreground">نقدر رأيك وسنعمل على تحسين تجربتك.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-lg font-bold mb-2">كيف تقيّم تجربتك؟</h2>
+              <p className="text-sm text-muted-foreground">رأيك يهمنا لتحسين الخدمة</p>
+            </div>
+            <div className="flex justify-center gap-2">
+              {[1, 2, 3, 4, 5].map(s => (
+                <button key={s} onClick={() => setRating(s)} className="p-1">
+                  <Star className={`w-10 h-10 transition-all ${s <= rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`} />
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={feedback}
+              onChange={e => setFeedback(e.target.value)}
+              placeholder="اكتب ملاحظاتك هنا (اختياري)..."
+              className="w-full h-32 p-3 rounded-xl border border-border/30 bg-card/50 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+              dir="rtl"
+            />
+            <button
+              onClick={() => { if (rating > 0) { toast.success("شكراً لتقييمك!"); setSubmitted(true); } else { toast.error("يرجى اختيار تقييم"); } }}
+              className="w-full py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98]"
+              style={{ background: "linear-gradient(135deg, #6B21A8, #7C3AED)" }}
+            >
+              إرسال التقييم
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Contact Support Screen ───
+function ContactSupportScreen({ onBack }: { onBack: () => void }) {
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [sent, setSent] = useState(false);
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 pt-14 pb-3 border-b border-border/30">
+        <button onClick={onBack} className="p-2 -ml-2"><ChevronRight className="w-5 h-5" /></button>
+        <h1 className="text-base font-bold" style={{ color: "#6B21A8" }}>تواصل مع تجربة الضيف</h1>
+        <div className="w-9" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 space-y-4">
+        {sent ? (
+          <div className="text-center py-12">
+            <Send className="w-16 h-16 mx-auto mb-4" style={{ color: "#6B21A8" }} />
+            <h2 className="text-lg font-bold mb-2">تم إرسال رسالتك!</h2>
+            <p className="text-sm text-muted-foreground">سنرد عليك في أقرب وقت ممكن.</p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              <div className="rounded-xl border border-border/30 bg-card/50 p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <Phone className="w-5 h-5" style={{ color: "#6B21A8" }} />
+                  <div>
+                    <p className="text-sm font-medium">الاتصال</p>
+                    <p className="text-xs text-muted-foreground" dir="ltr">920033225</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Mail className="w-5 h-5" style={{ color: "#6B21A8" }} />
+                  <div>
+                    <p className="text-sm font-medium">البريد الإلكتروني</p>
+                    <p className="text-xs text-muted-foreground">support@monthlykey.com</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="w-5 h-5" style={{ color: "#6B21A8" }} />
+                  <div>
+                    <p className="text-sm font-medium">واتساب</p>
+                    <p className="text-xs text-muted-foreground" dir="ltr">+966 920033225</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-border/20 pt-4">
+              <h3 className="text-sm font-bold mb-3">أرسل رسالة</h3>
+              <div className="space-y-3">
+                <input
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                  placeholder="الموضوع"
+                  className="w-full p-3 rounded-xl border border-border/30 bg-card/50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  dir="rtl"
+                />
+                <textarea
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  placeholder="اكتب رسالتك هنا..."
+                  className="w-full h-32 p-3 rounded-xl border border-border/30 bg-card/50 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  dir="rtl"
+                />
+                <button
+                  onClick={() => { if (subject && message) { toast.success("تم إرسال رسالتك بنجاح"); setSent(true); } else { toast.error("يرجى ملء جميع الحقول"); } }}
+                  className="w-full py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98]"
+                  style={{ background: "linear-gradient(135deg, #6B21A8, #7C3AED)" }}
+                >
+                  إرسال
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Invite Friends Screen ───
+function InviteFriendsScreen({ onBack }: { onBack: () => void }) {
+  const inviteCode = "MK" + Math.random().toString(36).substring(2, 8).toUpperCase();
+  const inviteLink = `https://monthlykey.com/invite/${inviteCode}`;
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setCopied(true);
+      toast.success("تم نسخ رابط الدعوة!");
+      setTimeout(() => setCopied(false), 3000);
+    }).catch(() => toast.error("فشل النسخ"));
+  };
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({ title: "المفتاح الشهري", text: `انضم إلى المفتاح الشهري واحجز أفضل العقارات! استخدم رمز الدعوة: ${inviteCode}`, url: inviteLink }).catch(() => {});
+    } else { handleCopy(); }
+  };
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 pt-14 pb-3 border-b border-border/30">
+        <button onClick={onBack} className="p-2 -ml-2"><ChevronRight className="w-5 h-5" /></button>
+        <h1 className="text-base font-bold" style={{ color: "#6B21A8" }}>دعوة أصدقاء</h1>
+        <div className="w-9" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-6 pb-24">
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: "linear-gradient(135deg, #6B21A820, #7C3AED20)" }}>
+            <Share2 className="w-10 h-10" style={{ color: "#6B21A8" }} />
+          </div>
+          <h2 className="text-lg font-bold mb-2">ادعُ أصدقاءك</h2>
+          <p className="text-sm text-muted-foreground">شارك رابط الدعوة مع أصدقائك ليستفيدوا من خدمات المفتاح الشهري</p>
+        </div>
+        <div className="rounded-xl border border-border/30 bg-card/50 p-4 mb-4">
+          <p className="text-xs text-muted-foreground mb-2">رمز الدعوة</p>
+          <p className="text-xl font-bold text-center tracking-widest" style={{ color: "#6B21A8" }}>{inviteCode}</p>
+        </div>
+        <div className="rounded-xl border border-border/30 bg-card/50 p-4 mb-6">
+          <p className="text-xs text-muted-foreground mb-2">رابط الدعوة</p>
+          <p className="text-xs break-all" dir="ltr">{inviteLink}</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={handleCopy} className="flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all active:scale-[0.98]" style={{ borderColor: "#6B21A8", color: "#6B21A8" }}>
+            {copied ? "تم النسخ ✓" : "نسخ الرابط"}
+          </button>
+          <button onClick={handleShare} className="flex-1 py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #6B21A8, #7C3AED)" }}>
+            مشاركة
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Change Language Screen ───
+function ChangeLanguageScreen({ onBack }: { onBack: () => void }) {
+  const [selectedLang, setSelectedLang] = useState("ar");
+  const languages = [
+    { code: "ar", name: "العربية", nativeName: "العربية", flag: "🇸🇦" },
+    { code: "en", name: "الإنجليزية", nativeName: "English", flag: "🇺🇸" },
+  ];
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 pt-14 pb-3 border-b border-border/30">
+        <button onClick={onBack} className="p-2 -ml-2"><ChevronRight className="w-5 h-5" /></button>
+        <h1 className="text-base font-bold" style={{ color: "#6B21A8" }}>تغيير اللغة</h1>
+        <div className="w-9" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 space-y-2">
+        {languages.map(lang => (
+          <button
+            key={lang.code}
+            onClick={() => { setSelectedLang(lang.code); toast.success(`تم تغيير اللغة إلى ${lang.name}`); }}
+            className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
+              selectedLang === lang.code ? "border-purple-500 bg-purple-500/10" : "border-border/30 bg-card/50"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{lang.flag}</span>
+              <div className="text-right">
+                <p className="text-sm font-medium">{lang.name}</p>
+                <p className="text-xs text-muted-foreground">{lang.nativeName}</p>
+              </div>
+            </div>
+            {selectedLang === lang.code && <Check className="w-5 h-5" style={{ color: "#6B21A8" }} />}
+          </button>
+        ))}
+        <p className="text-xs text-muted-foreground text-center mt-4">التطبيق حالياً يدعم العربية بشكل كامل. دعم الإنجليزية قيد التطوير.</p>
+      </div>
     </div>
   );
 }

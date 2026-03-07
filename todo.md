@@ -178,3 +178,20 @@
 - [x] Investigate "تعذر تحميل العقارات" error on home tab — monthlykey.com property.search/featured returning 500
 - [x] Fix API proxy with batch-fetch fallback (fetches individual properties by ID)
 - [x] Verify properties load correctly after fix
+
+## Fix: Profile Menu Items & Admin Panel UI
+- [x] Fix admin panel tabs - overlapping/cut off horizontal tabs (scrollable with proper sizing)
+- [x] Fix admin panel layout - content sections with proper spacing
+- [x] Make all profile menu items functional (removed all "قريباً" toasts)
+- [x] Make "قيّمنا" (Rate Us) functional - 5-star rating + feedback form
+- [x] Make "استضف معنا" (Host with Us) functional - property registration form
+- [x] Make "شحن المحفظة" (Wallet Top-up) functional - wallet top-up screen with Moyasar
+- [x] Make "تواصل مع تجربة الضيف" (Contact Guest Experience) functional - WhatsApp/email/phone contact
+- [x] Make "دعوة أصدقاء" (Invite Friends) functional - share referral link
+- [x] Make "الأسئلة الشائعة" (FAQ) functional - 8 FAQ items with expandable answers
+- [x] Make "شروط الاستخدام" (Terms) functional - full terms of use screen
+- [x] Make "سياسة الخصوصية" (Privacy) functional - full privacy policy screen
+- [x] Make "تغيير اللغة" (Change Language) functional - Arabic/English language selector
+- [x] Make "الإشعارات" (Notifications) functional - notification settings screen
+- [x] Make "طرق الدفع" (Payment Methods) functional - payment methods screen
+- [x] All items are editable/changeable in MobileApp.tsx
