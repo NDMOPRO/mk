@@ -17,6 +17,7 @@ import {
   UserPlus, LogIn, RefreshCw, Phone, MapPinned, Navigation,
   Clock, CheckCircle2, XCircle, BellRing, BellOff, Settings,
   SlidersHorizontal, MessageSquare, Send, Trash2, Info,
+  ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -65,6 +66,15 @@ function getPropertyImage(property: ApiProperty, index = 0): string {
 // ─── Tab Types ───
 type TabId = "home" | "search" | "favorites" | "bookings" | "profile";
 type ScreenId = "tabs" | "property-detail" | "booking-flow" | "login" | "notifications-settings" | "twilio-setup";
+type SortOption = "default" | "price_asc" | "price_desc" | "newest" | "rating";
+
+const SORT_OPTIONS: { value: SortOption; label: string; icon: typeof ArrowUpDown }[] = [
+  { value: "default", label: "الافتراضي", icon: ArrowUpDown },
+  { value: "price_asc", label: "السعر: الأقل", icon: ArrowUp },
+  { value: "price_desc", label: "السعر: الأعلى", icon: ArrowDown },
+  { value: "newest", label: "الأحدث", icon: Clock },
+  { value: "rating", label: "التقييم", icon: Star },
+];
 
 // ─── Booking Status Types ───
 interface UserBooking {
@@ -162,6 +172,7 @@ export default function MobileApp() {
   const [filterBedrooms, setFilterBedrooms] = useState<number | null>(null);
   const [filterFurnished, setFilterFurnished] = useState<string | null>(null);
   const [filterPropertyType, setFilterPropertyType] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("default");
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -383,6 +394,7 @@ export default function MobileApp() {
                       filterFurnished={filterFurnished} onFurnishedChange={setFilterFurnished}
                       filterPropertyType={filterPropertyType} onPropertyTypeChange={setFilterPropertyType}
                       activeFilterCount={activeFilterCount} onClearFilters={clearAllFilters}
+                      sortBy={sortBy} onSortChange={setSortBy}
                     />
                   )}
                   {activeTab === "favorites" && (
@@ -706,6 +718,7 @@ function SearchTab({
   filterMinPrice, onMinPriceChange, filterMaxPrice, onMaxPriceChange,
   filterBedrooms, onBedroomsChange, filterFurnished, onFurnishedChange,
   filterPropertyType, onPropertyTypeChange, activeFilterCount, onClearFilters,
+  sortBy, onSortChange,
 }: {
   properties: ApiProperty[]; total: number; loading: boolean;
   onOpenProperty: (p: ApiProperty) => void; searchQuery: string; onSearchChange: (q: string) => void;
@@ -717,6 +730,7 @@ function SearchTab({
   filterFurnished: string | null; onFurnishedChange: (v: string | null) => void;
   filterPropertyType: string | null; onPropertyTypeChange: (v: string | null) => void;
   activeFilterCount: number; onClearFilters: () => void;
+  sortBy: SortOption; onSortChange: (s: SortOption) => void;
 }) {
   const [localQuery, setLocalQuery] = useState(searchQuery);
   useEffect(() => {
@@ -727,6 +741,32 @@ function SearchTab({
   const activePricePreset = PRICE_PRESETS.findIndex(
     (p) => p.min === filterMinPrice && p.max === filterMaxPrice
   );
+
+  // Sort properties based on selected sort option
+  const sortedProperties = useMemo(() => {
+    if (sortBy === "default" || properties.length === 0) return properties;
+
+    const sorted = [...properties];
+    switch (sortBy) {
+      case "price_asc":
+        sorted.sort((a, b) => parseFloat(a.monthlyRent) - parseFloat(b.monthlyRent));
+        break;
+      case "price_desc":
+        sorted.sort((a, b) => parseFloat(b.monthlyRent) - parseFloat(a.monthlyRent));
+        break;
+      case "newest":
+        sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        break;
+      case "rating":
+        sorted.sort((a, b) => {
+          const ratingA = getDemoAverageRating(a.id).average;
+          const ratingB = getDemoAverageRating(b.id).average;
+          return ratingB - ratingA;
+        });
+        break;
+    }
+    return sorted;
+  }, [properties, sortBy]);
 
   return (
     <div className="pt-12">
@@ -829,12 +869,41 @@ function SearchTab({
         )}
       </AnimatePresence>
 
+      {/* Sort Bar */}
+      <div className="px-4 mb-2">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs text-muted-foreground">{loading ? "جاري البحث..." : `${total} نتيجة`}</p>
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <ArrowUpDown className="w-3 h-3" />
+            <span>ترتيب</span>
+          </div>
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+          {SORT_OPTIONS.map((option) => {
+            const Icon = option.icon;
+            const isActive = sortBy === option.value;
+            return (
+              <button
+                key={option.value}
+                onClick={() => onSortChange(option.value)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+                  isActive ? "bg-primary text-white shadow-sm" : "glass hover:bg-card/80"
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                <span>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Results */}
       <div className="px-4">
-        <p className="text-xs text-muted-foreground mb-3">{loading ? "جاري البحث..." : `${total} نتيجة`}</p>
         <div className="flex flex-col gap-3 pb-4">
           {loading ? (
             <div className="flex flex-col items-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin mb-3" /></div>
-          ) : properties.length === 0 ? (
+          ) : sortedProperties.length === 0 ? (
             <div className="text-center py-12">
               <Search className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
               <p className="text-muted-foreground text-sm">لا توجد نتائج</p>
@@ -843,7 +912,7 @@ function SearchTab({
               )}
             </div>
           ) : (
-            properties.map((property, i) => (
+            sortedProperties.map((property, i) => (
               <motion.div key={property.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <PropertyCard property={property} onPress={() => onOpenProperty(property)} isFavorite={favorites.has(property.id)} onToggleFavorite={() => onToggleFavorite(property.id)} size="compact" />
               </motion.div>

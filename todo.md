@@ -68,3 +68,12 @@
 
 ## Tests
 - [x] Write 68 new vitest tests for all 3 features (106 total tests passing)
+
+## Feature: Search Results Sorting
+- [x] Add sort options UI (horizontal pills/buttons) in SearchTab
+- [x] Sort by price (low to high)
+- [x] Sort by price (high to low)
+- [x] Sort by date listed (newest first)
+- [x] Sort by user ratings (highest first)
+- [x] Persist selected sort across searches (state persists in parent component)
+- [x] Write vitest tests for sorting logic (32 tests passing)
