@@ -1,7 +1,11 @@
 /**
- * Unified type exports
- * Import shared types from this single entry point.
+ * Shared types — no external dependencies
  */
 
-export type * from "../drizzle/schema";
-export * from "./_core/errors";
+// User type for Supabase Auth
+export interface AppUser {
+  id: string;
+  email?: string;
+  phone?: string;
+  fullName?: string;
+}

@@ -4,7 +4,8 @@
  * Arabic-first RTL, deep navy, frosted glass, Tajawal typography
  * Auth: Supabase Auth (email/password + phone OTP)
  * Data: Real API from monthlykey.com via server proxy
- * Features: Interactive map, bookings tracking, phone OTP login
+ * Features: Interactive map, bookings tracking, phone OTP login,
+ *           Supabase-backed favorites, push notifications, favorites tab
  */
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
@@ -13,8 +14,8 @@ import {
   Home, Search, CalendarDays, User, ChevronRight, MapPin, BedDouble, Bath,
   Maximize, Wifi, Car, Wind, Star, Heart, Bell, Filter, X, Check,
   CreditCard, Building2, ChevronLeft, Loader2, Eye, EyeOff, Mail, Lock,
-  UserPlus, LogIn, RefreshCw, ImageOff, Phone, MapPinned, Navigation,
-  Clock, CheckCircle2, XCircle, AlertCircle,
+  UserPlus, LogIn, RefreshCw, Phone, MapPinned, Navigation,
+  Clock, CheckCircle2, XCircle, BellRing, BellOff, Settings,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -23,6 +24,15 @@ import {
   calculateBookingTotal, propertyTypeLabels, furnishedLabels,
   type ApiProperty, type SearchParams,
 } from "@/lib/api";
+import {
+  fetchFavorites, addFavorite, removeFavorite,
+  getLocalFavorites, addLocalFavorite, removeLocalFavorite, syncLocalToSupabase,
+} from "@/lib/favorites";
+import {
+  getNotificationPrefs, saveNotificationPrefs, requestNotificationPermission,
+  sendLocalNotification, notificationTemplates,
+  type NotificationPrefs,
+} from "@/lib/notifications";
 
 // ─── Hero Image (generated) ───
 const HERO_IMAGE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663340926600/Qa7Q2PtJqyYVmLJFM69a8Y/hero-riyadh-mrK3PJVdGeLBcb9uR3WKW9.webp";
@@ -48,8 +58,8 @@ function getPropertyImage(property: ApiProperty, index = 0): string {
 }
 
 // ─── Tab Types ───
-type TabId = "home" | "search" | "bookings" | "profile";
-type ScreenId = "tabs" | "property-detail" | "booking-flow" | "login";
+type TabId = "home" | "search" | "favorites" | "bookings" | "profile";
+type ScreenId = "tabs" | "property-detail" | "booking-flow" | "login" | "notifications-settings";
 
 // ─── Booking Status Types ───
 interface UserBooking {
@@ -80,17 +90,9 @@ function AmenityIcon({ type }: { type: string }) {
 }
 
 const amenityLabels: Record<string, string> = {
-  wifi: "واي فاي",
-  parking: "موقف سيارات",
-  ac: "تكييف",
-  pool: "مسبح",
-  gym: "صالة رياضية",
-  elevator: "مصعد",
-  security: "أمن",
-  garden: "حديقة",
-  balcony: "بلكونة",
-  kitchen: "مطبخ",
-  laundry: "غسالة",
+  wifi: "واي فاي", parking: "موقف سيارات", ac: "تكييف", pool: "مسبح",
+  gym: "صالة رياضية", elevator: "مصعد", security: "أمن", garden: "حديقة",
+  balcony: "بلكونة", kitchen: "مطبخ", laundry: "غسالة",
 };
 
 // ─── Known cities for quick filter ───
@@ -98,10 +100,7 @@ const QUICK_CITIES = ["الرياض", "جدة", "المدينة المنورة",
 
 // ─── Interactive Map Component ───
 function PropertyMap({ latitude, longitude, title, googleMapsUrl }: {
-  latitude: string | null;
-  longitude: string | null;
-  title: string;
-  googleMapsUrl: string | null;
+  latitude: string | null; longitude: string | null; title: string; googleMapsUrl: string | null;
 }) {
   const lat = latitude ? parseFloat(latitude) : null;
   const lng = longitude ? parseFloat(longitude) : null;
@@ -115,32 +114,16 @@ function PropertyMap({ latitude, longitude, title, googleMapsUrl }: {
     );
   }
 
-  // Use OpenStreetMap embed (no API key needed, fully independent)
   const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.01},${lat - 0.008},${lng + 0.01},${lat + 0.008}&layer=mapnik&marker=${lat},${lng}`;
   const fullMapUrl = googleMapsUrl || `https://www.google.com/maps?q=${lat},${lng}`;
 
   return (
     <div className="rounded-2xl overflow-hidden border border-border/50">
       <div className="relative h-[200px]">
-        <iframe
-          src={mapUrl}
-          width="100%"
-          height="100%"
-          style={{ border: 0 }}
-          allowFullScreen
-          loading="lazy"
-          title={`موقع ${title}`}
-        />
-        <div className="absolute inset-0 pointer-events-none" style={{
-          background: "linear-gradient(to bottom, rgba(11,20,38,0.1) 0%, transparent 20%, transparent 80%, rgba(11,20,38,0.3) 100%)"
-        }} />
+        <iframe src={mapUrl} width="100%" height="100%" style={{ border: 0 }} allowFullScreen loading="lazy" title={`موقع ${title}`} />
+        <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to bottom, rgba(11,20,38,0.1) 0%, transparent 20%, transparent 80%, rgba(11,20,38,0.3) 100%)" }} />
       </div>
-      <a
-        href={fullMapUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 py-3 glass text-sm font-medium text-primary transition-all hover:bg-card/80"
-      >
+      <a href={fullMapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 glass text-sm font-medium text-primary transition-all hover:bg-card/80">
         <Navigation className="w-4 h-4" />
         <span>فتح في خرائط جوجل</span>
       </a>
@@ -160,6 +143,7 @@ export default function MobileApp() {
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
   const [userBookings, setUserBookings] = useState<UserBooking[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
 
   // API data state
   const [featuredProperties, setFeaturedProperties] = useState<ApiProperty[]>([]);
@@ -173,6 +157,22 @@ export default function MobileApp() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [errorFeatured, setErrorFeatured] = useState<string | null>(null);
 
+  // Load favorites from Supabase or localStorage
+  useEffect(() => {
+    if (isLoggedIn && user?.id) {
+      setFavoritesLoading(true);
+      syncLocalToSupabase(user.id).then(() =>
+        fetchFavorites(user.id).then((ids) => {
+          setFavorites(new Set(ids));
+          setFavoritesLoading(false);
+        })
+      ).catch(() => setFavoritesLoading(false));
+    } else {
+      const localFavs = getLocalFavorites();
+      setFavorites(new Set(localFavs));
+    }
+  }, [isLoggedIn, user?.id]);
+
   // Fetch featured properties on mount
   useEffect(() => {
     let cancelled = false;
@@ -180,17 +180,10 @@ export default function MobileApp() {
     setErrorFeatured(null);
     getFeaturedProperties()
       .then((data) => {
-        if (!cancelled) {
-          setFeaturedProperties(data);
-          setLoadingFeatured(false);
-        }
+        if (!cancelled) { setFeaturedProperties(data); setLoadingFeatured(false); }
       })
       .catch((err) => {
-        if (!cancelled) {
-          setErrorFeatured("تعذر تحميل العقارات. تحقق من الاتصال بالإنترنت.");
-          setLoadingFeatured(false);
-          console.error("Failed to fetch featured:", err);
-        }
+        if (!cancelled) { setErrorFeatured("تعذر تحميل العقارات. تحقق من الاتصال بالإنترنت."); setLoadingFeatured(false); console.error("Failed to fetch featured:", err); }
       });
     return () => { cancelled = true; };
   }, []);
@@ -205,17 +198,10 @@ export default function MobileApp() {
     setLoadingSearch(true);
     searchProperties(params)
       .then((data) => {
-        if (!cancelled) {
-          setSearchResults(data.items);
-          setSearchTotal(data.total);
-          setLoadingSearch(false);
-        }
+        if (!cancelled) { setSearchResults(data.items); setSearchTotal(data.total); setLoadingSearch(false); }
       })
       .catch((err) => {
-        if (!cancelled) {
-          setLoadingSearch(false);
-          console.error("Search failed:", err);
-        }
+        if (!cancelled) { setLoadingSearch(false); console.error("Search failed:", err); }
       });
     return () => { cancelled = true; };
   }, [searchQuery, selectedCity]);
@@ -236,20 +222,15 @@ export default function MobileApp() {
   }, []);
 
   const startBooking = useCallback(() => {
-    if (!isLoggedIn) {
-      setScreen("login");
-      return;
-    }
+    if (!isLoggedIn) { setScreen("login"); return; }
     setBookingStep(0);
     setBookingConfirmed(false);
     setScreen("booking-flow");
   }, [isLoggedIn]);
 
   const goBack = useCallback(() => {
-    if (screen === "booking-flow" && bookingStep > 0) {
-      setBookingStep((s) => s - 1);
-      return;
-    }
+    if (screen === "booking-flow" && bookingStep > 0) { setBookingStep((s) => s - 1); return; }
+    if (screen === "notifications-settings") { setScreen("tabs"); return; }
     setScreen("tabs");
     setSelectedPropertyId(null);
     setSelectedPropertyData(null);
@@ -257,20 +238,38 @@ export default function MobileApp() {
     setBookingConfirmed(false);
   }, [screen, bookingStep]);
 
-  const toggleFavorite = useCallback((id: number) => {
+  const toggleFavorite = useCallback(async (id: number) => {
+    const isFav = favorites.has(id);
+    // Optimistic update
     setFavorites((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }, []);
+
+    // Persist
+    if (isLoggedIn && user?.id) {
+      if (isFav) {
+        await removeFavorite(user.id, id);
+      } else {
+        await addFavorite(user.id, id);
+      }
+    } else {
+      if (isFav) {
+        removeLocalFavorite(id);
+      } else {
+        addLocalFavorite(id);
+      }
+    }
+  }, [favorites, isLoggedIn, user?.id]);
 
   const handleLogout = useCallback(async () => {
     await signOut();
     setScreen("tabs");
     setActiveTab("home");
     setUserBookings([]);
+    setFavorites(new Set(getLocalFavorites()));
     toast.success("تم تسجيل الخروج بنجاح");
   }, [signOut]);
 
@@ -295,11 +294,26 @@ export default function MobileApp() {
       createdAt: new Date(),
     };
     setUserBookings((prev) => [newBooking, ...prev]);
+
+    // Send push notification if enabled
+    const prefs = getNotificationPrefs();
+    if (prefs.enabled && prefs.bookingUpdates) {
+      const { title, body } = notificationTemplates.bookingConfirmed(property.titleAr);
+      sendLocalNotification(title, body);
+    }
   }, []);
 
   const userDisplayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "مستخدم";
   const userEmail = user?.email || user?.phone || "";
   const userInitials = userDisplayName.slice(0, 2);
+
+  // Get favorite properties for the favorites tab
+  const favoriteProperties = useMemo(() => {
+    const allProperties = [...featuredProperties, ...searchResults];
+    const uniqueMap = new Map<number, ApiProperty>();
+    allProperties.forEach((p) => uniqueMap.set(p.id, p));
+    return Array.from(uniqueMap.values()).filter((p) => favorites.has(p.id));
+  }, [featuredProperties, searchResults, favorites]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 md:p-8" style={{ background: "linear-gradient(135deg, #050A15 0%, #0B1426 40%, #0D1A33 100%)" }}>
@@ -312,59 +326,59 @@ export default function MobileApp() {
                 <div className="flex-1 overflow-y-auto" style={{ paddingBottom: "80px" }}>
                   {activeTab === "home" && (
                     <HomeTab
-                      properties={featuredProperties}
-                      loading={loadingFeatured}
-                      error={errorFeatured}
-                      onOpenProperty={openProperty}
-                      favorites={favorites}
-                      onToggleFavorite={toggleFavorite}
+                      properties={featuredProperties} loading={loadingFeatured} error={errorFeatured}
+                      onOpenProperty={openProperty} favorites={favorites} onToggleFavorite={toggleFavorite}
                       onRetry={() => {
-                        setLoadingFeatured(true);
-                        setErrorFeatured(null);
+                        setLoadingFeatured(true); setErrorFeatured(null);
                         getFeaturedProperties().then(setFeaturedProperties).catch(() => setErrorFeatured("تعذر تحميل العقارات")).finally(() => setLoadingFeatured(false));
                       }}
                     />
                   )}
                   {activeTab === "search" && (
                     <SearchTab
-                      properties={searchResults}
-                      total={searchTotal}
-                      loading={loadingSearch}
-                      onOpenProperty={openProperty}
-                      searchQuery={searchQuery}
-                      onSearchChange={setSearchQuery}
-                      selectedCity={selectedCity}
-                      onCityChange={setSelectedCity}
-                      showFilter={showFilter}
-                      onToggleFilter={() => setShowFilter(!showFilter)}
-                      favorites={favorites}
-                      onToggleFavorite={toggleFavorite}
+                      properties={searchResults} total={searchTotal} loading={loadingSearch}
+                      onOpenProperty={openProperty} searchQuery={searchQuery} onSearchChange={setSearchQuery}
+                      selectedCity={selectedCity} onCityChange={setSelectedCity}
+                      showFilter={showFilter} onToggleFilter={() => setShowFilter(!showFilter)}
+                      favorites={favorites} onToggleFavorite={toggleFavorite}
+                    />
+                  )}
+                  {activeTab === "favorites" && (
+                    <FavoritesTab
+                      properties={favoriteProperties} loading={favoritesLoading}
+                      onOpenProperty={openProperty} onToggleFavorite={toggleFavorite}
                     />
                   )}
                   {activeTab === "bookings" && (
-                    <BookingsTab
-                      isLoggedIn={isLoggedIn}
-                      onLogin={() => setScreen("login")}
-                      bookings={userBookings}
-                      onOpenProperty={openProperty}
-                    />
+                    <BookingsTab isLoggedIn={isLoggedIn} onLogin={() => setScreen("login")} bookings={userBookings} onOpenProperty={openProperty} />
                   )}
                   {activeTab === "profile" && (
-                    <ProfileTab isLoggedIn={isLoggedIn} onLogin={() => setScreen("login")} onLogout={handleLogout} userName={userDisplayName} userEmail={userEmail} userInitials={userInitials} />
+                    <ProfileTab
+                      isLoggedIn={isLoggedIn} onLogin={() => setScreen("login")} onLogout={handleLogout}
+                      userName={userDisplayName} userEmail={userEmail} userInitials={userInitials}
+                      onOpenNotifications={() => setScreen("notifications-settings")}
+                    />
                   )}
                 </div>
+                {/* Bottom Navigation — 5 tabs */}
                 <div className="absolute bottom-0 left-0 right-0 glass-strong" style={{ paddingBottom: "env(safe-area-inset-bottom, 8px)" }}>
                   <div className="flex items-center justify-around h-16">
                     {([
                       { id: "home" as TabId, icon: Home, label: "الرئيسية" },
                       { id: "search" as TabId, icon: Search, label: "البحث" },
+                      { id: "favorites" as TabId, icon: Heart, label: "المفضلة" },
                       { id: "bookings" as TabId, icon: CalendarDays, label: "حجوزاتي" },
                       { id: "profile" as TabId, icon: User, label: "حسابي" },
                     ]).map((tab) => (
-                      <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="flex flex-col items-center gap-1 transition-all duration-200">
-                        <tab.icon className={`w-5 h-5 transition-colors ${activeTab === tab.id ? "text-primary" : "text-muted-foreground"}`} />
+                      <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="flex flex-col items-center gap-1 transition-all duration-200 relative">
+                        <tab.icon className={`w-5 h-5 transition-colors ${activeTab === tab.id ? "text-primary" : "text-muted-foreground"} ${tab.id === "favorites" && favorites.size > 0 ? (activeTab === tab.id ? "fill-primary" : "") : ""}`} />
                         <span className={`text-[10px] font-medium transition-colors ${activeTab === tab.id ? "text-primary" : "text-muted-foreground"}`}>{tab.label}</span>
                         {activeTab === tab.id && <motion.div layoutId="tab-indicator" className="w-1 h-1 rounded-full bg-primary" />}
+                        {tab.id === "favorites" && favorites.size > 0 && (
+                          <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center" style={{ background: "linear-gradient(135deg, #EF4444, #DC2626)" }}>
+                            {favorites.size > 9 ? "9+" : favorites.size}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -375,12 +389,8 @@ export default function MobileApp() {
             {screen === "property-detail" && selectedPropertyData && (
               <motion.div key="detail" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
                 <PropertyDetail
-                  property={selectedPropertyData}
-                  loading={loadingDetail}
-                  onBack={goBack}
-                  onBook={startBooking}
-                  isFavorite={favorites.has(selectedPropertyData.id)}
-                  onToggleFavorite={() => toggleFavorite(selectedPropertyData.id)}
+                  property={selectedPropertyData} loading={loadingDetail} onBack={goBack} onBook={startBooking}
+                  isFavorite={favorites.has(selectedPropertyData.id)} onToggleFavorite={() => toggleFavorite(selectedPropertyData.id)}
                 />
               </motion.div>
             )}
@@ -388,10 +398,7 @@ export default function MobileApp() {
             {screen === "booking-flow" && selectedPropertyData && (
               <motion.div key="booking" initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
                 <BookingFlow
-                  property={selectedPropertyData}
-                  step={bookingStep}
-                  months={bookingMonths}
-                  onMonthsChange={setBookingMonths}
+                  property={selectedPropertyData} step={bookingStep} months={bookingMonths} onMonthsChange={setBookingMonths}
                   onNext={() => {
                     if (bookingStep < 3) setBookingStep((s) => s + 1);
                     if (bookingStep === 2) {
@@ -400,9 +407,14 @@ export default function MobileApp() {
                       handleBookingComplete(selectedPropertyData, bookingMonths, breakdown.grandTotal);
                     }
                   }}
-                  onBack={goBack}
-                  confirmed={bookingConfirmed}
+                  onBack={goBack} confirmed={bookingConfirmed}
                 />
+              </motion.div>
+            )}
+
+            {screen === "notifications-settings" && (
+              <motion.div key="notifications" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <NotificationsSettings onBack={goBack} />
               </motion.div>
             )}
 
@@ -422,13 +434,9 @@ export default function MobileApp() {
 function HomeTab({
   properties, loading, error, onOpenProperty, favorites, onToggleFavorite, onRetry,
 }: {
-  properties: ApiProperty[];
-  loading: boolean;
-  error: string | null;
-  onOpenProperty: (p: ApiProperty) => void;
-  favorites: Set<number>;
-  onToggleFavorite: (id: number) => void;
-  onRetry: () => void;
+  properties: ApiProperty[]; loading: boolean; error: string | null;
+  onOpenProperty: (p: ApiProperty) => void; favorites: Set<number>;
+  onToggleFavorite: (id: number) => void; onRetry: () => void;
 }) {
   const recent = useMemo(() => [...properties].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 4), [properties]);
   const popular = useMemo(() => [...properties].sort((a, b) => b.viewCount - a.viewCount), [properties]);
@@ -510,11 +518,7 @@ function HomeTab({
 function PropertyCard({
   property, onPress, isFavorite, onToggleFavorite, size = "large",
 }: {
-  property: ApiProperty;
-  onPress: () => void;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
-  size?: "large" | "compact";
+  property: ApiProperty; onPress: () => void; isFavorite: boolean; onToggleFavorite: () => void; size?: "large" | "compact";
 }) {
   const rent = parseFloat(property.monthlyRent);
   const isNew = (Date.now() - new Date(property.createdAt).getTime()) < 7 * 24 * 60 * 60 * 1000;
@@ -527,9 +531,7 @@ function PropertyCard({
       <button onClick={onPress} className="w-full flex gap-3 glass rounded-2xl p-3 text-right transition-all hover:bg-card/80 active:scale-[0.98]">
         <div className="relative w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
           <img src={imgSrc} alt={property.titleAr} className="w-full h-full object-cover" onError={() => setImgError(true)} />
-          {isNew && (
-            <div className="absolute top-1.5 right-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>جديد</div>
-          )}
+          {isNew && <div className="absolute top-1.5 right-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>جديد</div>}
         </div>
         <div className="flex-1 flex flex-col justify-between py-0.5">
           <div>
@@ -558,11 +560,9 @@ function PropertyCard({
         <img src={imgSrc} alt={property.titleAr} className="w-full h-full object-cover" onError={() => setImgError(true)} />
         <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(11,20,38,0.7) 0%, transparent 50%)" }} />
         <button onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }} className="absolute top-3 left-3 w-8 h-8 rounded-full glass flex items-center justify-center">
-          <Heart className={`w-4 h-4 ${isFavorite ? "fill-red-500 text-red-500" : "text-white/70"}`} />
+          <Heart className={`w-4 h-4 transition-all ${isFavorite ? "fill-red-500 text-red-500 scale-110" : "text-white/70"}`} />
         </button>
-        {isNew && (
-          <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>جديد</div>
-        )}
+        {isNew && <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>جديد</div>}
         <div className="absolute bottom-3 right-3 flex items-center gap-1 px-2 py-1 rounded-full glass">
           <span className="text-[10px] text-white/80">{typeLabel}</span>
         </div>
@@ -592,23 +592,62 @@ function PropertyCard({
   );
 }
 
+// ─── Favorites Tab ───
+function FavoritesTab({
+  properties, loading, onOpenProperty, onToggleFavorite,
+}: {
+  properties: ApiProperty[]; loading: boolean;
+  onOpenProperty: (p: ApiProperty) => void; onToggleFavorite: (id: number) => void;
+}) {
+  return (
+    <div className="pt-12 px-4">
+      <div className="pt-4 pb-3">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold">المفضلة</h1>
+          <div className="flex items-center gap-1.5">
+            <Heart className="w-4 h-4 fill-red-500 text-red-500" />
+            <span className="text-sm text-muted-foreground">{properties.length} عقار</span>
+          </div>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="flex flex-col items-center py-12">
+          <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
+          <p className="text-sm text-muted-foreground">جاري تحميل المفضلة...</p>
+        </div>
+      )}
+
+      {!loading && properties.length === 0 && (
+        <div className="text-center py-16">
+          <Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" />
+          <h3 className="text-lg font-bold mb-2">لا توجد عقارات مفضلة</h3>
+          <p className="text-sm text-muted-foreground max-w-[250px] mx-auto">اضغط على أيقونة القلب في أي عقار لإضافته إلى المفضلة</p>
+        </div>
+      )}
+
+      {!loading && properties.length > 0 && (
+        <div className="flex flex-col gap-3 pb-4">
+          {properties.map((property, i) => (
+            <motion.div key={property.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+              <PropertyCard property={property} onPress={() => onOpenProperty(property)} isFavorite={true} onToggleFavorite={() => onToggleFavorite(property.id)} size="compact" />
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Search Tab ───
 function SearchTab({
   properties, total, loading, onOpenProperty, searchQuery, onSearchChange,
   selectedCity, onCityChange, showFilter, onToggleFilter, favorites, onToggleFavorite,
 }: {
-  properties: ApiProperty[];
-  total: number;
-  loading: boolean;
-  onOpenProperty: (p: ApiProperty) => void;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
-  selectedCity: string | null;
-  onCityChange: (city: string | null) => void;
-  showFilter: boolean;
-  onToggleFilter: () => void;
-  favorites: Set<number>;
-  onToggleFavorite: (id: number) => void;
+  properties: ApiProperty[]; total: number; loading: boolean;
+  onOpenProperty: (p: ApiProperty) => void; searchQuery: string; onSearchChange: (q: string) => void;
+  selectedCity: string | null; onCityChange: (city: string | null) => void;
+  showFilter: boolean; onToggleFilter: () => void; favorites: Set<number>; onToggleFavorite: (id: number) => void;
 }) {
   const [localQuery, setLocalQuery] = useState(searchQuery);
   useEffect(() => {
@@ -623,19 +662,8 @@ function SearchTab({
         <div className="flex gap-2">
           <div className="flex-1 flex items-center gap-2 glass rounded-xl px-3 py-2.5">
             <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <input
-              type="text"
-              placeholder="ابحث بالحي أو المدينة..."
-              value={localQuery}
-              onChange={(e) => setLocalQuery(e.target.value)}
-              className="bg-transparent text-sm w-full outline-none placeholder:text-muted-foreground"
-              dir="rtl"
-            />
-            {localQuery && (
-              <button onClick={() => { setLocalQuery(""); onSearchChange(""); }}>
-                <X className="w-4 h-4 text-muted-foreground" />
-              </button>
-            )}
+            <input type="text" placeholder="ابحث بالحي أو المدينة..." value={localQuery} onChange={(e) => setLocalQuery(e.target.value)} className="bg-transparent text-sm w-full outline-none placeholder:text-muted-foreground" dir="rtl" />
+            {localQuery && <button onClick={() => { setLocalQuery(""); onSearchChange(""); }}><X className="w-4 h-4 text-muted-foreground" /></button>}
           </div>
           <button onClick={onToggleFilter} className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${showFilter ? "bg-primary text-white" : "glass"}`}>
             <Filter className="w-4 h-4" />
@@ -660,14 +688,10 @@ function SearchTab({
       </AnimatePresence>
 
       <div className="px-4">
-        <p className="text-xs text-muted-foreground mb-3">
-          {loading ? "جاري البحث..." : `${total} نتيجة`}
-        </p>
+        <p className="text-xs text-muted-foreground mb-3">{loading ? "جاري البحث..." : `${total} نتيجة`}</p>
         <div className="flex flex-col gap-3 pb-4">
           {loading ? (
-            <div className="flex flex-col items-center py-12">
-              <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
-            </div>
+            <div className="flex flex-col items-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin mb-3" /></div>
           ) : properties.length === 0 ? (
             <div className="text-center py-12">
               <Search className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
@@ -690,12 +714,8 @@ function SearchTab({
 function PropertyDetail({
   property, loading, onBack, onBook, isFavorite, onToggleFavorite,
 }: {
-  property: ApiProperty;
-  loading: boolean;
-  onBack: () => void;
-  onBook: () => void;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
+  property: ApiProperty; loading: boolean; onBack: () => void; onBook: () => void;
+  isFavorite: boolean; onToggleFavorite: () => void;
 }) {
   const rent = parseFloat(property.monthlyRent);
   const deposit = property.securityDeposit ? parseFloat(property.securityDeposit) : 0;
@@ -705,57 +725,34 @@ function PropertyDetail({
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-        {/* Photo Gallery */}
         <div className="relative h-[300px]">
           <img src={photos[photoIndex]} alt={property.titleAr} className="w-full h-full object-cover" />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(11,20,38,0.4) 0%, transparent 30%, rgba(11,20,38,0.9) 90%)" }} />
-
-          {photos.length > 1 && (
-            <div className="absolute top-12 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full glass text-[10px] text-white">
-              {photoIndex + 1} / {photos.length}
-            </div>
-          )}
-
+          {photos.length > 1 && <div className="absolute top-12 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full glass text-[10px] text-white">{photoIndex + 1} / {photos.length}</div>}
           {photos.length > 1 && (
             <>
-              <button onClick={() => setPhotoIndex((i) => (i + 1) % photos.length)} className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full glass flex items-center justify-center">
-                <ChevronLeft className="w-4 h-4 text-white" />
-              </button>
-              <button onClick={() => setPhotoIndex((i) => (i - 1 + photos.length) % photos.length)} className="absolute right-14 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full glass flex items-center justify-center">
-                <ChevronRight className="w-4 h-4 text-white" />
-              </button>
+              <button onClick={() => setPhotoIndex((i) => (i + 1) % photos.length)} className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full glass flex items-center justify-center"><ChevronLeft className="w-4 h-4 text-white" /></button>
+              <button onClick={() => setPhotoIndex((i) => (i - 1 + photos.length) % photos.length)} className="absolute right-14 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full glass flex items-center justify-center"><ChevronRight className="w-4 h-4 text-white" /></button>
             </>
           )}
-
           <div className="absolute top-12 right-4 flex items-center gap-2">
-            <button onClick={onBack} className="w-10 h-10 rounded-full glass flex items-center justify-center">
-              <ChevronRight className="w-5 h-5 text-white" />
-            </button>
+            <button onClick={onBack} className="w-10 h-10 rounded-full glass flex items-center justify-center"><ChevronRight className="w-5 h-5 text-white" /></button>
           </div>
           <div className="absolute top-12 left-4 flex gap-2">
             <button onClick={onToggleFavorite} className="w-10 h-10 rounded-full glass flex items-center justify-center">
-              <Heart className={`w-5 h-5 ${isFavorite ? "fill-red-500 text-red-500" : "text-white"}`} />
+              <Heart className={`w-5 h-5 transition-all ${isFavorite ? "fill-red-500 text-red-500 scale-110" : "text-white"}`} />
             </button>
           </div>
-
           <div className="absolute bottom-4 right-4 left-4">
             <div className="flex items-center gap-2 mb-1">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-                {propertyTypeLabels[property.propertyType] || property.propertyType}
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] glass text-white/80">
-                {furnishedLabels[property.furnishedLevel] || property.furnishedLevel}
-              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>{propertyTypeLabels[property.propertyType] || property.propertyType}</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] glass text-white/80">{furnishedLabels[property.furnishedLevel] || property.furnishedLevel}</span>
             </div>
             <h1 className="text-xl font-bold text-white mb-1">{property.titleAr}</h1>
-            <div className="flex items-center gap-1 text-white/70">
-              <MapPin className="w-3.5 h-3.5" />
-              <span className="text-sm">{property.cityAr} - {property.districtAr}</span>
-            </div>
+            <div className="flex items-center gap-1 text-white/70"><MapPin className="w-3.5 h-3.5" /><span className="text-sm">{property.cityAr} - {property.districtAr}</span></div>
           </div>
         </div>
 
-        {/* Price Badge */}
         <div className="px-4 -mt-3 relative z-10">
           <div className="inline-flex items-baseline gap-1 px-4 py-2.5 rounded-2xl" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.15), rgba(124,58,237,0.15))", border: "1px solid rgba(37,99,235,0.2)" }}>
             <span className="text-2xl font-bold gradient-text">{formatPrice(rent)}</span>
@@ -763,100 +760,47 @@ function PropertyDetail({
           </div>
         </div>
 
-        {/* Details Grid */}
         <div className="px-4 mt-5">
           <div className="grid grid-cols-3 gap-2">
-            <div className="glass rounded-xl p-3 text-center">
-              <BedDouble className="w-5 h-5 text-primary mx-auto mb-1" />
-              <span className="text-lg font-bold block">{property.bedrooms}</span>
-              <span className="text-[10px] text-muted-foreground">غرف النوم</span>
-            </div>
-            <div className="glass rounded-xl p-3 text-center">
-              <Bath className="w-5 h-5 text-primary mx-auto mb-1" />
-              <span className="text-lg font-bold block">{property.bathrooms}</span>
-              <span className="text-[10px] text-muted-foreground">دورات المياه</span>
-            </div>
-            <div className="glass rounded-xl p-3 text-center">
-              <Maximize className="w-5 h-5 text-primary mx-auto mb-1" />
-              <span className="text-lg font-bold block">{property.sizeSqm || "—"}</span>
-              <span className="text-[10px] text-muted-foreground">م²</span>
-            </div>
+            <div className="glass rounded-xl p-3 text-center"><BedDouble className="w-5 h-5 text-primary mx-auto mb-1" /><span className="text-lg font-bold block">{property.bedrooms}</span><span className="text-[10px] text-muted-foreground">غرف النوم</span></div>
+            <div className="glass rounded-xl p-3 text-center"><Bath className="w-5 h-5 text-primary mx-auto mb-1" /><span className="text-lg font-bold block">{property.bathrooms}</span><span className="text-[10px] text-muted-foreground">دورات المياه</span></div>
+            <div className="glass rounded-xl p-3 text-center"><Maximize className="w-5 h-5 text-primary mx-auto mb-1" /><span className="text-lg font-bold block">{property.sizeSqm || "—"}</span><span className="text-[10px] text-muted-foreground">م²</span></div>
           </div>
         </div>
 
-        {/* Description */}
         {property.descriptionAr && (
-          <div className="px-4 mt-5">
-            <h3 className="text-base font-bold mb-2">الوصف</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">{property.descriptionAr}</p>
-          </div>
+          <div className="px-4 mt-5"><h3 className="text-base font-bold mb-2">الوصف</h3><p className="text-sm text-muted-foreground leading-relaxed">{property.descriptionAr}</p></div>
         )}
 
-        {/* Interactive Map */}
         <div className="px-4 mt-5">
-          <h3 className="text-base font-bold mb-3">
-            <span className="flex items-center gap-2">
-              <MapPinned className="w-4 h-4 text-primary" />
-              الموقع على الخريطة
-            </span>
-          </h3>
-          <PropertyMap
-            latitude={property.latitude}
-            longitude={property.longitude}
-            title={property.titleAr}
-            googleMapsUrl={property.googleMapsUrl}
-          />
+          <h3 className="text-base font-bold mb-3"><span className="flex items-center gap-2"><MapPinned className="w-4 h-4 text-primary" />الموقع على الخريطة</span></h3>
+          <PropertyMap latitude={property.latitude} longitude={property.longitude} title={property.titleAr} googleMapsUrl={property.googleMapsUrl} />
         </div>
 
-        {/* Amenities */}
         {property.amenities && property.amenities.length > 0 && (
           <div className="px-4 mt-5">
             <h3 className="text-base font-bold mb-3">المرافق والخدمات</h3>
             <div className="flex flex-wrap gap-2">
               {property.amenities.map((amenity) => (
-                <div key={amenity} className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass">
-                  <AmenityIcon type={amenity} />
-                  <span className="text-xs">{amenityLabels[amenity.toLowerCase()] || amenity}</span>
-                </div>
+                <div key={amenity} className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass"><AmenityIcon type={amenity} /><span className="text-xs">{amenityLabels[amenity.toLowerCase()] || amenity}</span></div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Rental Details */}
         <div className="px-4 mt-5 mb-4">
           <div className="glass rounded-2xl p-4">
             <h3 className="text-sm font-bold mb-2">تفاصيل الإيجار</h3>
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">الإيجار الشهري</span>
-                <span className="font-bold gradient-text">{formatPrice(rent)}</span>
-              </div>
-              {deposit > 0 && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">مبلغ التأمين</span>
-                  <span className="font-medium">{formatPrice(deposit)}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">الحد الأدنى للإقامة</span>
-                <span className="font-medium">{property.minStayMonths} {property.minStayMonths === 1 ? "شهر" : "أشهر"}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">الحد الأقصى للإقامة</span>
-                <span className="font-medium">{property.maxStayMonths} {property.maxStayMonths === 1 ? "شهر" : "أشهر"}</span>
-              </div>
-              {property.instantBook && (
-                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs text-emerald-400 font-medium">حجز فوري متاح</span>
-                </div>
-              )}
+              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">الإيجار الشهري</span><span className="font-bold gradient-text">{formatPrice(rent)}</span></div>
+              {deposit > 0 && <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">مبلغ التأمين</span><span className="font-medium">{formatPrice(deposit)}</span></div>}
+              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">الحد الأدنى للإقامة</span><span className="font-medium">{property.minStayMonths} {property.minStayMonths === 1 ? "شهر" : "أشهر"}</span></div>
+              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">الحد الأقصى للإقامة</span><span className="font-medium">{property.maxStayMonths} {property.maxStayMonths === 1 ? "شهر" : "أشهر"}</span></div>
+              {property.instantBook && <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50"><Check className="w-4 h-4 text-emerald-400" /><span className="text-xs text-emerald-400 font-medium">حجز فوري متاح</span></div>}
             </div>
           </div>
         </div>
 
-        {/* Photo Thumbnails */}
         {photos.length > 1 && (
           <div className="px-4 mb-4">
             <h3 className="text-sm font-bold mb-2">الصور ({photos.length})</h3>
@@ -866,21 +810,14 @@ function PropertyDetail({
                   <img src={photo} alt="" className="w-full h-full object-cover" />
                 </button>
               ))}
-              {photos.length > 8 && (
-                <div className="w-16 h-16 rounded-lg glass flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs text-muted-foreground">+{photos.length - 8}</span>
-                </div>
-              )}
+              {photos.length > 8 && <div className="w-16 h-16 rounded-lg glass flex items-center justify-center flex-shrink-0"><span className="text-xs text-muted-foreground">+{photos.length - 8}</span></div>}
             </div>
           </div>
         )}
       </div>
 
-      {/* Book Button */}
       <div className="p-4 glass-strong">
-        <button onClick={onBook} className="w-full h-12 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-          إتمام الحجز
-        </button>
+        <button onClick={onBook} className="w-full h-12 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>إتمام الحجز</button>
       </div>
     </div>
   );
@@ -890,13 +827,8 @@ function PropertyDetail({
 function BookingFlow({
   property, step, months, onMonthsChange, onNext, onBack, confirmed,
 }: {
-  property: ApiProperty;
-  step: number;
-  months: number;
-  onMonthsChange: (m: number) => void;
-  onNext: () => void;
-  onBack: () => void;
-  confirmed: boolean;
+  property: ApiProperty; step: number; months: number; onMonthsChange: (m: number) => void;
+  onNext: () => void; onBack: () => void; confirmed: boolean;
 }) {
   const rent = parseFloat(property.monthlyRent);
   const allowedMonths = useMemo(() => {
@@ -914,9 +846,7 @@ function BookingFlow({
     <div className="h-full flex flex-col">
       <div className="pt-12 px-4 pb-3 glass-strong">
         <div className="flex items-center justify-between mb-4">
-          <button onClick={onBack} className="w-9 h-9 rounded-full glass flex items-center justify-center">
-            <ChevronRight className="w-5 h-5" />
-          </button>
+          <button onClick={onBack} className="w-9 h-9 rounded-full glass flex items-center justify-center"><ChevronRight className="w-5 h-5" /></button>
           <h2 className="text-base font-bold">إتمام الحجز</h2>
           <div className="w-9" />
         </div>
@@ -946,10 +876,7 @@ function BookingFlow({
               <div className="glass rounded-2xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <img src={getPropertyImage(property)} alt="" className="w-12 h-12 rounded-xl object-cover" />
-                  <div>
-                    <h4 className="text-sm font-bold">{property.titleAr}</h4>
-                    <p className="text-[11px] text-muted-foreground">{property.cityAr} - {property.districtAr}</p>
-                  </div>
+                  <div><h4 className="text-sm font-bold">{property.titleAr}</h4><p className="text-[11px] text-muted-foreground">{property.cityAr} - {property.districtAr}</p></div>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">{months} {months === 1 ? "شهر" : "أشهر"} × {formatPrice(rent)}</span>
@@ -963,32 +890,14 @@ function BookingFlow({
             <motion.div key="cost" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
               <h3 className="text-lg font-bold mb-4">تفاصيل التكلفة</h3>
               <div className="glass rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">الإيجار ({months} {months === 1 ? "شهر" : "أشهر"})</span>
-                  <span className="font-medium">{formatPrice(breakdown.baseRentTotal)}</span>
-                </div>
+                <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">الإيجار ({months} {months === 1 ? "شهر" : "أشهر"})</span><span className="font-medium">{formatPrice(breakdown.baseRentTotal)}</span></div>
                 {!breakdown.hideInsuranceFromTenant && breakdown.insuranceAmount > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">تأمين ({breakdown.appliedRates.insuranceRate}%)</span>
-                    <span className="font-medium">{formatPrice(breakdown.insuranceAmount)}</span>
-                  </div>
+                  <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">تأمين ({breakdown.appliedRates.insuranceRate}%)</span><span className="font-medium">{formatPrice(breakdown.insuranceAmount)}</span></div>
                 )}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">رسوم الخدمة ({breakdown.appliedRates.serviceFeeRate}%)</span>
-                  <span className="font-medium">{formatPrice(breakdown.serviceFeeAmount)}</span>
-                </div>
-                <div className="border-t border-border/50 pt-2 flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">المجموع الفرعي</span>
-                  <span className="font-medium">{formatPrice(breakdown.subtotal)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">ضريبة القيمة المضافة ({breakdown.appliedRates.vatRate}%)</span>
-                  <span className="font-medium">{formatPrice(breakdown.vatAmount)}</span>
-                </div>
-                <div className="border-t border-border/50 pt-3 flex items-center justify-between">
-                  <span className="font-bold">المجموع الكلي</span>
-                  <span className="text-xl font-bold gradient-text">{formatPrice(breakdown.grandTotal)}</span>
-                </div>
+                <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">رسوم الخدمة ({breakdown.appliedRates.serviceFeeRate}%)</span><span className="font-medium">{formatPrice(breakdown.serviceFeeAmount)}</span></div>
+                <div className="border-t border-border/50 pt-2 flex items-center justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي</span><span className="font-medium">{formatPrice(breakdown.subtotal)}</span></div>
+                <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">ضريبة القيمة المضافة ({breakdown.appliedRates.vatRate}%)</span><span className="font-medium">{formatPrice(breakdown.vatAmount)}</span></div>
+                <div className="border-t border-border/50 pt-3 flex items-center justify-between"><span className="font-bold">المجموع الكلي</span><span className="text-xl font-bold gradient-text">{formatPrice(breakdown.grandTotal)}</span></div>
               </div>
             </motion.div>
           )}
@@ -1003,13 +912,8 @@ function BookingFlow({
                   { id: "mada", label: "مدى", icon: CreditCard, desc: "بطاقة مدى المحلية" },
                 ].map((method, i) => (
                   <motion.button key={method.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} onClick={onNext} className="w-full flex items-center gap-3 glass rounded-xl p-4 text-right transition-all hover:bg-card/80 active:scale-[0.98]">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.15), rgba(124,58,237,0.15))" }}>
-                      <method.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <span className="text-sm font-bold block">{method.label}</span>
-                      <span className="text-[11px] text-muted-foreground">{method.desc}</span>
-                    </div>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.15), rgba(124,58,237,0.15))" }}><method.icon className="w-5 h-5 text-primary" /></div>
+                    <div className="flex-1"><span className="text-sm font-bold block">{method.label}</span><span className="text-[11px] text-muted-foreground">{method.desc}</span></div>
                     <ChevronLeft className="w-4 h-4 text-muted-foreground" />
                   </motion.button>
                 ))}
@@ -1027,15 +931,9 @@ function BookingFlow({
               <div className="glass rounded-2xl p-4 w-full">
                 <div className="flex items-center gap-3 mb-3">
                   <img src={getPropertyImage(property)} alt="" className="w-12 h-12 rounded-xl object-cover" />
-                  <div>
-                    <h4 className="text-sm font-bold">{property.titleAr}</h4>
-                    <p className="text-[11px] text-muted-foreground">{months} {months === 1 ? "شهر" : "أشهر"}</p>
-                  </div>
+                  <div><h4 className="text-sm font-bold">{property.titleAr}</h4><p className="text-[11px] text-muted-foreground">{months} {months === 1 ? "شهر" : "أشهر"}</p></div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">المجموع</span>
-                  <span className="font-bold gradient-text">{formatPrice(breakdown.grandTotal)}</span>
-                </div>
+                <div className="flex items-center justify-between"><span className="text-xs text-muted-foreground">المجموع</span><span className="font-bold gradient-text">{formatPrice(breakdown.grandTotal)}</span></div>
               </div>
             </motion.div>
           )}
@@ -1052,21 +950,16 @@ function BookingFlow({
 
       {step === 3 && confirmed && (
         <div className="p-4 glass-strong">
-          <button onClick={onBack} className="w-full h-12 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-            العودة للرئيسية
-          </button>
+          <button onClick={onBack} className="w-full h-12 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>العودة للرئيسية</button>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Bookings Tab (Real bookings tracking) ───
+// ─── Bookings Tab ───
 function BookingsTab({ isLoggedIn, onLogin, bookings, onOpenProperty }: {
-  isLoggedIn: boolean;
-  onLogin: () => void;
-  bookings: UserBooking[];
-  onOpenProperty: (p: ApiProperty) => void;
+  isLoggedIn: boolean; onLogin: () => void; bookings: UserBooking[]; onOpenProperty: (p: ApiProperty) => void;
 }) {
   if (!isLoggedIn) {
     return (
@@ -1074,9 +967,7 @@ function BookingsTab({ isLoggedIn, onLogin, bookings, onOpenProperty }: {
         <CalendarDays className="w-16 h-16 text-muted-foreground/30 mb-4" />
         <h2 className="text-lg font-bold mb-2">حجوزاتي</h2>
         <p className="text-sm text-muted-foreground text-center mb-6">سجل الدخول لعرض حجوزاتك</p>
-        <button onClick={onLogin} className="px-8 py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-          تسجيل الدخول
-        </button>
+        <button onClick={onLogin} className="px-8 py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>تسجيل الدخول</button>
       </div>
     );
   }
@@ -1102,40 +993,19 @@ function BookingsTab({ isLoggedIn, onLogin, bookings, onOpenProperty }: {
           const statusInfo = bookingStatusLabels[booking.status];
           const StatusIcon = statusInfo.icon;
           return (
-            <motion.div
-              key={booking.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-            >
-              <button
-                onClick={() => onOpenProperty(booking.property)}
-                className="w-full glass rounded-2xl p-4 text-right transition-all hover:bg-card/80 active:scale-[0.98]"
-              >
+            <motion.div key={booking.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
+              <button onClick={() => onOpenProperty(booking.property)} className="w-full glass rounded-2xl p-4 text-right transition-all hover:bg-card/80 active:scale-[0.98]">
                 <div className="flex gap-3 mb-3">
-                  <img
-                    src={getPropertyImage(booking.property)}
-                    alt={booking.property.titleAr}
-                    className="w-20 h-20 rounded-xl object-cover flex-shrink-0"
-                  />
+                  <img src={getPropertyImage(booking.property)} alt={booking.property.titleAr} className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
                   <div className="flex-1">
                     <h3 className="text-sm font-bold leading-tight mb-1">{booking.property.titleAr}</h3>
-                    <div className="flex items-center gap-1 text-muted-foreground mb-1">
-                      <MapPin className="w-3 h-3" />
-                      <span className="text-[11px]">{booking.property.cityAr} - {booking.property.districtAr}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <StatusIcon className="w-3.5 h-3.5" style={{ color: statusInfo.color }} />
-                      <span className="text-[11px] font-medium" style={{ color: statusInfo.color }}>{statusInfo.label}</span>
-                    </div>
+                    <div className="flex items-center gap-1 text-muted-foreground mb-1"><MapPin className="w-3 h-3" /><span className="text-[11px]">{booking.property.cityAr} - {booking.property.districtAr}</span></div>
+                    <div className="flex items-center gap-1.5"><StatusIcon className="w-3.5 h-3.5" style={{ color: statusInfo.color }} /><span className="text-[11px] font-medium" style={{ color: statusInfo.color }}>{statusInfo.label}</span></div>
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-border/30">
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <CalendarDays className="w-3 h-3" />
-                      {booking.months} {booking.months === 1 ? "شهر" : "أشهر"}
-                    </span>
+                    <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{booking.months} {booking.months === 1 ? "شهر" : "أشهر"}</span>
                     <span>رقم الحجز: {booking.id}</span>
                   </div>
                   <span className="text-sm font-bold gradient-text">{formatPrice(booking.totalAmount)}</span>
@@ -1149,16 +1019,144 @@ function BookingsTab({ isLoggedIn, onLogin, bookings, onOpenProperty }: {
   );
 }
 
+// ─── Notifications Settings Screen ───
+function NotificationsSettings({ onBack }: { onBack: () => void }) {
+  const [prefs, setPrefs] = useState<NotificationPrefs>(getNotificationPrefs());
+  const [permissionGranted, setPermissionGranted] = useState(
+    typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted"
+  );
+
+  const handleToggleEnabled = async () => {
+    if (!prefs.enabled) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        toast.error("يرجى السماح بالإشعارات من إعدادات المتصفح");
+        return;
+      }
+      setPermissionGranted(true);
+      const updated = { ...prefs, enabled: true };
+      setPrefs(updated);
+      saveNotificationPrefs(updated);
+      toast.success("تم تفعيل الإشعارات");
+
+      // Send test notification
+      sendLocalNotification("المفتاح الشهري", "تم تفعيل الإشعارات بنجاح! ستصلك تنبيهات عند تحديث حجوزاتك.");
+    } else {
+      const updated = { ...prefs, enabled: false };
+      setPrefs(updated);
+      saveNotificationPrefs(updated);
+      toast.success("تم إيقاف الإشعارات");
+    }
+  };
+
+  const togglePref = (key: keyof Omit<NotificationPrefs, "enabled">) => {
+    const updated = { ...prefs, [key]: !prefs[key] };
+    setPrefs(updated);
+    saveNotificationPrefs(updated);
+  };
+
+  const notificationOptions = [
+    { key: "bookingUpdates" as const, label: "تحديثات الحجوزات", desc: "إشعارات عند تأكيد أو تحديث حجوزاتك", icon: CalendarDays },
+    { key: "newProperties" as const, label: "عقارات جديدة", desc: "إشعارات عند إضافة عقارات جديدة في مدينتك", icon: Home },
+    { key: "priceDrops" as const, label: "انخفاض الأسعار", desc: "إشعارات عند انخفاض أسعار العقارات المفضلة", icon: Star },
+    { key: "promotions" as const, label: "العروض والتخفيضات", desc: "إشعارات بالعروض الخاصة والتخفيضات", icon: Bell },
+  ];
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="pt-12 px-4 pb-3">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="w-9 h-9 rounded-full glass flex items-center justify-center"><ChevronRight className="w-5 h-5" /></button>
+          <h1 className="text-lg font-bold">إعدادات الإشعارات</h1>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4" style={{ scrollbarWidth: "none" }}>
+        {/* Main Toggle */}
+        <div className="glass rounded-2xl p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: prefs.enabled ? "linear-gradient(135deg, #2563EB, #7C3AED)" : "rgba(255,255,255,0.05)" }}>
+                {prefs.enabled ? <BellRing className="w-5 h-5 text-white" /> : <BellOff className="w-5 h-5 text-muted-foreground" />}
+              </div>
+              <div>
+                <h3 className="text-sm font-bold">الإشعارات</h3>
+                <p className="text-[11px] text-muted-foreground">{prefs.enabled ? "مفعلة" : "متوقفة"}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleToggleEnabled}
+              className={`w-12 h-7 rounded-full transition-all duration-300 relative ${prefs.enabled ? "bg-primary" : "bg-muted"}`}
+            >
+              <motion.div
+                className="w-5 h-5 rounded-full bg-white absolute top-1"
+                animate={{ left: prefs.enabled ? 24 : 4 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Permission Warning */}
+        {!permissionGranted && prefs.enabled && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 p-3 rounded-xl text-sm" style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.2)" }}>
+            <p className="text-amber-400 text-xs">يرجى السماح بالإشعارات من إعدادات المتصفح لتلقي التنبيهات</p>
+          </motion.div>
+        )}
+
+        {/* Notification Categories */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-muted-foreground mb-2">أنواع الإشعارات</h3>
+          {notificationOptions.map((option) => (
+            <div key={option.key} className="glass rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1">
+                  <option.icon className="w-5 h-5 text-primary flex-shrink-0" />
+                  <div>
+                    <h4 className="text-sm font-medium">{option.label}</h4>
+                    <p className="text-[11px] text-muted-foreground">{option.desc}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => togglePref(option.key)}
+                  disabled={!prefs.enabled}
+                  className={`w-10 h-6 rounded-full transition-all duration-300 relative flex-shrink-0 ${prefs[option.key] && prefs.enabled ? "bg-primary" : "bg-muted"} ${!prefs.enabled ? "opacity-40" : ""}`}
+                >
+                  <motion.div
+                    className="w-4 h-4 rounded-full bg-white absolute top-1"
+                    animate={{ left: prefs[option.key] && prefs.enabled ? 20 : 4 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Info */}
+        <div className="mt-6 p-4 glass rounded-xl">
+          <div className="flex items-start gap-3">
+            <Settings className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs font-bold mb-1">ملاحظة</h4>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                يستخدم التطبيق إشعارات المتصفح (Web Push). للتطبيق الأصلي على الهاتف، سيتم استخدام Firebase Cloud Messaging لإرسال إشعارات Push حقيقية حتى عند إغلاق التطبيق.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Profile Tab ───
 function ProfileTab({
-  isLoggedIn, onLogin, onLogout, userName, userEmail, userInitials,
+  isLoggedIn, onLogin, onLogout, userName, userEmail, userInitials, onOpenNotifications,
 }: {
-  isLoggedIn: boolean;
-  onLogin: () => void;
-  onLogout: () => void;
-  userName: string;
-  userEmail: string;
-  userInitials: string;
+  isLoggedIn: boolean; onLogin: () => void; onLogout: () => void;
+  userName: string; userEmail: string; userInitials: string;
+  onOpenNotifications: () => void;
 }) {
   if (!isLoggedIn) {
     return (
@@ -1166,9 +1164,7 @@ function ProfileTab({
         <User className="w-16 h-16 text-muted-foreground/30 mb-4" />
         <h2 className="text-lg font-bold mb-2">حسابي</h2>
         <p className="text-sm text-muted-foreground text-center mb-6">سجل الدخول للوصول إلى حسابك</p>
-        <button onClick={onLogin} className="px-8 py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-          تسجيل الدخول
-        </button>
+        <button onClick={onLogin} className="px-8 py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>تسجيل الدخول</button>
       </div>
     );
   }
@@ -1177,28 +1173,20 @@ function ProfileTab({
     <div className="pt-12 px-4">
       <div className="pt-4 pb-6">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-            {userInitials}
-          </div>
-          <div>
-            <h2 className="text-lg font-bold">{userName}</h2>
-            <p className="text-sm text-muted-foreground">{userEmail}</p>
-          </div>
+          <div className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>{userInitials}</div>
+          <div><h2 className="text-lg font-bold">{userName}</h2><p className="text-sm text-muted-foreground">{userEmail}</p></div>
         </div>
       </div>
       <div className="space-y-2">
         {[
-          { label: "الإعدادات", icon: "⚙️" },
-          { label: "اللغة", icon: "🌐", value: "العربية" },
-          { label: "المظهر", icon: "🌙", value: "داكن" },
-          { label: "الإشعارات", icon: "🔔" },
-          { label: "المساعدة", icon: "❓" },
+          { label: "الإعدادات", icon: "⚙️", action: undefined },
+          { label: "اللغة", icon: "🌐", value: "العربية", action: undefined },
+          { label: "المظهر", icon: "🌙", value: "داكن", action: undefined },
+          { label: "الإشعارات", icon: "🔔", action: onOpenNotifications },
+          { label: "المساعدة", icon: "❓", action: undefined },
         ].map((item) => (
-          <button key={item.label} className="w-full flex items-center justify-between glass rounded-xl p-4 transition-all hover:bg-card/80">
-            <div className="flex items-center gap-3">
-              <span className="text-lg">{item.icon}</span>
-              <span className="text-sm font-medium">{item.label}</span>
-            </div>
+          <button key={item.label} onClick={item.action} className="w-full flex items-center justify-between glass rounded-xl p-4 transition-all hover:bg-card/80">
+            <div className="flex items-center gap-3"><span className="text-lg">{item.icon}</span><span className="text-sm font-medium">{item.label}</span></div>
             <div className="flex items-center gap-2">
               {item.value && <span className="text-xs text-muted-foreground">{item.value}</span>}
               <ChevronLeft className="w-4 h-4 text-muted-foreground" />
@@ -1206,9 +1194,7 @@ function ProfileTab({
           </button>
         ))}
       </div>
-      <button onClick={onLogout} className="w-full mt-6 py-3 rounded-xl text-sm font-bold text-destructive glass transition-all hover:bg-destructive/10">
-        تسجيل الخروج
-      </button>
+      <button onClick={onLogout} className="w-full mt-6 py-3 rounded-xl text-sm font-bold text-destructive glass transition-all hover:bg-destructive/10">تسجيل الخروج</button>
     </div>
   );
 }
@@ -1231,129 +1217,69 @@ function LoginScreen({ onSuccess, onBack }: { onSuccess: () => void; onBack: () 
     setError(null);
     if (!email.trim()) { setError("يرجى إدخال البريد الإلكتروني"); return; }
     if (!password.trim() || password.length < 6) { setError("كلمة المرور يجب أن تكون 6 أحرف على الأقل"); return; }
-
     setLoading(true);
     try {
       if (mode === "login") {
         const { error: authError } = await signIn(email, password);
-        if (authError) {
-          setError(authError.message.includes("Invalid login") ? "البريد الإلكتروني أو كلمة المرور غير صحيحة" : authError.message);
-          return;
-        }
+        if (authError) { setError(authError.message.includes("Invalid login") ? "البريد الإلكتروني أو كلمة المرور غير صحيحة" : authError.message); return; }
         onSuccess();
       } else {
         if (!fullName.trim()) { setError("يرجى إدخال الاسم الكامل"); setLoading(false); return; }
         const { error: authError } = await signUp(email, password, fullName);
-        if (authError) {
-          setError(authError.message.includes("already registered") ? "هذا البريد الإلكتروني مسجل بالفعل" : authError.message);
-          return;
-        }
+        if (authError) { setError(authError.message.includes("already registered") ? "هذا البريد الإلكتروني مسجل بالفعل" : authError.message); return; }
         toast.success("تم إنشاء الحساب بنجاح! تحقق من بريدك الإلكتروني لتأكيد الحساب.");
         setMode("login");
       }
-    } catch {
-      setError("حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.");
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError("حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى."); } finally { setLoading(false); }
   };
 
   const handlePhoneSubmit = async () => {
     setError(null);
     const cleanPhone = phoneNumber.replace(/\s/g, "");
-    if (!cleanPhone || cleanPhone.length < 9) {
-      setError("يرجى إدخال رقم جوال صحيح");
-      return;
-    }
-
+    if (!cleanPhone || cleanPhone.length < 9) { setError("يرجى إدخال رقم جوال صحيح"); return; }
     const fullPhone = cleanPhone.startsWith("+") ? cleanPhone : `+966${cleanPhone.startsWith("0") ? cleanPhone.slice(1) : cleanPhone}`;
-
     setLoading(true);
     try {
       const { error: authError } = await signInWithPhone(fullPhone);
-      if (authError) {
-        setError(authError.message.includes("Phone") ? "رقم الجوال غير صحيح أو الخدمة غير مفعلة" : authError.message);
-        return;
-      }
+      if (authError) { setError(authError.message.includes("Phone") ? "رقم الجوال غير صحيح أو الخدمة غير مفعلة" : authError.message); return; }
       setMode("otp");
       toast.success("تم إرسال رمز التحقق إلى جوالك");
       setTimeout(() => otpInputRef.current?.focus(), 300);
-    } catch {
-      setError("حدث خطأ. يرجى المحاولة مرة أخرى.");
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError("حدث خطأ. يرجى المحاولة مرة أخرى."); } finally { setLoading(false); }
   };
 
   const handleOtpVerify = async () => {
     setError(null);
-    if (!otpCode || otpCode.length !== 6) {
-      setError("يرجى إدخال رمز التحقق المكون من 6 أرقام");
-      return;
-    }
-
+    if (!otpCode || otpCode.length !== 6) { setError("يرجى إدخال رمز التحقق المكون من 6 أرقام"); return; }
     const cleanPhone = phoneNumber.replace(/\s/g, "");
     const fullPhone = cleanPhone.startsWith("+") ? cleanPhone : `+966${cleanPhone.startsWith("0") ? cleanPhone.slice(1) : cleanPhone}`;
-
     setLoading(true);
     try {
       const { error: authError } = await verifyOtp(fullPhone, otpCode);
-      if (authError) {
-        setError("رمز التحقق غير صحيح أو منتهي الصلاحية");
-        return;
-      }
+      if (authError) { setError("رمز التحقق غير صحيح أو منتهي الصلاحية"); return; }
       onSuccess();
-    } catch {
-      setError("حدث خطأ. يرجى المحاولة مرة أخرى.");
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError("حدث خطأ. يرجى المحاولة مرة أخرى."); } finally { setLoading(false); }
   };
 
   return (
     <div className="h-full flex flex-col">
       <div className="pt-12 px-4 pb-3">
-        <button onClick={mode === "otp" ? () => setMode("phone") : onBack} className="w-9 h-9 rounded-full glass flex items-center justify-center">
-          <ChevronRight className="w-5 h-5" />
-        </button>
+        <button onClick={mode === "otp" ? () => setMode("phone") : onBack} className="w-9 h-9 rounded-full glass flex items-center justify-center"><ChevronRight className="w-5 h-5" /></button>
       </div>
       <div className="flex-1 px-6 flex flex-col justify-center">
         <div className="mb-8">
-          {mode === "login" && (
-            <>
-              <h1 className="text-2xl font-bold mb-2">مرحباً بك</h1>
-              <p className="text-sm text-muted-foreground">سجل الدخول للمتابعة</p>
-            </>
-          )}
-          {mode === "signup" && (
-            <>
-              <h1 className="text-2xl font-bold mb-2">إنشاء حساب جديد</h1>
-              <p className="text-sm text-muted-foreground">أنشئ حسابك للبدء في استخدام المفتاح الشهري</p>
-            </>
-          )}
-          {mode === "phone" && (
-            <>
-              <h1 className="text-2xl font-bold mb-2">الدخول برقم الجوال</h1>
-              <p className="text-sm text-muted-foreground">أدخل رقم جوالك وسنرسل لك رمز تحقق</p>
-            </>
-          )}
-          {mode === "otp" && (
-            <>
-              <h1 className="text-2xl font-bold mb-2">رمز التحقق</h1>
-              <p className="text-sm text-muted-foreground">أدخل الرمز المرسل إلى {phoneNumber}</p>
-            </>
-          )}
+          {mode === "login" && <><h1 className="text-2xl font-bold mb-2">مرحباً بك</h1><p className="text-sm text-muted-foreground">سجل الدخول للمتابعة</p></>}
+          {mode === "signup" && <><h1 className="text-2xl font-bold mb-2">إنشاء حساب جديد</h1><p className="text-sm text-muted-foreground">أنشئ حسابك للبدء في استخدام المفتاح الشهري</p></>}
+          {mode === "phone" && <><h1 className="text-2xl font-bold mb-2">الدخول برقم الجوال</h1><p className="text-sm text-muted-foreground">أدخل رقم جوالك وسنرسل لك رمز تحقق</p></>}
+          {mode === "otp" && <><h1 className="text-2xl font-bold mb-2">رمز التحقق</h1><p className="text-sm text-muted-foreground">أدخل الرمز المرسل إلى {phoneNumber}</p></>}
         </div>
 
         <AnimatePresence>
           {error && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="mb-4 p-3 rounded-xl text-sm font-medium" style={{ background: "rgba(239,68,68,0.15)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.2)" }}>
-              {error}
-            </motion.div>
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="mb-4 p-3 rounded-xl text-sm font-medium" style={{ background: "rgba(239,68,68,0.15)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.2)" }}>{error}</motion.div>
           )}
         </AnimatePresence>
 
-        {/* Email/Password Form */}
         {(mode === "login" || mode === "signup") && (
           <div className="space-y-4">
             <AnimatePresence>
@@ -1388,112 +1314,58 @@ function LoginScreen({ onSuccess, onBack }: { onSuccess: () => void; onBack: () 
             </div>
 
             <button onClick={handleEmailSubmit} disabled={loading} className="w-full h-12 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-              {loading ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /><span>جاري {mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب"}...</span></>
-              ) : (
-                <>{mode === "login" ? <LogIn className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}<span>{mode === "login" ? "تسجيل الدخول" : "إنشاء حساب"}</span></>
-              )}
+              {loading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>جاري {mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب"}...</span></> : <>{mode === "login" ? <LogIn className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}<span>{mode === "login" ? "تسجيل الدخول" : "إنشاء حساب"}</span></>}
             </button>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3 my-2">
-              <div className="flex-1 h-px bg-border/50" />
-              <span className="text-[11px] text-muted-foreground">أو</span>
-              <div className="flex-1 h-px bg-border/50" />
-            </div>
+            <div className="flex items-center gap-3 my-2"><div className="flex-1 h-px bg-border/50" /><span className="text-[11px] text-muted-foreground">أو</span><div className="flex-1 h-px bg-border/50" /></div>
 
-            {/* Phone OTP Button */}
             <button onClick={() => { setMode("phone"); setError(null); }} className="w-full h-12 rounded-xl font-bold text-sm glass flex items-center justify-center gap-2 transition-all hover:bg-card/80">
-              <Phone className="w-5 h-5 text-primary" />
-              <span>الدخول برقم الجوال</span>
+              <Phone className="w-5 h-5 text-primary" /><span>الدخول برقم الجوال</span>
             </button>
 
             <p className="text-center text-xs text-muted-foreground mt-2">
-              {mode === "login" ? (
-                <>ليس لديك حساب؟{" "}<button onClick={() => { setMode("signup"); setError(null); }} className="text-primary font-medium">إنشاء حساب</button></>
-              ) : (
-                <>لديك حساب بالفعل؟{" "}<button onClick={() => { setMode("login"); setError(null); }} className="text-primary font-medium">تسجيل الدخول</button></>
-              )}
+              {mode === "login" ? <>ليس لديك حساب؟{" "}<button onClick={() => { setMode("signup"); setError(null); }} className="text-primary font-medium">إنشاء حساب</button></> : <>لديك حساب بالفعل؟{" "}<button onClick={() => { setMode("login"); setError(null); }} className="text-primary font-medium">تسجيل الدخول</button></>}
             </p>
           </div>
         )}
 
-        {/* Phone Number Input */}
         {mode === "phone" && (
           <div className="space-y-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1.5 block">رقم الجوال</label>
               <div className="flex gap-2">
-                <div className="flex items-center gap-1.5 px-3 h-12 rounded-xl glass text-sm font-medium flex-shrink-0">
-                  <span>🇸🇦</span>
-                  <span dir="ltr">+966</span>
-                </div>
+                <div className="flex items-center gap-1.5 px-3 h-12 rounded-xl glass text-sm font-medium flex-shrink-0"><span>🇸🇦</span><span dir="ltr">+966</span></div>
                 <div className="relative flex-1">
                   <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => { setPhoneNumber(e.target.value.replace(/[^\d\s]/g, "")); setError(null); }}
-                    placeholder="5XX XXX XXXX"
-                    className="w-full h-12 pr-10 pl-4 rounded-xl glass bg-transparent text-sm outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground"
-                    dir="ltr"
-                    maxLength={12}
-                  />
+                  <input type="tel" value={phoneNumber} onChange={(e) => { setPhoneNumber(e.target.value.replace(/[^\d\s]/g, "")); setError(null); }} placeholder="5XX XXX XXXX" className="w-full h-12 pr-10 pl-4 rounded-xl glass bg-transparent text-sm outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground" dir="ltr" maxLength={12} />
                 </div>
               </div>
             </div>
 
             <button onClick={handlePhoneSubmit} disabled={loading} className="w-full h-12 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-              {loading ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /><span>جاري الإرسال...</span></>
-              ) : (
-                <><Phone className="w-5 h-5" /><span>إرسال رمز التحقق</span></>
-              )}
+              {loading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>جاري الإرسال...</span></> : <><Phone className="w-5 h-5" /><span>إرسال رمز التحقق</span></>}
             </button>
 
-            <div className="flex items-center gap-3 my-2">
-              <div className="flex-1 h-px bg-border/50" />
-              <span className="text-[11px] text-muted-foreground">أو</span>
-              <div className="flex-1 h-px bg-border/50" />
-            </div>
+            <div className="flex items-center gap-3 my-2"><div className="flex-1 h-px bg-border/50" /><span className="text-[11px] text-muted-foreground">أو</span><div className="flex-1 h-px bg-border/50" /></div>
 
             <button onClick={() => { setMode("login"); setError(null); }} className="w-full h-12 rounded-xl font-bold text-sm glass flex items-center justify-center gap-2 transition-all hover:bg-card/80">
-              <Mail className="w-5 h-5 text-primary" />
-              <span>الدخول بالبريد الإلكتروني</span>
+              <Mail className="w-5 h-5 text-primary" /><span>الدخول بالبريد الإلكتروني</span>
             </button>
           </div>
         )}
 
-        {/* OTP Verification */}
         {mode === "otp" && (
           <div className="space-y-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1.5 block">رمز التحقق (6 أرقام)</label>
-              <input
-                ref={otpInputRef}
-                type="text"
-                inputMode="numeric"
-                value={otpCode}
-                onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(null); }}
-                placeholder="000000"
-                className="w-full h-14 rounded-xl glass bg-transparent text-2xl text-center font-bold tracking-[0.5em] outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground/30"
-                dir="ltr"
-                maxLength={6}
-                autoComplete="one-time-code"
-              />
+              <input ref={otpInputRef} type="text" inputMode="numeric" value={otpCode} onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(null); }} placeholder="000000" className="w-full h-14 rounded-xl glass bg-transparent text-2xl text-center font-bold tracking-[0.5em] outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground/30" dir="ltr" maxLength={6} autoComplete="one-time-code" />
             </div>
 
             <button onClick={handleOtpVerify} disabled={loading || otpCode.length !== 6} className="w-full h-12 rounded-xl font-bold text-white text-base transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
-              {loading ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /><span>جاري التحقق...</span></>
-              ) : (
-                <><Check className="w-5 h-5" /><span>تأكيد</span></>
-              )}
+              {loading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>جاري التحقق...</span></> : <><Check className="w-5 h-5" /><span>تأكيد</span></>}
             </button>
 
-            <button onClick={handlePhoneSubmit} disabled={loading} className="w-full text-center text-xs text-primary font-medium mt-2">
-              لم يصلك الرمز؟ إعادة الإرسال
-            </button>
+            <button onClick={handlePhoneSubmit} disabled={loading} className="w-full text-center text-xs text-primary font-medium mt-2">لم يصلك الرمز؟ إعادة الإرسال</button>
           </div>
         )}
       </div>
