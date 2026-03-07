@@ -142,3 +142,12 @@
 - [x] Renamed tab from "حسابي" to "المزيد" (More) with MoreHorizontal icon
 - [x] Fixed not-logged-in state to show full Gathern-style menu (logo, login button, guest menu items, footer)
 - [x] Guest menu shows: Host with us, FAQ, Terms, Privacy, Change language
+
+## Feature: Automatic Admin Detection
+- [x] Created adminConfig.ts with admin emails and phones
+- [x] Auto-detect admin by email (hobarti@protonmail.com) or phone (+966504466528)
+- [x] Show لوحة التحكم menu item only for admin users (conditional rendering)
+- [x] Hide admin panel from non-admin users
+- [x] Case-insensitive email matching, phone normalization (spaces, dashes, parentheses)
+- [x] No manual Supabase metadata setup required
+- [x] Write vitest tests for admin detection logic (20 tests, 234 total passing)

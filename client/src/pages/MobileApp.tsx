@@ -42,10 +42,8 @@ import {
   fetchReviews, submitReview, getAverageRating, generateDemoReviews, getDemoAverageRating,
   type Review,
 } from "@/lib/reviews";
-import {
-  getRecentlyViewed, addRecentlyViewed, clearRecentlyViewed,
-  type RecentlyViewedEntry,
-} from "@/lib/recentlyViewed";
+import { getRecentlyViewed, addRecentlyViewed, clearRecentlyViewed, type RecentlyViewedEntry } from "@/lib/recentlyViewed";
+import { isRootAdmin } from "@/lib/adminConfig";
 
 // ─── Hero Image (generated) ───
 const HERO_IMAGE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663340926600/Qa7Q2PtJqyYVmLJFM69a8Y/hero-riyadh-mrK3PJVdGeLBcb9uR3WKW9.webp";
@@ -377,6 +375,7 @@ export default function MobileApp() {
   const userDisplayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "مستخدم";
   const userEmail = user?.email || user?.phone || "";
   const userInitials = userDisplayName.slice(0, 2);
+  const isAdmin = isLoggedIn && isRootAdmin(user?.email, user?.phone);
 
   // Get favorite properties for the favorites tab
   const favoriteProperties = useMemo(() => {
@@ -441,6 +440,7 @@ export default function MobileApp() {
                       onOpenProfile={() => setScreen("profile-completion")}
                       onOpenAdmin={() => setScreen("admin-panel")}
                       userBookingsCount={userBookings.length}
+                      isAdmin={isAdmin}
                     />
                   )}
                 </div>
@@ -1722,13 +1722,13 @@ function NotificationsSettings({ onBack }: { onBack: () => void }) {
 function ProfileTab({
   isLoggedIn, onLogin, onLogout, userName, userEmail, userInitials,
   onOpenNotifications, onOpenTwilioSetup, onOpenProfile, onOpenAdmin,
-  userBookingsCount,
+  userBookingsCount, isAdmin,
 }: {
   isLoggedIn: boolean; onLogin: () => void; onLogout: () => void;
   userName: string; userEmail: string; userInitials: string;
   onOpenNotifications: () => void; onOpenTwilioSetup: () => void;
   onOpenProfile: () => void; onOpenAdmin: () => void;
-  userBookingsCount: number;
+  userBookingsCount: number; isAdmin: boolean;
 }) {
   const [showHostSheet, setShowHostSheet] = useState(false);
 
@@ -1847,7 +1847,7 @@ function ProfileTab({
     { label: "تغيير اللغة", icon: <Globe className="w-5 h-5" />, action: () => toast.info("قريباً") },
     { label: "الإشعارات", icon: <Bell className="w-5 h-5" />, action: onOpenNotifications },
     { label: "إعداد SMS (Twilio)", icon: <Phone className="w-5 h-5" />, action: onOpenTwilioSetup },
-    { label: "لوحة التحكم", icon: <ShieldCheck className="w-5 h-5" />, action: onOpenAdmin },
+    ...(isAdmin ? [{ label: "لوحة التحكم", icon: <ShieldCheck className="w-5 h-5" />, action: onOpenAdmin }] : []),
     { label: "تسجيل الخروج", icon: <Clock className="w-5 h-5" />, action: onLogout },
   ];
 
