@@ -1,3 +1,4 @@
+// Admin navigation: /admin/permissions — الأدوار والصلاحيات (Roles & Permissions)
 import DashboardLayout from "@/components/DashboardLayout";
 import SEOHead from "@/components/SEOHead";
 import { useI18n } from "@/lib/i18n";

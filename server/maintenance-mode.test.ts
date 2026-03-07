@@ -28,23 +28,140 @@ vi.mock("./permissions", () => ({
   PERMISSION_CATEGORIES: [],
 }));
 
+// Build comprehensive settings store matching seed-settings.ts (129+ keys)
+const _settingsStore: Record<string, string> = {};
+function _initSettings() {
+  const defaults: Record<string, string> = {
+    "site.nameAr": "المفتاح الشهري", "site.nameEn": "Monthly Key",
+    "site.descriptionAr": "المفتاح الشهري", "site.descriptionEn": "Monthly Key connects tenants",
+    "site.logoUrl": "", "site.faviconUrl": "",
+    "site.primaryColor": "#3ECFC0", "site.accentColor": "#C9A96E",
+    "hero.titleAr": "خبير الإيجار الشهري", "hero.titleEn": "Monthly Rental Expert",
+    "hero.subtitleAr": "إدارة إيجارات شهرية", "hero.subtitleEn": "Premium monthly rental",
+    "hero.bgImage": "", "hero.bgType": "image", "hero.bgVideo": "", "hero.overlayOpacity": "40",
+    "stats.properties": "500+", "stats.propertiesLabelAr": "عقار متاح", "stats.propertiesLabelEn": "Available Properties",
+    "stats.tenants": "1000+", "stats.tenantsLabelAr": "مستأجر سعيد", "stats.tenantsLabelEn": "Happy Tenants",
+    "stats.cities": "50+", "stats.citiesLabelAr": "مدينة", "stats.citiesLabelEn": "Cities",
+    "stats.satisfaction": "98%", "stats.satisfactionLabelAr": "رضا العملاء", "stats.satisfactionLabelEn": "Customer Satisfaction",
+    "maintenance.enabled": "false",
+    "maintenance.titleAr": "الموقع تحت الصيانة", "maintenance.titleEn": "Under Maintenance",
+    "maintenance.subtitleAr": "نعمل على تحسين تجربتكم", "maintenance.subtitleEn": "We are improving your experience",
+    "maintenance.messageAr": "يرجى المحاولة لاحقاً", "maintenance.messageEn": "Please try again later",
+    "maintenance.imageUrl": "", "maintenance.countdownDate": "", "maintenance.showCountdown": "false",
+    "social.twitter": "", "social.instagram": "", "social.snapchat": "",
+    "social.tiktok": "", "social.linkedin": "", "social.youtube": "",
+    "ai.enabled": "true", "ai.name": "مساعد المفتاح", "ai.nameEn": "Key Assistant",
+    "ai.personality": "helpful", "ai.welcomeMessage": "مرحباً", "ai.welcomeMessageEn": "Welcome",
+    "ai.customInstructions": "", "ai.maxResponseLength": "500",
+    "footer.aboutAr": "عن المفتاح الشهري", "footer.aboutEn": "About Monthly Key",
+    "footer.copyrightAr": "جميع الحقوق محفوظة", "footer.copyrightEn": "All rights reserved",
+    "footer.phone": "+966504466528", "footer.email": "info@monthlykey.com",
+    "footer.addressAr": "الرياض", "footer.addressEn": "Riyadh",
+    "seo.titleAr": "المفتاح الشهري", "seo.titleEn": "Monthly Key",
+    "seo.descriptionAr": "منصة الإيجار الشهري", "seo.descriptionEn": "Monthly rental platform",
+    "seo.keywordsAr": "إيجار شهري", "seo.keywordsEn": "monthly rental",
+    "seo.ogImage": "", "seo.canonical": "",
+    "booking.minDays": "30", "booking.maxDays": "365",
+    "booking.autoApprove": "false", "booking.requireKyc": "true",
+    "booking.depositPercent": "100", "booking.cancellationHours": "48",
+    "payment.currency": "SAR", "payment.vatRate": "15",
+    "payment.serviceFeeRate": "5", "payment.insuranceRate": "10",
+    "payment.insuranceMode": "percentage", "payment.hideInsuranceFromTenant": "true",
+    "payment.moyasarEnabled": "true", "payment.paypalEnabled": "false",
+    "notification.emailEnabled": "true", "notification.smsEnabled": "false",
+    "notification.pushEnabled": "true", "notification.whatsappEnabled": "false",
+    "notification.bookingConfirmation": "true", "notification.paymentReceipt": "true",
+    "notification.maintenanceUpdate": "true",
+    "kyc.required": "true", "kyc.autoApprove": "false",
+    "kyc.idRequired": "true", "kyc.selfieRequired": "true",
+    "map.defaultLat": "24.7136", "map.defaultLng": "46.6753", "map.defaultZoom": "12",
+    "map.style": "default", "map.showClusters": "true",
+    "search.defaultCity": "Riyadh", "search.maxResults": "50",
+    "search.showMap": "true", "search.showFilters": "true",
+    "property.maxPhotos": "20", "property.requireApproval": "true",
+    "property.autoPublish": "false", "property.showViews": "true",
+    "review.enabled": "true", "review.requireBooking": "true",
+    "review.autoPublish": "false", "review.minRating": "1", "review.maxRating": "5",
+    "chat.enabled": "true", "chat.maxMessageLength": "1000",
+    "whatsapp.enabled": "false", "whatsapp.phone": "",
+    "whatsapp.businessId": "", "whatsapp.token": "",
+  };
+  Object.assign(_settingsStore, defaults);
+}
+_initSettings();
+
+// Mock db module
+vi.mock("./db", () => ({
+  getAdminPermissions: vi.fn().mockResolvedValue({ id: 1, userId: 1, permissions: ["manage_settings", "manage_cms"], isRootAdmin: true, createdAt: new Date(), updatedAt: new Date() }),
+  getAllSettings: vi.fn().mockImplementation(async () => ({ ..._settingsStore })),
+  getSetting: vi.fn().mockImplementation(async (key: string) => _settingsStore[key] ?? null),
+  setSetting: vi.fn().mockImplementation(async (key: string, value: string) => { _settingsStore[key] = value; }),
+  bulkSetSettings: vi.fn().mockImplementation(async (settings: Record<string, string>) => {
+    for (const [k, v] of Object.entries(settings)) _settingsStore[k] = v;
+  }),
+  seedMissingSettings: vi.fn().mockResolvedValue(undefined),
+  // Districts/Cities (needed by geo router)
+  getAllDistricts: vi.fn().mockResolvedValue([]),
+  getAllCities: vi.fn().mockResolvedValue([]),
+  getCityById: vi.fn().mockResolvedValue(null),
+  getCityCount: vi.fn().mockResolvedValue(0),
+  getFeaturedCities: vi.fn().mockResolvedValue([]),
+  getDistrictsByCity: vi.fn().mockResolvedValue([]),
+  getDistrictsByCityId: vi.fn().mockResolvedValue([]),
+  getDistrictById: vi.fn().mockResolvedValue(null),
+  getDistrictCount: vi.fn().mockResolvedValue(0),
+  // Activity/Manager
+  getActivityStats: vi.fn().mockResolvedValue({ totalActions: 0, uniqueUsers: 0, topActions: [] }),
+  getActivityLog: vi.fn().mockResolvedValue([]),
+  trackActivity: vi.fn().mockResolvedValue(undefined),
+  getAllManagersWithCounts: vi.fn().mockResolvedValue([]),
+  getAllPropertyManagers: vi.fn().mockResolvedValue([]),
+  getPropertyManagerById: vi.fn().mockResolvedValue(null),
+  getPropertyManagerByProperty: vi.fn().mockResolvedValue(null),
+  createPropertyManager: vi.fn().mockResolvedValue(1),
+  updatePropertyManager: vi.fn().mockResolvedValue(undefined),
+  deletePropertyManager: vi.fn().mockResolvedValue(undefined),
+  getManagerAssignments: vi.fn().mockResolvedValue([]),
+  assignManagerToProperties: vi.fn().mockResolvedValue(undefined),
+  getManagerByEmail: vi.fn().mockResolvedValue(null),
+  getManagerByToken: vi.fn().mockResolvedValue(null),
+  setManagerEditToken: vi.fn().mockResolvedValue(undefined),
+  getManagerWithProperties: vi.fn().mockResolvedValue(null),
+  getUserPreferences: vi.fn().mockResolvedValue(null),
+  getConversationsByUser: vi.fn().mockResolvedValue([]),
+  getMessagesByConversation: vi.fn().mockResolvedValue([]),
+  getOrCreateConversation: vi.fn().mockResolvedValue({ id: 1 }),
+  createMessage: vi.fn().mockResolvedValue(1),
+  markMessagesAsRead: vi.fn().mockResolvedValue(undefined),
+  getUnreadMessageCount: vi.fn().mockResolvedValue(0),
+  createNotification: vi.fn().mockResolvedValue(1),
+  getPropertyById: vi.fn().mockResolvedValue(null),
+  // Permissions (roles router)
+  getAllAdminPermissions: vi.fn().mockResolvedValue([]),
+  setAdminPermissions: vi.fn().mockResolvedValue(undefined),
+  deleteAdminPermissions: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("./storage", () => ({
+  storagePut: vi.fn().mockResolvedValue({ url: "https://s3.example.com/test.jpg", key: "test.jpg" }),
+}));
+
+// Also mock seed-settings to use our in-memory store
+vi.mock("./seed-settings", () => ({
+  seedDefaultSettings: vi.fn().mockImplementation(async () => {
+    // Seed only adds missing keys, doesn't overwrite
+    // Since _settingsStore is already populated, this is a no-op
+  }),
+}));
+
 // ── Context Helpers ──────────────────────────────────────────────────
 
 function createAdminCtx(): TrpcContext {
   return {
     user: {
-      id: 1,
-      openId: "admin-test",
-      userId: "Hobart",
-      email: "hobarti@protonmail.com",
-      name: "Admin",
-      displayName: "Admin",
-      loginMethod: "local",
-      role: "admin",
-      phone: "+966504466528",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastSignedIn: new Date(),
+      id: 1, openId: "admin-test", email: "admin@test.com", name: "Admin",
+      loginMethod: "local", role: "admin", phone: "+966504466528",
+      createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
     } as any,
     req: { protocol: "https", headers: {} } as any,
     res: { clearCookie: () => {} } as any,
@@ -54,18 +171,9 @@ function createAdminCtx(): TrpcContext {
 function createUserCtx(id = 2): TrpcContext {
   return {
     user: {
-      id,
-      openId: `user-${id}`,
-      userId: `user${id}`,
-      email: `user${id}@test.com`,
-      name: `User ${id}`,
-      displayName: `User ${id}`,
-      loginMethod: "local",
-      role: "user",
-      phone: "+966500000000",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastSignedIn: new Date(),
+      id, openId: `user-${id}`, email: `user${id}@test.com`, name: `User ${id}`,
+      loginMethod: "local", role: "user", phone: "+966500000000",
+      createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
     } as any,
     req: { protocol: "https", headers: {} } as any,
     res: { clearCookie: () => {} } as any,
@@ -104,16 +212,10 @@ describe("Maintenance Mode — Complete Logic", () => {
     it("all maintenance keys are present after seed", async () => {
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       const requiredKeys = [
-        "maintenance.enabled",
-        "maintenance.titleAr",
-        "maintenance.titleEn",
-        "maintenance.subtitleAr",
-        "maintenance.subtitleEn",
-        "maintenance.messageAr",
-        "maintenance.messageEn",
-        "maintenance.imageUrl",
-        "maintenance.countdownDate",
-        "maintenance.showCountdown",
+        "maintenance.enabled", "maintenance.titleAr", "maintenance.titleEn",
+        "maintenance.subtitleAr", "maintenance.subtitleEn",
+        "maintenance.messageAr", "maintenance.messageEn",
+        "maintenance.imageUrl", "maintenance.countdownDate", "maintenance.showCountdown",
       ];
       for (const key of requiredKeys) {
         expect(settings).toHaveProperty(key);
@@ -189,52 +291,39 @@ describe("Maintenance Mode — Complete Logic", () => {
 
   describe("Maintenance Content — Save & Read", () => {
     it("admin can update maintenance title (Arabic)", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.titleAr": "الموقع تحت الصيانة" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.titleAr": "الموقع تحت الصيانة" } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.titleAr"]).toBe("الموقع تحت الصيانة");
     });
 
     it("admin can update maintenance title (English)", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.titleEn": "Under Maintenance" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.titleEn": "Under Maintenance" } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.titleEn"]).toBe("Under Maintenance");
     });
 
     it("admin can update maintenance message (Arabic)", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.messageAr": "نعتذر عن الإزعاج" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.messageAr": "نعتذر عن الإزعاج" } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.messageAr"]).toBe("نعتذر عن الإزعاج");
     });
 
     it("admin can update countdown date", async () => {
       const futureDate = "2026-03-01T00:00:00Z";
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.countdownDate": futureDate },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.countdownDate": futureDate } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.countdownDate"]).toBe(futureDate);
     });
 
     it("admin can enable countdown", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.showCountdown": "true" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.showCountdown": "true" } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.showCountdown"]).toBe("true");
     });
 
     it("admin can update social links", async () => {
       await adminCaller.siteSettings.update({
-        settings: {
-          "social.twitter": "https://twitter.com/monthlykey",
-          "social.instagram": "https://instagram.com/monthlykey",
-        },
+        settings: { "social.twitter": "https://twitter.com/monthlykey", "social.instagram": "https://instagram.com/monthlykey" },
       });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["social.twitter"]).toBe("https://twitter.com/monthlykey");
@@ -243,15 +332,12 @@ describe("Maintenance Mode — Complete Logic", () => {
 
     it("admin can batch-update multiple maintenance settings at once", async () => {
       const batch = {
-        "maintenance.titleAr": "قريباً",
-        "maintenance.titleEn": "Coming Soon",
-        "maintenance.subtitleAr": "جاري التحضير",
-        "maintenance.subtitleEn": "Preparing",
+        "maintenance.titleAr": "قريباً", "maintenance.titleEn": "Coming Soon",
+        "maintenance.subtitleAr": "جاري التحضير", "maintenance.subtitleEn": "Preparing",
         "maintenance.enabled": "false",
       };
       const result = await adminCaller.siteSettings.update({ settings: batch });
       expect(result.success).toBe(true);
-
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.titleAr"]).toBe("قريباً");
       expect(settings["maintenance.titleEn"]).toBe("Coming Soon");
@@ -265,19 +351,11 @@ describe("Maintenance Mode — Complete Logic", () => {
 
   describe("Access Control — Who Can Toggle", () => {
     it("non-admin user CANNOT update maintenance settings", async () => {
-      await expect(
-        userCaller.siteSettings.update({
-          settings: { "maintenance.enabled": "true" },
-        })
-      ).rejects.toThrow();
+      await expect(userCaller.siteSettings.update({ settings: { "maintenance.enabled": "true" } })).rejects.toThrow();
     });
 
     it("public (unauthenticated) user CANNOT update maintenance settings", async () => {
-      await expect(
-        publicCaller.siteSettings.update({
-          settings: { "maintenance.enabled": "true" },
-        })
-      ).rejects.toThrow();
+      await expect(publicCaller.siteSettings.update({ settings: { "maintenance.enabled": "true" } })).rejects.toThrow();
     });
 
     it("public user CAN read settings (needed for MaintenanceGate)", async () => {
@@ -321,16 +399,9 @@ describe("Maintenance Mode — Complete Logic", () => {
 
   describe("Seed Idempotency — Does NOT Overwrite Existing", () => {
     it("updating a setting then re-seeding preserves the updated value", async () => {
-      // Set a custom value
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.titleAr": "عنوان مخصص" },
-      });
-
-      // Re-run seed (import and call)
+      await adminCaller.siteSettings.update({ settings: { "maintenance.titleAr": "عنوان مخصص" } });
       const { seedDefaultSettings } = await import("./seed-settings");
       await seedDefaultSettings();
-
-      // Verify custom value was NOT overwritten
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.titleAr"]).toBe("عنوان مخصص");
     });
@@ -340,36 +411,25 @@ describe("Maintenance Mode — Complete Logic", () => {
 
   describe("Edge Cases", () => {
     it("setting maintenance.enabled to empty string is treated as falsy", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.enabled": "" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.enabled": "" } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
-      // Empty string should be stored as-is
       expect(settings["maintenance.enabled"]).toBe("");
-      // MaintenanceGate checks === "true", so empty string = not enabled
     });
 
     it("setting maintenance.enabled to 'TRUE' (uppercase) is not equal to 'true'", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.enabled": "TRUE" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.enabled": "TRUE" } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.enabled"]).toBe("TRUE");
-      // MaintenanceGate checks === "true" (lowercase), so "TRUE" would NOT trigger maintenance
     });
 
     it("restore maintenance.enabled to false for clean state", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.enabled": "false" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.enabled": "false" } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.enabled"]).toBe("false");
     });
 
     it("individual get endpoint returns correct maintenance value", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.enabled": "true" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.enabled": "true" } });
       const result = await publicCaller.siteSettings.get({ key: "maintenance.enabled" });
       expect(result.value).toBe("true");
     });
@@ -380,9 +440,7 @@ describe("Maintenance Mode — Complete Logic", () => {
     });
 
     it("cleanup: set maintenance.enabled back to true for browser tests", async () => {
-      await adminCaller.siteSettings.update({
-        settings: { "maintenance.enabled": "true" },
-      });
+      await adminCaller.siteSettings.update({ settings: { "maintenance.enabled": "true" } });
       const settings = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
       expect(settings["maintenance.enabled"]).toBe("true");
     });

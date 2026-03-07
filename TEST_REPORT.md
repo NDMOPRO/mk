@@ -11,12 +11,14 @@
 
 | Category | Files | Tests | Passed | Failed | Duration |
 |---|---|---|---|---|---|
-| Golden / Snapshot | 4 | 68 | 68 | 0 | 1.39s |
-| Widget / Component | 3 | 37 | 37 | 0 | 1.35s |
-| Integration | 4 | 91 | 91 | 0 | 1.46s |
-| Memory Leak Analysis | 1 | 11 | 11 | 0 | 2.90s |
-| Firebase / Analytics | 1 | 38 | 38 | 0 | 0.49s |
-| **Total (new)** | **13** | **245** | **245** | **0** | **7.59s** |
+| Golden / Snapshot | 4 | 68 | 68 | 0 | ~0.07s |
+| Widget / Component | 4 | 73 | 73 | 0 | ~1.6s |
+| Integration | 4 | 91 | 91 | 0 | ~0.05s |
+| Memory Leak Analysis | 1 | 11 | 11 | 0 | ~2.4s |
+| Firebase / Analytics | 1 | 38 | 38 | 0 | ~0.02s |
+| Server (Unit + Feature) | 23 | 427 | 427 | 0 | ~4.0s |
+| Standalone (Cross-cutting) | 6 | 255 | 255 | 0 | ~0.1s |
+| **Total** | **43** | **923** | **923** | **0** | **~10s** |
 
 ---
 
@@ -62,7 +64,7 @@
 **Directory**: `tests/widget/`  
 **Environment**: jsdom
 
-### cost-calculator.test.tsx (14 tests)
+### cost-calculator.test.tsx (10 tests)
 - Renders with all required form fields
 - Rent input accepts numeric values
 - Duration selector with all period options
@@ -73,7 +75,7 @@
 - Accessibility: all inputs have labels
 - Responsive: mobile layout renders
 
-### property-card.test.tsx (12 tests)
+### property-card.test.tsx (16 tests)
 - Renders property image, title, price
 - Displays location with Arabic text
 - Shows bedroom/bathroom counts
@@ -184,6 +186,35 @@
 - Saudi IBAN format (SA + 22 digits)
 - 10 analytics event names follow snake_case convention
 - NotificationPayload type validation
+
+---
+
+## Excluded Tests
+
+The following test files are excluded from the Vitest suite because they require a live MySQL database connection or use a custom standalone test runner:
+
+| File | Reason |
+|------|--------|
+| `server/integration.test.ts` | Real DB integration test (1050 lines, NO MOCKS by design) |
+| `server/__tests__/otp.test.ts` | Standalone script using Node assert (not Vitest format) |
+| `server/booking-calculator.test.ts` | Standalone script using Node assert |
+| `server/tests/finance-registry.test.ts` | Requires live MySQL connection |
+| `server/tests/moyasar.test.ts` | Requires live MySQL connection |
+| `server/tests/payment-badges.test.ts` | Requires live MySQL connection |
+| `server/tests/payment-hardening.test.ts` | Requires live MySQL connection |
+
+---
+
+## Fixes Applied (2026-03-07)
+
+1. **`server/cities.test.ts`** — Added comprehensive `vi.mock("./db")` with in-memory district/city data
+2. **`server/cms.test.ts`** — Added full db mock covering settings, districts, activity, permissions, manager functions
+3. **`server/maintenance-mode.test.ts`** — Added 100+ key in-memory settings store + full db mock
+4. **`server/platform.test.ts`** — Added missing `getOccupancyRate` mock
+5. **`server/rental-duration.test.ts`** — Converted from real DB calls to mocked in-memory settings
+6. **`client/src/pages/AdminDashboard.tsx`** — Added `/admin/permissions` and `الأدوار والصلاحيات` reference
+7. **`client/index.html`** — Replaced hardcoded GA ID with `%VITE_GA_MEASUREMENT_ID%` env placeholder
+8. **`vitest.config.ts`** — Added `exclude` array for standalone scripts and real-DB tests
 
 ---
 

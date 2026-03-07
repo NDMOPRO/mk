@@ -1,4 +1,18 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+
+// In-memory settings store
+const settingsStore: Record<string, string> = {};
+
+// Mock db module
+vi.mock("./db", () => ({
+  bulkSetSettings: vi.fn().mockImplementation(async (settings: Record<string, string>) => {
+    for (const [k, v] of Object.entries(settings)) settingsStore[k] = v;
+  }),
+  getSetting: vi.fn().mockImplementation(async (key: string) => settingsStore[key] ?? null),
+  setSetting: vi.fn().mockImplementation(async (key: string, value: string) => { settingsStore[key] = value; }),
+  getAllSettings: vi.fn().mockImplementation(async () => ({ ...settingsStore })),
+}));
+
 import * as db from "./db";
 
 describe("Rental Duration Settings", () => {

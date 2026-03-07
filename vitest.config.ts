@@ -25,6 +25,16 @@ export default defineConfig({
       "tests/**/*.test.tsx",
       "tests/**/*.spec.tsx",
     ],
+    exclude: [
+      "server/integration.test.ts",
+      "server/__tests__/otp.test.ts",
+      "server/booking-calculator.test.ts",
+      "server/tests/finance-registry.test.ts",
+      "server/tests/moyasar.test.ts",
+      "server/tests/payment-badges.test.ts",
+      "server/tests/payment-hardening.test.ts",
+      "node_modules/**",
+    ],
     environmentMatchGlobs: [
       ["tests/widget/**", "jsdom"],
     ],

@@ -53,6 +53,7 @@ vi.mock("./db", () => ({
   getPropertyCount: vi.fn().mockResolvedValue(5),
   getBookingCount: vi.fn().mockResolvedValue(3),
   getTotalRevenue: vi.fn().mockResolvedValue("50000"),
+  getOccupancyRate: vi.fn().mockResolvedValue(75),
   getAllUsers: vi.fn().mockResolvedValue([]),
   getAllProperties: vi.fn().mockResolvedValue([]),
   getAllBookings: vi.fn().mockResolvedValue([]),
@@ -298,7 +299,9 @@ describe("Admin Router", () => {
     const { ctx } = createUserContext("admin");
     const caller = appRouter.createCaller(ctx);
     const result = await caller.admin.properties({ limit: 10 });
-    expect(Array.isArray(result)).toBe(true);
+    expect(result).toBeDefined();
+    expect(result).toHaveProperty("items");
+    expect(Array.isArray(result.items)).toBe(true);
   });
 
   it("lists bookings for admin", async () => {

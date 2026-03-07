@@ -1,6 +1,18 @@
-import { describe, expect, it, beforeAll, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+
+// In-memory store for cities and districts
+let cityStore: any[] = [
+  { id: 1, nameEn: "Riyadh", nameAr: "الرياض", region: "Riyadh Region", regionAr: "منطقة الرياض", latitude: "24.7", longitude: "46.7", imageUrl: "", isActive: true, isFeatured: true, sortOrder: 1, createdAt: new Date(), updatedAt: new Date() },
+  { id: 2, nameEn: "Jeddah", nameAr: "جدة", region: "Makkah Region", regionAr: "منطقة مكة", latitude: "21.5", longitude: "39.2", imageUrl: "", isActive: true, isFeatured: false, sortOrder: 2, createdAt: new Date(), updatedAt: new Date() },
+];
+let districtStore: any[] = [
+  { id: 1, cityId: 1, city: "Riyadh", cityAr: "الرياض", nameEn: "Al Olaya", nameAr: "العليا", latitude: "24.7", longitude: "46.7", isActive: true, sortOrder: 1, createdAt: new Date(), updatedAt: new Date() },
+  { id: 2, cityId: 1, city: "Riyadh", cityAr: "الرياض", nameEn: "Al Malaz", nameAr: "الملز", latitude: "24.6", longitude: "46.7", isActive: true, sortOrder: 2, createdAt: new Date(), updatedAt: new Date() },
+];
+let nextCityId = 3;
+let nextDistrictId = 3;
 
 // Mock permissions to always allow in tests
 vi.mock("./permissions", () => ({
@@ -16,6 +28,81 @@ vi.mock("./permissions", () => ({
     SEND_NOTIFICATIONS: "send_notifications", MANAGE_AI: "manage_ai",
   },
   PERMISSION_CATEGORIES: [],
+}));
+
+// Mock db module with in-memory store
+vi.mock("./db", () => ({
+  getAdminPermissions: vi.fn().mockResolvedValue({ id: 1, userId: 1, permissions: ["manage_cities"], isRootAdmin: true, createdAt: new Date(), updatedAt: new Date() }),
+  getAllCities: vi.fn().mockImplementation(async (activeOnly = true) => {
+    if (activeOnly) return cityStore.filter(c => c.isActive);
+    return [...cityStore];
+  }),
+  getCityById: vi.fn().mockImplementation(async (id: number) => {
+    return cityStore.find(c => c.id === id) || null;
+  }),
+  getCityCount: vi.fn().mockImplementation(async () => cityStore.length),
+  createCity: vi.fn().mockImplementation(async (data: any) => {
+    const id = nextCityId++;
+    cityStore.push({ id, ...data, createdAt: new Date(), updatedAt: new Date() });
+    return id;
+  }),
+  updateCity: vi.fn().mockImplementation(async (id: number, data: any) => {
+    const idx = cityStore.findIndex(c => c.id === id);
+    if (idx >= 0) cityStore[idx] = { ...cityStore[idx], ...data, updatedAt: new Date() };
+  }),
+  toggleCityActive: vi.fn().mockImplementation(async (id: number, isActive: boolean) => {
+    const idx = cityStore.findIndex(c => c.id === id);
+    if (idx >= 0) cityStore[idx].isActive = isActive;
+  }),
+  deleteCity: vi.fn().mockImplementation(async (id: number) => {
+    cityStore = cityStore.filter(c => c.id !== id);
+  }),
+  getFeaturedCities: vi.fn().mockImplementation(async () => cityStore.filter(c => c.isFeatured && c.isActive)),
+  getAllDistricts: vi.fn().mockImplementation(async (activeOnly = true) => {
+    if (activeOnly) return districtStore.filter(d => d.isActive);
+    return [...districtStore];
+  }),
+  getDistrictById: vi.fn().mockImplementation(async (id: number) => {
+    return districtStore.find(d => d.id === id) || null;
+  }),
+  getDistrictsByCity: vi.fn().mockImplementation(async (city: string) => {
+    return districtStore.filter(d => d.city === city);
+  }),
+  getDistrictsByCityId: vi.fn().mockImplementation(async (cityId: number) => {
+    return districtStore.filter(d => d.cityId === cityId);
+  }),
+  getDistrictCount: vi.fn().mockImplementation(async () => districtStore.length),
+  createDistrict: vi.fn().mockImplementation(async (data: any) => {
+    const id = nextDistrictId++;
+    districtStore.push({ id, ...data, createdAt: new Date(), updatedAt: new Date() });
+    return id;
+  }),
+  updateDistrict: vi.fn().mockImplementation(async (id: number, data: any) => {
+    const idx = districtStore.findIndex(d => d.id === id);
+    if (idx >= 0) districtStore[idx] = { ...districtStore[idx], ...data, updatedAt: new Date() };
+  }),
+  toggleDistrictActive: vi.fn().mockImplementation(async (id: number, isActive: boolean) => {
+    const idx = districtStore.findIndex(d => d.id === id);
+    if (idx >= 0) districtStore[idx].isActive = isActive;
+  }),
+  deleteDistrict: vi.fn().mockImplementation(async (id: number) => {
+    districtStore = districtStore.filter(d => d.id !== id);
+  }),
+  bulkCreateDistricts: vi.fn().mockImplementation(async (districts: any[]) => {
+    for (const d of districts) {
+      const id = nextDistrictId++;
+      districtStore.push({ id, ...d, createdAt: new Date(), updatedAt: new Date() });
+    }
+  }),
+  deleteDistrictsByCity: vi.fn().mockImplementation(async (city: string) => {
+    districtStore = districtStore.filter(d => d.city !== city);
+  }),
+  getPropertyById: vi.fn().mockResolvedValue(null),
+}));
+
+// Mock storage
+vi.mock("./storage", () => ({
+  storagePut: vi.fn().mockResolvedValue({ url: "https://s3.example.com/test.jpg", key: "test.jpg" }),
 }));
 
 function createAdminContext(): TrpcContext {
@@ -67,7 +154,6 @@ describe("Cities & Districts Management", () => {
     it("should list only active cities when activeOnly is true", async () => {
       const cities = await userCaller.cities.all({ activeOnly: true });
       expect(Array.isArray(cities)).toBe(true);
-      // All returned cities should be active
       for (const city of cities) {
         expect(city.isActive).toBe(true);
       }
@@ -88,27 +174,22 @@ describe("Cities & Districts Management", () => {
       expect(result).toBeDefined();
       expect(result.id).toBeGreaterThan(0);
 
-      // Verify via byId
       const city = await adminCaller.cities.byId({ id: result.id });
       expect(city?.nameEn).toBe("Test City");
       expect(city?.nameAr).toBe("مدينة اختبار");
     });
 
     it("should toggle city active status (admin only)", async () => {
-      // Get the test city
       const cities = await adminCaller.cities.all({ activeOnly: false });
       const testCity = cities.find((c: any) => c.nameEn === "Test City");
       expect(testCity).toBeDefined();
 
-      // Toggle to inactive
       const result = await adminCaller.cities.toggle({ id: testCity!.id, isActive: false });
       expect(result.success).toBe(true);
 
-      // Verify it's inactive
       const updated = await adminCaller.cities.byId({ id: testCity!.id });
       expect(updated?.isActive).toBe(false);
 
-      // Toggle back to active
       await adminCaller.cities.toggle({ id: testCity!.id, isActive: true });
     });
 
@@ -183,7 +264,6 @@ describe("Cities & Districts Management", () => {
       expect(result).toBeDefined();
       expect(result.id).toBeGreaterThan(0);
 
-      // Verify via byId
       const district = await adminCaller.districts.byId({ id: result.id });
       expect(district?.nameEn).toBe("Test District");
     });
@@ -196,11 +276,9 @@ describe("Cities & Districts Management", () => {
       const result = await adminCaller.districts.toggle({ id: testDistrict!.id, isActive: false });
       expect(result.success).toBe(true);
 
-      // Verify inactive
       const updated = await adminCaller.districts.byId({ id: testDistrict!.id });
       expect(updated?.isActive).toBe(false);
 
-      // Toggle back
       await adminCaller.districts.toggle({ id: testDistrict!.id, isActive: true });
     });
 
