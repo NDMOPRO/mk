@@ -30,6 +30,18 @@ import { toast } from "sonner";
 import SEOHead from "@/components/SEOHead";
 import IdentityVerification from "@/components/IdentityVerification";
 
+/* ─── UI Fix [1] — Rejection reason Arabic mapping ─── */
+const rejectionReasonMap: Record<string, string> = {
+  booked: 'الوحدة محجوزة مسبقاً',
+  cancelled: 'تم إلغاء الطلب',
+  incomplete: 'الطلب غير مكتمل',
+  unqualified: 'المستأجر غير مؤهل',
+  price_negotiation: 'خلاف على السعر',
+  other: 'سبب آخر',
+};
+const getArabicRejectionReason = (reason: string) =>
+  rejectionReasonMap[reason] ?? reason;
+
 /* ─── Bilingual status badge helper ─── */
 const statusBadge = (status: string, lang: string) => {
   const map: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string; labelAr: string }> = {
@@ -180,7 +192,8 @@ export default function TenantDashboard() {
             ) : bookings.data && bookings.data.length > 0 ? (
               <div className="space-y-3">
                 {bookings.data.map((b) => (
-                  <Card key={b.id} className="card-hover transition-shadow">
+                  <Card key={b.id} className={`card-hover transition-shadow ${ // UI Fix [5] — Visually collapse rejected bookings
+                    b.status === 'rejected' ? 'opacity-60 border-red-900/40 bg-red-950/10' : ''}`}>
                     <CardContent className="p-4">
                       {/* Booking header row */}
                       <div className="flex items-center justify-between cursor-pointer booking-header-row" onClick={() => setLocation(`/property/${b.propertyId}`)}>
@@ -197,8 +210,13 @@ export default function TenantDashboard() {
                           </div>
                         </div>
                         <div className={`shrink-0 booking-amount ${isAr ? "text-start ms-4" : "text-end ms-4"}`}>
-                          <div className="font-bold text-primary"><span className="currency-amount">{Number(b.totalAmount).toLocaleString()}</span> {t("payment.sar")}</div>
-                          <div className="text-xs text-muted-foreground">{t("common.total")}</div>
+                          {/* UI Fix [2] — Hide invoice amount for rejected bookings */}
+                          {b.status !== 'rejected' ? (
+                            <><div className="font-bold text-primary"><span className="currency-amount">{Number(b.totalAmount).toLocaleString()}</span> {t("payment.sar")}</div>
+                            <div className="text-xs text-muted-foreground">{t("common.total")}</div></>
+                          ) : (
+                            <div className="text-zinc-500 text-sm line-through"><span className="currency-amount">{Number(b.totalAmount).toLocaleString()}</span> {t("payment.sar")}</div>
+                          )}
                         </div>
                       </div>
 
@@ -208,6 +226,7 @@ export default function TenantDashboard() {
                           <Clock className="h-3 w-3 shrink-0" />
                           <span>{isAr ? "الجدول الزمني" : "Timeline"}</span>
                         </div>
+                        {/* UI Fix [3] — Stop timeline at rejection point */}
                         <div className={`flex items-center gap-1 flex-wrap ${isAr ? "flex-row-reverse" : ""}`}>
                           <span className={`text-xs px-2 py-0.5 rounded-full ${b.status === "pending" || b.status === "approved" || b.status === "active" || b.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
                             {isAr ? "تم الطلب" : "Requested"}
@@ -216,13 +235,16 @@ export default function TenantDashboard() {
                           <span className={`text-xs px-2 py-0.5 rounded-full ${b.status === "approved" || b.status === "active" || b.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : b.status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
                             {b.status === "rejected" ? (isAr ? "مرفوض" : "Rejected") : (isAr ? "موافق عليه" : "Approved")}
                           </span>
-                          <TimelineArrow isRtl={isAr} />
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${b.status === "active" || b.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
-                            {isAr ? "تم الدفع" : "Paid"}
-                          </span>
-                          <TimelineArrow isRtl={isAr} />
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${b.status === "active" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" : b.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
-                            {b.status === "completed" ? (isAr ? "مكتمل" : "Completed") : (isAr ? "نشط" : "Active")}
+                          {/* UI Fix [3] — Grey out steps after rejection */}
+                          <span className={b.status === 'rejected' ? 'opacity-30 pointer-events-none contents' : 'contents'}>
+                            <TimelineArrow isRtl={isAr} />
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${b.status === "active" || b.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
+                              {isAr ? "تم الدفع" : "Paid"}
+                            </span>
+                            <TimelineArrow isRtl={isAr} />
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${b.status === "active" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" : b.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
+                              {b.status === "completed" ? (isAr ? "مكتمل" : "Completed") : (isAr ? "نشط" : "Active")}
+                            </span>
                           </span>
                         </div>
                       </div>
@@ -238,13 +260,16 @@ export default function TenantDashboard() {
                             <div key={le.id} className="flex items-center justify-between text-xs p-2 rounded border bg-muted/30 mb-1 invoice-row">
                               <div className="flex items-center gap-2 badge-row">
                                 <span className="font-mono invoice-code">{le.invoiceNumber}</span>
+                                {/* UI Fix [6] — Fix invoice badge for rejected bookings */}
                                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                                  b.status === 'rejected' ? 'bg-red-900/20 text-red-400 border-red-800' :
                                   le.status === 'PAID' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' :
                                   le.status === 'VOID' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800' :
                                   le.status === 'DUE' ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800' :
                                   'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
                                 }`}>
-                                  {le.status === 'PAID' ? (isAr ? 'مدفوع' : 'Paid') :
+                                  {b.status === 'rejected' ? (isAr ? 'مرفوض' : 'Rejected') :
+                                   le.status === 'PAID' ? (isAr ? 'مدفوع' : 'Paid') :
                                    le.status === 'VOID' ? (isAr ? 'ملغي' : 'Void') :
                                    le.status === 'DUE' ? (isAr ? 'مستحق' : 'Due') : le.status}
                                 </span>
@@ -252,6 +277,20 @@ export default function TenantDashboard() {
                               <span className="font-medium"><span className="currency-amount">{Number(le.amount).toLocaleString()}</span> {isAr ? "ر.س" : le.currency}</span>
                             </div>
                           ))}
+                        </div>
+                      )}
+
+                      {/* UI Fix [4] — Pay Now CTA for pending_payment bookings */}
+                      {b.status === 'pending_payment' && (
+                        <div className="mt-3 pt-3 border-t">
+                          <a
+                            href={`/pay/${b.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors"
+                          >
+                            <CreditCard className="h-4 w-4 me-2" />
+                            {isAr ? 'ادفع الآن' : 'Pay Now'}
+                          </a>
                         </div>
                       )}
 
@@ -302,7 +341,7 @@ export default function TenantDashboard() {
                             <span className="font-medium text-red-700 dark:text-red-400">
                               {isAr ? "سبب الرفض: " : "Rejection reason: "}
                             </span>
-                            <span className="text-red-600 dark:text-red-300">{(b as any).rejectionReason}</span>
+                            <span className="text-red-600 dark:text-red-300">{isAr ? getArabicRejectionReason((b as any).rejectionReason) : (b as any).rejectionReason}</span> {/* UI Fix [1] */}
                           </div>
                         </div>
                       )}
