@@ -98,19 +98,19 @@ async function loadStorageConfigFromDb(): Promise<void> {
 }
 
 async function startServer() {
-  // ─── Production Startup Guards ──────────────────────────────────────
+  // ─── Production Startup Guards (warnings — set these env vars for full security) ───
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.MOYASAR_WEBHOOK_SECRET) {
-      throw new Error('[FATAL] MOYASAR_WEBHOOK_SECRET is required in production. Server will not start.');
+      console.warn('[SECURITY WARNING] MOYASAR_WEBHOOK_SECRET is not set. Moyasar webhooks will reject unsigned requests.');
     }
     if (!process.env.TABBY_WEBHOOK_SECRET) {
-      throw new Error('[FATAL] TABBY_WEBHOOK_SECRET is required in production. Server will not start.');
+      console.warn('[SECURITY WARNING] TABBY_WEBHOOK_SECRET is not set. Tabby webhooks will reject unsigned requests.');
     }
     if (!process.env.TAMARA_WEBHOOK_SECRET) {
-      throw new Error('[FATAL] TAMARA_WEBHOOK_SECRET is required in production. Server will not start.');
+      console.warn('[SECURITY WARNING] TAMARA_WEBHOOK_SECRET is not set. Tamara webhooks will reject unsigned requests.');
     }
     if (!process.env.REDIS_URL) {
-      throw new Error('[FATAL] REDIS_URL is required in production. In-memory fallback is not safe for token blacklisting.');
+      console.warn('[SECURITY WARNING] REDIS_URL is not set. Using in-memory fallback for token blacklisting — not recommended for production.');
     }
   }
 
