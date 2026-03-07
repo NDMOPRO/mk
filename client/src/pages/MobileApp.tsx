@@ -16,6 +16,7 @@ import {
   CreditCard, Building2, ChevronLeft, Loader2, Eye, EyeOff, Mail, Lock,
   UserPlus, LogIn, RefreshCw, Phone, MapPinned, Navigation,
   Clock, CheckCircle2, XCircle, BellRing, BellOff, Settings,
+  SlidersHorizontal, MessageSquare, Send, Trash2, Info,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -33,6 +34,10 @@ import {
   sendLocalNotification, notificationTemplates,
   type NotificationPrefs,
 } from "@/lib/notifications";
+import {
+  fetchReviews, submitReview, getAverageRating, generateDemoReviews, getDemoAverageRating,
+  type Review,
+} from "@/lib/reviews";
 
 // ─── Hero Image (generated) ───
 const HERO_IMAGE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663340926600/Qa7Q2PtJqyYVmLJFM69a8Y/hero-riyadh-mrK3PJVdGeLBcb9uR3WKW9.webp";
@@ -59,7 +64,7 @@ function getPropertyImage(property: ApiProperty, index = 0): string {
 
 // ─── Tab Types ───
 type TabId = "home" | "search" | "favorites" | "bookings" | "profile";
-type ScreenId = "tabs" | "property-detail" | "booking-flow" | "login" | "notifications-settings";
+type ScreenId = "tabs" | "property-detail" | "booking-flow" | "login" | "notifications-settings" | "twilio-setup";
 
 // ─── Booking Status Types ───
 interface UserBooking {
@@ -152,6 +157,11 @@ export default function MobileApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [showFilter, setShowFilter] = useState(false);
+  const [filterMinPrice, setFilterMinPrice] = useState<number | null>(null);
+  const [filterMaxPrice, setFilterMaxPrice] = useState<number | null>(null);
+  const [filterBedrooms, setFilterBedrooms] = useState<number | null>(null);
+  const [filterFurnished, setFilterFurnished] = useState<string | null>(null);
+  const [filterPropertyType, setFilterPropertyType] = useState<string | null>(null);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -188,12 +198,38 @@ export default function MobileApp() {
     return () => { cancelled = true; };
   }, []);
 
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filterMinPrice !== null) count++;
+    if (filterMaxPrice !== null) count++;
+    if (filterBedrooms !== null) count++;
+    if (filterFurnished !== null) count++;
+    if (filterPropertyType !== null) count++;
+    if (selectedCity) count++;
+    return count;
+  }, [filterMinPrice, filterMaxPrice, filterBedrooms, filterFurnished, filterPropertyType, selectedCity]);
+
+  const clearAllFilters = useCallback(() => {
+    setFilterMinPrice(null);
+    setFilterMaxPrice(null);
+    setFilterBedrooms(null);
+    setFilterFurnished(null);
+    setFilterPropertyType(null);
+    setSelectedCity(null);
+  }, []);
+
   // Search properties when filters change
   useEffect(() => {
     let cancelled = false;
     const params: SearchParams = { limit: 20 };
     if (searchQuery.trim()) params.query = searchQuery.trim();
     if (selectedCity) params.city = selectedCity;
+    if (filterMinPrice !== null) params.minPrice = filterMinPrice;
+    if (filterMaxPrice !== null) params.maxPrice = filterMaxPrice;
+    if (filterBedrooms !== null) params.bedrooms = filterBedrooms;
+    if (filterFurnished !== null) params.furnishedLevel = filterFurnished;
+    if (filterPropertyType !== null) params.propertyType = filterPropertyType;
 
     setLoadingSearch(true);
     searchProperties(params)
@@ -204,7 +240,7 @@ export default function MobileApp() {
         if (!cancelled) { setLoadingSearch(false); console.error("Search failed:", err); }
       });
     return () => { cancelled = true; };
-  }, [searchQuery, selectedCity]);
+  }, [searchQuery, selectedCity, filterMinPrice, filterMaxPrice, filterBedrooms, filterFurnished, filterPropertyType]);
 
   const openProperty = useCallback(async (property: ApiProperty) => {
     setSelectedPropertyId(property.id);
@@ -230,7 +266,7 @@ export default function MobileApp() {
 
   const goBack = useCallback(() => {
     if (screen === "booking-flow" && bookingStep > 0) { setBookingStep((s) => s - 1); return; }
-    if (screen === "notifications-settings") { setScreen("tabs"); return; }
+    if (screen === "notifications-settings" || screen === "twilio-setup") { setScreen("tabs"); return; }
     setScreen("tabs");
     setSelectedPropertyId(null);
     setSelectedPropertyData(null);
@@ -341,6 +377,12 @@ export default function MobileApp() {
                       selectedCity={selectedCity} onCityChange={setSelectedCity}
                       showFilter={showFilter} onToggleFilter={() => setShowFilter(!showFilter)}
                       favorites={favorites} onToggleFavorite={toggleFavorite}
+                      filterMinPrice={filterMinPrice} onMinPriceChange={setFilterMinPrice}
+                      filterMaxPrice={filterMaxPrice} onMaxPriceChange={setFilterMaxPrice}
+                      filterBedrooms={filterBedrooms} onBedroomsChange={setFilterBedrooms}
+                      filterFurnished={filterFurnished} onFurnishedChange={setFilterFurnished}
+                      filterPropertyType={filterPropertyType} onPropertyTypeChange={setFilterPropertyType}
+                      activeFilterCount={activeFilterCount} onClearFilters={clearAllFilters}
                     />
                   )}
                   {activeTab === "favorites" && (
@@ -357,6 +399,7 @@ export default function MobileApp() {
                       isLoggedIn={isLoggedIn} onLogin={() => setScreen("login")} onLogout={handleLogout}
                       userName={userDisplayName} userEmail={userEmail} userInitials={userInitials}
                       onOpenNotifications={() => setScreen("notifications-settings")}
+                      onOpenTwilioSetup={() => setScreen("twilio-setup")}
                     />
                   )}
                 </div>
@@ -391,6 +434,7 @@ export default function MobileApp() {
                 <PropertyDetail
                   property={selectedPropertyData} loading={loadingDetail} onBack={goBack} onBook={startBooking}
                   isFavorite={favorites.has(selectedPropertyData.id)} onToggleFavorite={() => toggleFavorite(selectedPropertyData.id)}
+                  isLoggedIn={isLoggedIn} userId={user?.id} userName={user?.user_metadata?.full_name || user?.email || "مستخدم"}
                 />
               </motion.div>
             )}
@@ -415,6 +459,12 @@ export default function MobileApp() {
             {screen === "notifications-settings" && (
               <motion.div key="notifications" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
                 <NotificationsSettings onBack={goBack} />
+              </motion.div>
+            )}
+
+            {screen === "twilio-setup" && (
+              <motion.div key="twilio" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="h-full">
+                <TwilioSetupGuide onBack={goBack} />
               </motion.div>
             )}
 
@@ -639,21 +689,44 @@ function FavoritesTab({
   );
 }
 
-// ─── Search Tab ───
+// ─── Price Range Presets ───
+const PRICE_PRESETS = [
+  { label: "الكل", min: null, max: null },
+  { label: "أقل من ٣٠٠٠", min: null, max: 3000 },
+  { label: "٣٠٠٠ - ٥٠٠٠", min: 3000, max: 5000 },
+  { label: "٥٠٠٠ - ٨٠٠٠", min: 5000, max: 8000 },
+  { label: "٨٠٠٠ - ١٢٠٠٠", min: 8000, max: 12000 },
+  { label: "أكثر من ١٢٠٠٠", min: 12000, max: null },
+];
+
+// ─── Search Tab with Advanced Filters ───
 function SearchTab({
   properties, total, loading, onOpenProperty, searchQuery, onSearchChange,
   selectedCity, onCityChange, showFilter, onToggleFilter, favorites, onToggleFavorite,
+  filterMinPrice, onMinPriceChange, filterMaxPrice, onMaxPriceChange,
+  filterBedrooms, onBedroomsChange, filterFurnished, onFurnishedChange,
+  filterPropertyType, onPropertyTypeChange, activeFilterCount, onClearFilters,
 }: {
   properties: ApiProperty[]; total: number; loading: boolean;
   onOpenProperty: (p: ApiProperty) => void; searchQuery: string; onSearchChange: (q: string) => void;
   selectedCity: string | null; onCityChange: (city: string | null) => void;
   showFilter: boolean; onToggleFilter: () => void; favorites: Set<number>; onToggleFavorite: (id: number) => void;
+  filterMinPrice: number | null; onMinPriceChange: (v: number | null) => void;
+  filterMaxPrice: number | null; onMaxPriceChange: (v: number | null) => void;
+  filterBedrooms: number | null; onBedroomsChange: (v: number | null) => void;
+  filterFurnished: string | null; onFurnishedChange: (v: string | null) => void;
+  filterPropertyType: string | null; onPropertyTypeChange: (v: string | null) => void;
+  activeFilterCount: number; onClearFilters: () => void;
 }) {
   const [localQuery, setLocalQuery] = useState(searchQuery);
   useEffect(() => {
     const t = setTimeout(() => onSearchChange(localQuery), 400);
     return () => clearTimeout(t);
   }, [localQuery, onSearchChange]);
+
+  const activePricePreset = PRICE_PRESETS.findIndex(
+    (p) => p.min === filterMinPrice && p.max === filterMaxPrice
+  );
 
   return (
     <div className="pt-12">
@@ -665,8 +738,13 @@ function SearchTab({
             <input type="text" placeholder="ابحث بالحي أو المدينة..." value={localQuery} onChange={(e) => setLocalQuery(e.target.value)} className="bg-transparent text-sm w-full outline-none placeholder:text-muted-foreground" dir="rtl" />
             {localQuery && <button onClick={() => { setLocalQuery(""); onSearchChange(""); }}><X className="w-4 h-4 text-muted-foreground" /></button>}
           </div>
-          <button onClick={onToggleFilter} className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${showFilter ? "bg-primary text-white" : "glass"}`}>
-            <Filter className="w-4 h-4" />
+          <button onClick={onToggleFilter} className={`relative w-11 h-11 rounded-xl flex items-center justify-center transition-all ${showFilter ? "bg-primary text-white" : "glass"}`}>
+            <SlidersHorizontal className="w-4 h-4" />
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center" style={{ background: "linear-gradient(135deg, #EF4444, #DC2626)" }}>
+                {activeFilterCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -674,13 +752,77 @@ function SearchTab({
       <AnimatePresence>
         {showFilter && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="px-4 pb-3">
-              <p className="text-xs text-muted-foreground mb-2">المدينة</p>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={() => onCityChange(null)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${!selectedCity ? "bg-primary text-white" : "glass"}`}>الكل</button>
-                {QUICK_CITIES.map((city) => (
-                  <button key={city} onClick={() => onCityChange(city === selectedCity ? null : city)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCity === city ? "bg-primary text-white" : "glass"}`}>{city}</button>
-                ))}
+            <div className="px-4 pb-4 space-y-4">
+              {/* Clear All Filters */}
+              {activeFilterCount > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-primary font-medium">{activeFilterCount} فلتر نشط</span>
+                  <button onClick={onClearFilters} className="text-xs text-destructive font-medium flex items-center gap-1">
+                    <X className="w-3 h-3" /> مسح الكل
+                  </button>
+                </div>
+              )}
+
+              {/* City Filter */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 font-medium">المدينة</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => onCityChange(null)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${!selectedCity ? "bg-primary text-white" : "glass"}`}>الكل</button>
+                  {QUICK_CITIES.map((city) => (
+                    <button key={city} onClick={() => onCityChange(city === selectedCity ? null : city)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCity === city ? "bg-primary text-white" : "glass"}`}>{city}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Price Range Filter */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 font-medium">نطاق السعر (ر.س / شهرياً)</p>
+                <div className="flex flex-wrap gap-2">
+                  {PRICE_PRESETS.map((preset, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { onMinPriceChange(preset.min); onMaxPriceChange(preset.max); }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${activePricePreset === i ? "bg-primary text-white" : "glass"}`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bedrooms Filter */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 font-medium">عدد غرف النوم</p>
+                <div className="flex gap-2">
+                  <button onClick={() => onBedroomsChange(null)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterBedrooms === null ? "bg-primary text-white" : "glass"}`}>الكل</button>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} onClick={() => onBedroomsChange(filterBedrooms === n ? null : n)} className={`w-9 h-9 rounded-full text-xs font-medium transition-all flex items-center justify-center ${filterBedrooms === n ? "bg-primary text-white" : "glass"}`}>
+                      {n}{n === 5 ? "+" : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Furnishing Level Filter */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 font-medium">التأثيث</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => onFurnishedChange(null)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterFurnished === null ? "bg-primary text-white" : "glass"}`}>الكل</button>
+                  {Object.entries(furnishedLabels).map(([key, label]) => (
+                    <button key={key} onClick={() => onFurnishedChange(filterFurnished === key ? null : key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterFurnished === key ? "bg-primary text-white" : "glass"}`}>{label}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Property Type Filter */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 font-medium">نوع العقار</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => onPropertyTypeChange(null)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterPropertyType === null ? "bg-primary text-white" : "glass"}`}>الكل</button>
+                  {Object.entries(propertyTypeLabels).map(([key, label]) => (
+                    <button key={key} onClick={() => onPropertyTypeChange(filterPropertyType === key ? null : key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterPropertyType === key ? "bg-primary text-white" : "glass"}`}>{label}</button>
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>
@@ -696,6 +838,9 @@ function SearchTab({
             <div className="text-center py-12">
               <Search className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
               <p className="text-muted-foreground text-sm">لا توجد نتائج</p>
+              {activeFilterCount > 0 && (
+                <button onClick={onClearFilters} className="mt-3 text-xs text-primary font-medium">مسح الفلاتر وإعادة البحث</button>
+              )}
             </div>
           ) : (
             properties.map((property, i) => (
@@ -710,12 +855,254 @@ function SearchTab({
   );
 }
 
+// ─── Star Rating Component ───
+function StarRating({ rating, size = 16, interactive = false, onChange }: {
+  rating: number; size?: number; interactive?: boolean; onChange?: (r: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-0.5" dir="ltr">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => interactive && onChange?.(star)}
+          className={`transition-all ${interactive ? "cursor-pointer hover:scale-110" : "cursor-default"}`}
+          disabled={!interactive}
+        >
+          <Star
+            style={{ width: size, height: size }}
+            className={`transition-colors ${
+              star <= rating
+                ? "fill-amber-400 text-amber-400"
+                : star - 0.5 <= rating
+                ? "fill-amber-400/50 text-amber-400"
+                : "text-muted-foreground/30"
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Reviews Section Component ───
+function ReviewsSection({ propertyId, isLoggedIn, userId, userName }: {
+  propertyId: number; isLoggedIn: boolean; userId?: string; userName?: string;
+}) {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [avgRating, setAvgRating] = useState<{ average: number; count: number }>({ average: 0, count: 0 });
+  const [loadingReviews, setLoadingReviews] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [newRating, setNewRating] = useState(0);
+  const [newComment, setNewComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingReviews(true);
+
+    Promise.all([
+      fetchReviews(propertyId),
+      getAverageRating(propertyId),
+    ]).then(([reviewsData, ratingData]) => {
+      if (cancelled) return;
+      // If no real reviews, show demo reviews
+      if (reviewsData.length === 0) {
+        const demoReviews = generateDemoReviews(propertyId);
+        const demoRating = getDemoAverageRating(propertyId);
+        setReviews(demoReviews);
+        setAvgRating(demoRating);
+      } else {
+        setReviews(reviewsData);
+        setAvgRating(ratingData);
+      }
+      setLoadingReviews(false);
+    }).catch(() => {
+      if (cancelled) return;
+      const demoReviews = generateDemoReviews(propertyId);
+      const demoRating = getDemoAverageRating(propertyId);
+      setReviews(demoReviews);
+      setAvgRating(demoRating);
+      setLoadingReviews(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [propertyId]);
+
+  const handleSubmitReview = async () => {
+    if (!userId || !userName) return;
+    if (newRating === 0) { toast.error("يرجى اختيار التقييم"); return; }
+    if (!newComment.trim()) { toast.error("يرجى كتابة تعليق"); return; }
+
+    setSubmitting(true);
+    const success = await submitReview({
+      propertyId,
+      userId,
+      userName,
+      rating: newRating,
+      comment: newComment.trim(),
+    });
+
+    if (success) {
+      toast.success("تم إرسال تقييمك بنجاح");
+      // Add to local list
+      const newReview: Review = {
+        id: `new-${Date.now()}`,
+        propertyId,
+        userId,
+        userName,
+        rating: newRating,
+        comment: newComment.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      setReviews((prev) => [newReview, ...prev]);
+      setAvgRating((prev) => {
+        const newCount = prev.count + 1;
+        const newAvg = (prev.average * prev.count + newRating) / newCount;
+        return { average: Math.round(newAvg * 10) / 10, count: newCount };
+      });
+      setNewRating(0);
+      setNewComment("");
+      setShowForm(false);
+    } else {
+      toast.error("فشل في إرسال التقييم");
+    }
+    setSubmitting(false);
+  };
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
+    if (diffDays === 0) return "اليوم";
+    if (diffDays === 1) return "أمس";
+    if (diffDays < 7) return `منذ ${diffDays} أيام`;
+    if (diffDays < 30) return `منذ ${Math.floor(diffDays / 7)} أسابيع`;
+    return `منذ ${Math.floor(diffDays / 30)} أشهر`;
+  };
+
+  return (
+    <div className="px-4 mt-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-bold flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-primary" />
+          التقييمات والمراجعات
+        </h3>
+        {avgRating.count > 0 && (
+          <div className="flex items-center gap-1.5">
+            <StarRating rating={avgRating.average} size={14} />
+            <span className="text-sm font-bold text-amber-400">{avgRating.average.toFixed(1)}</span>
+            <span className="text-[11px] text-muted-foreground">({avgRating.count})</span>
+          </div>
+        )}
+      </div>
+
+      {/* Add Review Button */}
+      {isLoggedIn && !showForm && (
+        <button
+          onClick={() => setShowForm(true)}
+          className="w-full mb-3 py-2.5 rounded-xl glass text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-card/80"
+        >
+          <Star className="w-4 h-4 text-primary" />
+          <span>أضف تقييمك</span>
+        </button>
+      )}
+
+      {/* Review Form */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden mb-3"
+          >
+            <div className="glass rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-bold">تقييمك</h4>
+                <button onClick={() => setShowForm(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
+              </div>
+              <div className="flex items-center justify-center mb-3">
+                <StarRating rating={newRating} size={28} interactive onChange={setNewRating} />
+              </div>
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="شاركنا تجربتك..."
+                className="w-full h-20 rounded-xl glass bg-transparent text-sm p-3 outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground resize-none"
+                dir="rtl"
+                maxLength={500}
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[10px] text-muted-foreground">{newComment.length}/500</span>
+                <button
+                  onClick={handleSubmitReview}
+                  disabled={submitting || newRating === 0}
+                  className="px-4 py-2 rounded-xl font-bold text-white text-xs transition-all active:scale-[0.98] disabled:opacity-60 flex items-center gap-1.5"
+                  style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}
+                >
+                  {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  <span>إرسال</span>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Reviews List */}
+      {loadingReviews ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-5 h-5 text-primary animate-spin" />
+        </div>
+      ) : reviews.length === 0 ? (
+        <div className="text-center py-6 glass rounded-2xl">
+          <MessageSquare className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+          <p className="text-xs text-muted-foreground">لا توجد تقييمات بعد</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {reviews.slice(0, 5).map((review, i) => (
+            <motion.div
+              key={review.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="glass rounded-xl p-3"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: "linear-gradient(135deg, #2563EB, #7C3AED)" }}>
+                    {review.userName.slice(0, 2)}
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold">{review.userName}</span>
+                    <span className="text-[10px] text-muted-foreground mr-2">{formatDate(review.createdAt)}</span>
+                  </div>
+                </div>
+                <StarRating rating={review.rating} size={12} />
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">{review.comment}</p>
+            </motion.div>
+          ))}
+          {reviews.length > 5 && (
+            <p className="text-center text-[11px] text-muted-foreground py-2">
+              و {reviews.length - 5} تقييمات أخرى
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Property Detail with Interactive Map ───
 function PropertyDetail({
-  property, loading, onBack, onBook, isFavorite, onToggleFavorite,
+  property, loading, onBack, onBook, isFavorite, onToggleFavorite, isLoggedIn, userId, userName,
 }: {
   property: ApiProperty; loading: boolean; onBack: () => void; onBook: () => void;
   isFavorite: boolean; onToggleFavorite: () => void;
+  isLoggedIn: boolean; userId?: string; userName?: string;
 }) {
   const rent = parseFloat(property.monthlyRent);
   const deposit = property.securityDeposit ? parseFloat(property.securityDeposit) : 0;
@@ -814,6 +1201,10 @@ function PropertyDetail({
             </div>
           </div>
         )}
+        {/* Reviews Section */}
+        <ReviewsSection propertyId={property.id} isLoggedIn={isLoggedIn} userId={userId} userName={userName} />
+
+        <div className="h-6" />
       </div>
 
       <div className="p-4 glass-strong">
@@ -1152,11 +1543,11 @@ function NotificationsSettings({ onBack }: { onBack: () => void }) {
 
 // ─── Profile Tab ───
 function ProfileTab({
-  isLoggedIn, onLogin, onLogout, userName, userEmail, userInitials, onOpenNotifications,
+  isLoggedIn, onLogin, onLogout, userName, userEmail, userInitials, onOpenNotifications, onOpenTwilioSetup,
 }: {
   isLoggedIn: boolean; onLogin: () => void; onLogout: () => void;
   userName: string; userEmail: string; userInitials: string;
-  onOpenNotifications: () => void;
+  onOpenNotifications: () => void; onOpenTwilioSetup: () => void;
 }) {
   if (!isLoggedIn) {
     return (
@@ -1183,6 +1574,7 @@ function ProfileTab({
           { label: "اللغة", icon: "🌐", value: "العربية", action: undefined },
           { label: "المظهر", icon: "🌙", value: "داكن", action: undefined },
           { label: "الإشعارات", icon: "🔔", action: onOpenNotifications },
+          { label: "إعداد SMS (Twilio)", icon: "📨", action: onOpenTwilioSetup },
           { label: "المساعدة", icon: "❓", action: undefined },
         ].map((item) => (
           <button key={item.label} onClick={item.action} className="w-full flex items-center justify-between glass rounded-xl p-4 transition-all hover:bg-card/80">
@@ -1195,6 +1587,147 @@ function ProfileTab({
         ))}
       </div>
       <button onClick={onLogout} className="w-full mt-6 py-3 rounded-xl text-sm font-bold text-destructive glass transition-all hover:bg-destructive/10">تسجيل الخروج</button>
+    </div>
+  );
+}
+
+// ─── Twilio SMS Setup Guide ───
+function TwilioSetupGuide({ onBack }: { onBack: () => void }) {
+  const steps = [
+    {
+      title: "١. إنشاء حساب Twilio",
+      desc: "اذهب إلى twilio.com وأنشئ حساباً مجانياً. ستحصل على رصيد تجريبي للبدء.",
+      icon: "🔑",
+    },
+    {
+      title: "٢. الحصول على Account SID و Auth Token",
+      desc: "من لوحة تحكم Twilio Console → Account Info، انسخ Account SID و Auth Token.",
+      icon: "📋",
+    },
+    {
+      title: "٣. شراء رقم هاتف",
+      desc: "اشترِ رقم هاتف يدعم SMS من Phone Numbers → Buy a Number. اختر رقماً يدعم المملكة العربية السعودية.",
+      icon: "📱",
+    },
+    {
+      title: "٤. إعداد Verify Service",
+      desc: "اذهب إلى Verify → Services → Create Service. فعّل قناة SMS واضبط طول الرمز (6 أرقام) ومدة الصلاحية (10 دقائق).",
+      icon: "✅",
+    },
+    {
+      title: "٥. ربط Twilio مع Supabase",
+      desc: "في Supabase Dashboard → Authentication → Providers → Phone:\n• فعّل Phone Provider\n• اختر Twilio كمزود SMS\n• أدخل Account SID و Auth Token و Verify Service SID\n• أدخل رقم الهاتف المرسل",
+      icon: "🔗",
+    },
+    {
+      title: "٦. اختبار الإرسال",
+      desc: "استخدم شاشة تسجيل الدخول برقم الهاتف في التطبيق لإرسال OTP تجريبي. تأكد من استخدام التنسيق الدولي +966.",
+      icon: "🧪",
+    },
+  ];
+
+  const troubleshooting = [
+    { q: "لا يصل رمز OTP؟", a: "تأكد من أن رقم الهاتف بالتنسيق الدولي (+966XXXXXXXXX) وأن Twilio Verify Service مفعّل." },
+    { q: "خطأ في المصادقة؟", a: "تحقق من Account SID و Auth Token في إعدادات Supabase. تأكد أنها مطابقة للوحة Twilio." },
+    { q: "رسوم Twilio؟", a: "الحساب التجريبي يوفر رصيد ~$15. كل رسالة SMS للسعودية تكلف ~$0.05. للإنتاج اشحن رصيدك." },
+  ];
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex items-center justify-between px-4 pt-4 pb-3">
+        <button onClick={onBack} className="w-9 h-9 rounded-full glass flex items-center justify-center">
+          <ChevronRight className="w-5 h-5" />
+        </button>
+        <h1 className="text-lg font-bold">إعداد Twilio SMS</h1>
+        <div className="w-9" />
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 pb-6" style={{ scrollbarWidth: "none" }}>
+        {/* Intro */}
+        <div className="glass rounded-2xl p-4 mb-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #F22F46, #E91E63)" }}>
+              <Phone className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold">تفعيل تسجيل الدخول برقم الهاتف</h2>
+              <p className="text-[11px] text-muted-foreground">عبر Twilio + Supabase Auth</p>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            لتفعيل تسجيل الدخول برقم الهاتف (OTP) في التطبيق، تحتاج إلى ربط حساب Twilio مع Supabase.
+            اتبع الخطوات التالية:
+          </p>
+        </div>
+
+        {/* Steps */}
+        <div className="space-y-3 mb-6">
+          {steps.map((step, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.08 }}
+              className="glass rounded-xl p-3"
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-lg mt-0.5">{step.icon}</span>
+                <div>
+                  <h3 className="text-xs font-bold mb-1">{step.title}</h3>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-line">{step.desc}</p>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Troubleshooting */}
+        <div className="mb-4">
+          <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+            <Info className="w-4 h-4 text-primary" />
+            حل المشاكل
+          </h3>
+          <div className="space-y-2">
+            {troubleshooting.map((item, i) => (
+              <div key={i} className="glass rounded-xl p-3">
+                <p className="text-xs font-bold mb-1">{item.q}</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{item.a}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Quick Links */}
+        <div className="glass rounded-2xl p-4">
+          <h3 className="text-sm font-bold mb-3">روابط سريعة</h3>
+          <div className="space-y-2">
+            {[
+              { label: "Twilio Console", url: "https://console.twilio.com" },
+              { label: "Supabase Dashboard", url: "https://supabase.com/dashboard" },
+              { label: "Twilio Verify Docs", url: "https://www.twilio.com/docs/verify" },
+            ].map((link) => (
+              <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between py-2 px-3 rounded-lg glass text-xs font-medium transition-all hover:bg-card/80">
+                <span>{link.label}</span>
+                <Navigation className="w-3 h-3 text-primary" />
+              </a>
+            ))}
+          </div>
+        </div>
+
+        {/* Phone number format note */}
+        <div className="mt-4 glass rounded-xl p-3 border border-amber-500/20">
+          <div className="flex items-start gap-2">
+            <span className="text-amber-400 text-sm">⚠️</span>
+            <div>
+              <p className="text-xs font-bold text-amber-400 mb-1">تنسيق رقم الهاتف السعودي</p>
+              <p className="text-[11px] text-muted-foreground">
+                يجب إدخال الرقم بالتنسيق الدولي: +966 5XXXXXXXX
+                (بدون الصفر البادئ)
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
