@@ -14,7 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useState, useEffect, useMemo, useRef } from "react";
-import html2canvas from "html2canvas";
 import { Link } from "wouter";
 import {
   Settings, Image, Palette, DollarSign, FileText, Users, Shield, BarChart3,
@@ -1354,27 +1353,26 @@ export default function AdminSettings() {
                         onClick={async () => {
                           if (!bankCardRef.current) return;
                           try {
-                            const canvas = await html2canvas(bankCardRef.current, { backgroundColor: null, scale: 2, useCORS: true });
-                            canvas.toBlob(async (blob) => {
-                              if (!blob) return;
-                              try {
-                                await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-                                toast.success(lang === "ar" ? "تم نسخ البطاقة كصورة" : "Card copied as image");
-                              } catch {
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url; a.download = "bank-card.png"; a.click();
-                                URL.revokeObjectURL(url);
-                                toast.success(lang === "ar" ? "تم تحميل البطاقة كصورة" : "Card downloaded as image");
-                              }
-                            }, "image/png");
-                          } catch {
+                            const html2canvasMod = await import("html2canvas");
+                            const h2c = html2canvasMod.default || html2canvasMod;
+                            const canvas = await h2c(bankCardRef.current, { backgroundColor: "#0f172a", scale: 2, useCORS: true, logging: false });
+                            const dataUrl = canvas.toDataURL("image/png");
+                            // Always download as file (most reliable across all browsers)
+                            const a = document.createElement("a");
+                            a.href = dataUrl;
+                            a.download = "bank-card.png";
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            toast.success(lang === "ar" ? "تم تحميل البطاقة كصورة" : "Card downloaded as image");
+                          } catch (err) {
+                            console.error("html2canvas error:", err);
                             toast.error(lang === "ar" ? "فشل نسخ الصورة" : "Failed to copy image");
                           }
                         }}
                       >
-                        <ImageIcon className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
-                        {lang === "ar" ? "نسخ كصورة" : "Copy as Image"}
+                        <Download className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
+                        {lang === "ar" ? "تحميل كصورة" : "Download as Image"}
                       </Button>
                     </div>
                   </div>
@@ -1510,27 +1508,25 @@ export default function AdminSettings() {
                         onClick={async () => {
                           if (!bankCard2Ref.current) return;
                           try {
-                            const canvas = await html2canvas(bankCard2Ref.current, { backgroundColor: null, scale: 2, useCORS: true });
-                            canvas.toBlob(async (blob) => {
-                              if (!blob) return;
-                              try {
-                                await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-                                toast.success(lang === "ar" ? "تم نسخ البطاقة كصورة" : "Card copied as image");
-                              } catch {
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url; a.download = "bank-card-2.png"; a.click();
-                                URL.revokeObjectURL(url);
-                                toast.success(lang === "ar" ? "تم تحميل البطاقة كصورة" : "Card downloaded as image");
-                              }
-                            }, "image/png");
-                          } catch {
+                            const html2canvasMod = await import("html2canvas");
+                            const h2c = html2canvasMod.default || html2canvasMod;
+                            const canvas = await h2c(bankCard2Ref.current, { backgroundColor: "#064e3b", scale: 2, useCORS: true, logging: false });
+                            const dataUrl = canvas.toDataURL("image/png");
+                            const a = document.createElement("a");
+                            a.href = dataUrl;
+                            a.download = "bank-card-2.png";
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            toast.success(lang === "ar" ? "تم تحميل البطاقة كصورة" : "Card downloaded as image");
+                          } catch (err) {
+                            console.error("html2canvas error:", err);
                             toast.error(lang === "ar" ? "فشل نسخ الصورة" : "Failed to copy image");
                           }
                         }}
                       >
-                        <ImageIcon className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
-                        {lang === "ar" ? "نسخ كصورة" : "Copy as Image"}
+                        <Download className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
+                        {lang === "ar" ? "تحميل كصورة" : "Download as Image"}
                       </Button>
                     </div>
                   </div>
