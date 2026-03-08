@@ -33,7 +33,7 @@ export default function NotFound() {
           </span>
           {/* Gold key icon overlay */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            <img 
+            <img loading="lazy" 
               src="/assets/brand/mk-logo-transparent.svg" 
               alt="" 
               className="h-16 sm:h-20 w-auto opacity-20 drop-shadow-lg"

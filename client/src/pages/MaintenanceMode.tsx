@@ -236,8 +236,7 @@ export default function MaintenanceMode() {
           <div className="absolute -inset-8 rounded-full bg-gradient-to-b from-[#3ECFC0]/[0.06] to-[#C9A96E]/[0.04] blur-2xl animate-pulse" />
           {/* Logo container */}
           <div className="relative w-32 h-32 sm:w-40 sm:h-40 flex items-center justify-center">
-            <img
-              src="/assets/brand/mk-logo-transparent.svg"
+            <img loading="lazy"               src="/assets/brand/mk-logo-transparent.svg"
               alt="Monthly Key"
               className="w-full h-full object-contain drop-shadow-[0_0_40px_rgba(62,207,192,0.15)]"
             />
@@ -269,7 +268,7 @@ export default function MaintenanceMode() {
         {imageUrl && (
           <div className="relative mb-10 max-w-md w-full">
             <div className="rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl">
-              <img src={imageUrl} alt="" className="w-full h-auto object-cover" />
+              <img loading="lazy" src={imageUrl} alt="" className="w-full h-auto object-cover" />
             </div>
             <div className="absolute -inset-3 rounded-3xl bg-gradient-to-b from-[#3ECFC0]/[0.06] to-[#C9A96E]/[0.04] -z-10 blur-2xl" />
           </div>

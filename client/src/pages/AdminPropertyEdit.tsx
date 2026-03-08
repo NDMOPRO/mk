@@ -72,7 +72,7 @@ function SortablePhoto({ id, url, index, onRemove, onSetCover, isAr }: {
 
   return (
     <div ref={setNodeRef} style={style} className="relative group rounded-lg overflow-hidden border aspect-square">
-      <img src={normalizeImageUrl(url)} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = BROKEN_IMAGE_PLACEHOLDER; }} />
+      <img loading="lazy" src={normalizeImageUrl(url)} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = BROKEN_IMAGE_PLACEHOLDER; }} />
       {/* Drag handle */}
       <div
         {...attributes} {...listeners}

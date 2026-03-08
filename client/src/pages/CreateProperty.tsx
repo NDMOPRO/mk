@@ -302,7 +302,7 @@ export default function CreateProperty() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {form.photos.map((url, i) => (
                   <div key={i} className="relative aspect-square rounded-lg overflow-hidden group">
-                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <img loading="lazy" src={url} alt="" className="w-full h-full object-cover" />
                     <button onClick={() => removePhoto(i)} className="absolute top-1 end-1 h-6 w-6 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <X className="h-3 w-3" />
                     </button>

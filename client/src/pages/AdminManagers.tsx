@@ -220,7 +220,7 @@ export default function AdminManagers() {
         <Label>{lang === "ar" ? "الصورة الشخصية" : "Profile Photo"}</Label>
         <div className="flex items-center gap-3 mt-1">
           {formPhotoUrl && (
-            <img src={formPhotoUrl} alt="preview" className="w-16 h-16 rounded-lg object-cover border" />
+            <img loading="lazy" src={formPhotoUrl} alt="preview" className="w-16 h-16 rounded-lg object-cover border" />
           )}
           <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handlePhotoUpload} />
           <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}
@@ -309,7 +309,7 @@ export default function AdminManagers() {
                     {/* Photo */}
                     <div className="shrink-0">
                       {mgr.photoUrl ? (
-                        <img src={mgr.photoUrl} alt={mgr.name} className="w-20 h-20 rounded-xl object-cover border" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
+                        <img loading="lazy" src={mgr.photoUrl} alt={mgr.name} className="w-20 h-20 rounded-xl object-cover border" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
                       ) : null}
                       <div className={`w-20 h-20 rounded-xl bg-gradient-to-br from-[#3ECFC0] to-[#2ab5a6] flex items-center justify-center text-white font-bold text-2xl select-none ${mgr.photoUrl ? 'hidden' : ''}`}>
                         {(mgr.name || '').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || 'PM'}

@@ -117,7 +117,7 @@ export default function MapViewPage() {
     return `
       <div style="direction:${dir};font-family:Tajawal,sans-serif;width:280px;padding:0;margin:0;">
         ${photo ? `<div style="width:100%;height:140px;overflow:hidden;border-radius:8px 8px 0 0;">
-          <img src="${photo}" style="width:100%;height:100%;object-fit:cover;" alt="${title}" />
+          <img loading="lazy" src="${photo}" style="width:100%;height:100%;object-fit:cover;" alt="${title}" />
         </div>` : ""}
         <div style="padding:12px;">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">

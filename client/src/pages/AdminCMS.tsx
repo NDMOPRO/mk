@@ -554,7 +554,7 @@ export default function AdminCMS() {
                                           </Button>
                                         </div>
                                         {editValue && (
-                                          <img src={editValue.startsWith('/') ? `https://monthlykey.com${editValue}` : editValue} alt="" className="max-h-32 rounded border object-cover" />
+                                          <img loading="lazy" src={editValue.startsWith('/') ? `https://monthlykey.com${editValue}` : editValue} alt="" className="max-h-32 rounded border object-cover" />
                                         )}
                                       </div>
                                     ) : keyDef.type === "select" ? (
@@ -604,7 +604,7 @@ export default function AdminCMS() {
                                   <div className="space-y-1">
                                     {keyDef.type === "image" && liveValue ? (
                                       <div className="flex items-center gap-3">
-                                        <img src={liveValue.startsWith('/') ? `https://monthlykey.com${liveValue}` : liveValue} alt="" className="max-h-24 rounded border object-cover" />
+                                        <img loading="lazy" src={liveValue.startsWith('/') ? `https://monthlykey.com${liveValue}` : liveValue} alt="" className="max-h-24 rounded border object-cover" />
                                         <code className="text-[10px] text-muted-foreground break-all max-w-xs">{liveValue.length > 60 ? liveValue.substring(0, 60) + '...' : liveValue}</code>
                                       </div>
                                     ) : keyDef.type === "color" && liveValue ? (
@@ -722,7 +722,7 @@ export default function AdminCMS() {
                       {(mediaQuery.data?.items ?? []).map((item: any) => (
                         <div key={item.id} className="group relative border rounded-lg overflow-hidden">
                           {item.contentType?.startsWith("image/") ? (
-                            <img src={item.url} alt={item.alt || item.filename} className="w-full h-32 object-cover" />
+                            <img loading="lazy" src={item.url} alt={item.alt || item.filename} className="w-full h-32 object-cover" />
                           ) : (
                             <div className="w-full h-32 bg-muted flex items-center justify-center">
                               <FileText className="h-8 w-8 text-muted-foreground" />

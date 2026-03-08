@@ -162,7 +162,7 @@ export default function LandlordDashboard() {
                   <Card key={p.id} className="card-hover transition-shadow">
                     <CardContent className="p-4 flex items-center gap-4">
                       <div className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-muted">
-                        <img src={normalizeImageUrl(p.photos?.[0]) || BROKEN_IMAGE_PLACEHOLDER} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = BROKEN_IMAGE_PLACEHOLDER; }} />
+                        <img loading="lazy" src={normalizeImageUrl(p.photos?.[0]) || BROKEN_IMAGE_PLACEHOLDER} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = BROKEN_IMAGE_PLACEHOLDER; }} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -346,7 +346,7 @@ export default function LandlordDashboard() {
                   <div className="flex flex-col sm:flex-row items-center gap-6">
                     <div className="relative group cursor-pointer shrink-0" onClick={() => avatarInputRef.current?.click()}>
                       {user?.avatarUrl ? (
-                        <img src={user.avatarUrl} alt="" className="w-28 h-28 rounded-full object-cover border-4 border-[#3ECFC0]/20 shadow-lg" />
+                        <img loading="lazy" src={user.avatarUrl} alt="" className="w-28 h-28 rounded-full object-cover border-4 border-[#3ECFC0]/20 shadow-lg" />
                       ) : (
                         <div className="w-28 h-28 rounded-full bg-gradient-to-br from-[#3ECFC0]/20 to-[#3ECFC0]/5 flex items-center justify-center border-4 border-dashed border-[#3ECFC0]/30">
                           <User className="h-10 w-10 text-[#3ECFC0]/60" />

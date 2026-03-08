@@ -169,7 +169,7 @@ export default function PropertyCard({ property, compact }: PropertyCardProps) {
                 {lang === "ar" ? (property.managerNameAr || property.managerName) : property.managerName}
               </span>
               {property.managerPhotoUrl ? (
-                <img src={normalizeImageUrl(property.managerPhotoUrl)} alt="" className="w-6 h-6 rounded-full object-cover border border-[#3ECFC0]/30" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
+                <img loading="lazy" src={normalizeImageUrl(property.managerPhotoUrl)} alt="" className="w-6 h-6 rounded-full object-cover border border-[#3ECFC0]/30" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
               ) : null}
               <div className={`w-6 h-6 rounded-full bg-gradient-to-br from-[#3ECFC0] to-[#2ab5a6] flex items-center justify-center text-white text-[8px] font-bold select-none ${property.managerPhotoUrl ? 'hidden' : ''}`}>
                 {(property.managerName || '').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || 'PM'}

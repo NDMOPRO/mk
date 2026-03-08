@@ -135,7 +135,7 @@ export default function DashboardLayout({
       <div className="flex items-center justify-center min-h-screen" dir={dir}>
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-6">
-            <img 
+            <img loading="lazy" 
               src="/assets/brand/mk-logo-transparent.svg" 
               alt="Monthly Key - المفتاح الشهري" 
               className="h-24 w-auto object-contain"
@@ -275,13 +275,13 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center min-w-0">
-                  <img 
+                  <img loading="lazy" 
                     src="/assets/brand/mk-logo-dark.svg" 
                     alt="Monthly Key - المفتاح الشهري" 
                     className="h-8 w-auto object-contain dark:hidden"
                     style={{ maxWidth: '160px' }} 
                   />
-                  <img 
+                  <img loading="lazy" 
                     src="/assets/brand/mk-logo-transparent.svg" 
                     alt="Monthly Key - المفتاح الشهري" 
                     className="h-8 w-auto object-contain hidden dark:block"
@@ -290,7 +290,7 @@ function DashboardLayoutContent({
                 </div>
               ) : (
                 <div className="flex items-center justify-center">
-                  <img 
+                  <img loading="lazy" 
                     src="/assets/brand/mk-logo-transparent.svg" 
                     alt="MK" 
                     className="h-7 w-7 object-contain" 

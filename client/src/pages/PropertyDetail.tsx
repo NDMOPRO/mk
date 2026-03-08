@@ -796,7 +796,7 @@ export default function PropertyDetail() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             {r.tenantAvatar ? (
-                              <img src={r.tenantAvatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+                              <img loading="lazy" src={r.tenantAvatar} alt="" className="h-8 w-8 rounded-full object-cover" />
                             ) : (
                               <div className="h-8 w-8 rounded-full bg-[#3ECFC0]/20 flex items-center justify-center text-sm font-bold text-[#3ECFC0]">
                                 {(lang === "ar" ? (r.tenantNameAr || r.tenantName) : r.tenantName)?.charAt(0) ?? "?"}
@@ -1118,7 +1118,7 @@ export default function PropertyDetail() {
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       {(prop as any).manager.photoUrl ? (
-                        <img src={normalizeImageUrl((prop as any).manager.photoUrl)} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-[#3ECFC0]/30" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
+                        <img loading="lazy" src={normalizeImageUrl((prop as any).manager.photoUrl)} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-[#3ECFC0]/30" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
                       ) : null}
                       <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-[#3ECFC0] to-[#2ab5a6] flex items-center justify-center text-white font-bold text-base select-none ${(prop as any).manager.photoUrl ? 'hidden' : ''}`}>
                         {((prop as any).manager.name || '').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || 'PM'}

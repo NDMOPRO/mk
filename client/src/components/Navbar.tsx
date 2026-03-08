@@ -321,7 +321,7 @@ export default function Navbar() {
         <div className="flex h-16 sm:h-20 items-center justify-between">
           {/* Logo — light variant on dark navbar, fixed height, no stretch */}
           <Link href="/" className="flex items-center shrink-0 me-3 transition-transform duration-300 hover:scale-105">
-            <img 
+            <img loading="lazy" 
               src="/assets/brand/mk-logo-dark.svg"
               alt={lang === "ar" ? "المفتاح الشهري" : "Monthly Key"}
               className="h-10 sm:h-12 md:h-14 w-auto object-contain"

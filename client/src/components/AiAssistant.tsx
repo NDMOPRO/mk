@@ -211,7 +211,7 @@ export default function AiAssistant() {
               ...(dir === "rtl" ? { left: "1.5rem" } : { right: "1.5rem" }),
             }}
           >
-            <img src="/assets/brand/mk-logo-transparent.svg" alt="MK" className="w-7 h-7 group-hover:hidden" />
+            <img loading="lazy" src="/assets/brand/mk-logo-transparent.svg" alt="MK" className="w-7 h-7 group-hover:hidden" />
             <Sparkles className="w-7 h-7 hidden group-hover:block" />
             {/* Pulse ring */}
             <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-20" />
@@ -249,7 +249,7 @@ export default function AiAssistant() {
                 )}
                 <div className="flex items-center gap-2 flex-1">
                   <div className="w-9 h-9 rounded-full bg-transparent flex items-center justify-center relative">
-                    <img src="/assets/brand/mk-logo-transparent.svg" alt="MK" className="w-5 h-5" />
+                    <img loading="lazy" src="/assets/brand/mk-logo-transparent.svg" alt="MK" className="w-5 h-5" />
                     <span className="absolute -bottom-0.5 -end-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-emerald-600" />
                   </div>
                   <div>
@@ -351,7 +351,7 @@ export default function AiAssistant() {
                       transition={{ delay: 0.1 }}
                       className="w-20 h-20 rounded-full bg-transparent flex items-center justify-center mb-4 relative"
                     >
-                      <img src="/assets/brand/mk-logo-transparent.svg" alt="MK" className="w-10 h-10" />
+                      <img loading="lazy" src="/assets/brand/mk-logo-transparent.svg" alt="MK" className="w-10 h-10" />
                       <motion.div
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ repeat: Infinity, duration: 2 }}

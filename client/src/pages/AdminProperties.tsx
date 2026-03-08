@@ -686,7 +686,7 @@ function PropertyWizard({ open, onClose, editId, onSuccess }: {
                 <div className="grid grid-cols-4 gap-3">
                   {form.photos.map((url, i) => (
                     <div key={i} className="relative aspect-square rounded-lg overflow-hidden border group">
-                      <img src={normalizeImageUrl(url)} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = BROKEN_IMAGE_PLACEHOLDER; }} />
+                      <img loading="lazy" src={normalizeImageUrl(url)} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = BROKEN_IMAGE_PLACEHOLDER; }} />
                       <button
                         onClick={() => removePhoto(i)}
                         className="absolute top-2 end-2 bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"

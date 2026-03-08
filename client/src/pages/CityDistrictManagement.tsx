@@ -402,7 +402,7 @@ export default function CityDistrictManagement() {
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-4 flex-1">
                             {city.imageUrl ? (
-                              <img src={city.imageUrl} alt={isAr ? city.nameAr : city.nameEn} className="w-16 h-16 rounded-lg object-cover" />
+                              <img loading="lazy" src={city.imageUrl} alt={isAr ? city.nameAr : city.nameEn} className="w-16 h-16 rounded-lg object-cover" />
                             ) : (
                               <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
                                 <Map className="h-6 w-6 text-muted-foreground" />
@@ -627,7 +627,7 @@ export default function CityDistrictManagement() {
               />
               {cityForm.imageUrl ? (
                 <div className="relative mt-2 rounded-lg overflow-hidden border">
-                  <img src={cityForm.imageUrl} alt="" className="w-full h-40 object-cover" />
+                  <img loading="lazy" src={cityForm.imageUrl} alt="" className="w-full h-40 object-cover" />
                   <div className="absolute top-2 end-2 flex gap-1">
                     <Button
                       type="button"

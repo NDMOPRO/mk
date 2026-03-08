@@ -304,7 +304,7 @@ function SubmissionDetailDialog({ id, open, onClose, onRefresh, onConvert }: {
                     const fullUrl = normalizeImageUrl(photo.url);
                     return (
                       <a key={i} href={fullUrl} target="_blank" rel="noopener" className="w-28 h-28 rounded-lg overflow-hidden border hover:ring-2 ring-[#3ECFC0] transition-all">
-                        <img src={imgUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = BROKEN_IMAGE_PLACEHOLDER; }} />
+                        <img loading="lazy" src={imgUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = BROKEN_IMAGE_PLACEHOLDER; }} />
                       </a>
                     );
                   })}

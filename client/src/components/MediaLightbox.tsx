@@ -246,8 +246,7 @@ export function MediaLightbox({ items, initialIndex = 0, open, onClose, property
                   className="w-full h-full object-contain rounded-2xl"
                 />
               ) : (
-                <img
-                  src={current.url}
+                <img loading="lazy"                   src={current.url}
                   alt={`${currentIndex + 1}`}
                   className="w-full h-full object-contain rounded-2xl transition-transform duration-200"
                   style={{ transform: `scale(${zoom})` }}
@@ -351,7 +350,7 @@ export function MediaLightbox({ items, initialIndex = 0, open, onClose, property
                   <Play className="w-4 h-4 text-white" />
                 </div>
               ) : (
-                <img src={item.url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0.3'; }} />
+                <img loading="lazy" src={item.url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0.3'; }} />
               )}
             </button>
           ))}

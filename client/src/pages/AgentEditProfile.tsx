@@ -148,7 +148,7 @@ export default function AgentEditProfile() {
             <div className="flex flex-col items-center">
               <div className="relative group">
                 {photoUrl ? (
-                  <img src={photoUrl} alt={name} className="w-28 h-28 rounded-xl object-cover border-2 border-[#3ECFC0]/30" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
+                  <img loading="lazy" src={photoUrl} alt={name} className="w-28 h-28 rounded-xl object-cover border-2 border-[#3ECFC0]/30" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
                 ) : null}
                 <div className={`w-28 h-28 rounded-xl bg-gradient-to-br from-[#3ECFC0] to-[#2ab5a6] flex items-center justify-center text-white font-bold text-3xl select-none ${photoUrl ? 'hidden' : ''}`}>
                   {(manager?.name || '').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || 'PM'}

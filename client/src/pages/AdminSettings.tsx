@@ -306,7 +306,7 @@ export default function AdminSettings() {
                     <Label>{t("settings.logo")}</Label>
                     <div className="flex items-center gap-4">
                       {settings["site.logoUrl"] && (
-                        <img src={settings["site.logoUrl"]} alt="Logo" className="h-16 w-16 object-contain rounded border" />
+                        <img loading="lazy" src={settings["site.logoUrl"]} alt="Logo" className="h-16 w-16 object-contain rounded border" />
                       )}
                       <Button variant="outline" onClick={() => handleFileUpload("site.logoUrl")}>
                         <Upload className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
@@ -320,7 +320,7 @@ export default function AdminSettings() {
                     <Label>{t("settings.favicon")}</Label>
                     <div className="flex items-center gap-4">
                       {settings["site.faviconUrl"] && (
-                        <img src={settings["site.faviconUrl"]} alt="Favicon" className="h-10 w-10 object-contain rounded border" />
+                        <img loading="lazy" src={settings["site.faviconUrl"]} alt="Favicon" className="h-10 w-10 object-contain rounded border" />
                       )}
                       <Button variant="outline" onClick={() => handleFileUpload("site.faviconUrl")}>
                         <Upload className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
@@ -373,7 +373,7 @@ export default function AdminSettings() {
                     <Label>{t("settings.heroBgImage")}</Label>
                     <div className="flex items-center gap-4">
                       {settings["hero.bgImage"] && (
-                        <img src={settings["hero.bgImage"]} alt="Hero BG" className="h-24 w-40 object-cover rounded border" />
+                        <img loading="lazy" src={settings["hero.bgImage"]} alt="Hero BG" className="h-24 w-40 object-cover rounded border" />
                       )}
                       <Button variant="outline" onClick={() => handleFileUpload("hero.bgImage")}>
                         <Upload className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
@@ -401,7 +401,7 @@ export default function AdminSettings() {
                       <Label>{lang === "ar" ? "صورة البوستر (تظهر أثناء تحميل الفيديو)" : "Poster Image (shown while video loads)"}</Label>
                       <div className="flex items-center gap-4">
                         {settings["hero.bgImage"] && (
-                          <img src={settings["hero.bgImage"]} alt="Poster" className="h-20 w-36 object-cover rounded border" />
+                          <img loading="lazy" src={settings["hero.bgImage"]} alt="Poster" className="h-20 w-36 object-cover rounded border" />
                         )}
                         <Button variant="outline" size="sm" onClick={() => handleFileUpload("hero.bgImage")}>
                           <Upload className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
@@ -534,8 +534,7 @@ export default function AdminSettings() {
                         >
                           {/* Preview image */}
                           <div className="relative h-28 w-full">
-                            <img
-                              src={`/api/img-proxy?url=${encodeURIComponent(preset.bgImage)}`}
+                            <img loading="lazy"                               src={`/api/img-proxy?url=${encodeURIComponent(preset.bgImage)}`}
                               alt={lang === "ar" ? preset.labelAr : preset.labelEn}
                               className="w-full h-full object-cover"
                               loading="lazy"
@@ -1756,7 +1755,7 @@ export default function AdminSettings() {
                   <div className="mt-2 flex items-center gap-4">
                     {settings["maintenance.imageUrl"] && (
                       <div className="relative w-40 h-24 rounded-lg overflow-hidden border">
-                        <img src={settings["maintenance.imageUrl"]} alt="" className="w-full h-full object-cover" />
+                        <img loading="lazy" src={settings["maintenance.imageUrl"]} alt="" className="w-full h-full object-cover" />
                         <button
                           onClick={() => updateSetting("maintenance.imageUrl", "")}
                           className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
@@ -2100,7 +2099,7 @@ function CitiesManagement({ lang, dir, isRtl }: { lang: string; dir: string; isR
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {form.imageUrl && <img src={form.imageUrl} alt="" className="h-12 w-16 object-cover rounded" />}
+              {form.imageUrl && <img loading="lazy" src={form.imageUrl} alt="" className="h-12 w-16 object-cover rounded" />}
               <Button variant="outline" size="sm" onClick={handlePhotoUpload} disabled={uploadPhotoMutation.isPending}>
                 <Upload className="h-3 w-3 me-1" />
                 {lang === "ar" ? "رفع صورة" : "Upload Photo"}
@@ -2140,7 +2139,7 @@ function CitiesManagement({ lang, dir, isRtl }: { lang: string; dir: string; isR
                   <td className="p-2.5 text-muted-foreground">{city.id}</td>
                   <td className="p-2.5">
                     {city.imageUrl ? (
-                      <img src={city.imageUrl} alt="" className="h-8 w-12 object-cover rounded" />
+                      <img loading="lazy" src={city.imageUrl} alt="" className="h-8 w-12 object-cover rounded" />
                     ) : (
                       <div className="h-8 w-12 bg-muted rounded flex items-center justify-center">
                         <MapPin className="h-3 w-3 text-muted-foreground" />
@@ -2243,7 +2242,7 @@ function CitiesManagement({ lang, dir, isRtl }: { lang: string; dir: string; isR
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {form.imageUrl && <img src={form.imageUrl} alt="" className="h-12 w-16 object-cover rounded" />}
+              {form.imageUrl && <img loading="lazy" src={form.imageUrl} alt="" className="h-12 w-16 object-cover rounded" />}
               <Button variant="outline" size="sm" onClick={handlePhotoUpload} disabled={uploadPhotoMutation.isPending}>
                 <Upload className="h-3 w-3 me-1" />
                 {lang === "ar" ? "رفع صورة" : "Upload Photo"}

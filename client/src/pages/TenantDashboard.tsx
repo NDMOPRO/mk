@@ -562,7 +562,7 @@ export default function TenantDashboard() {
                     {/* Avatar Preview */}
                     <div className="relative group cursor-pointer shrink-0" onClick={() => avatarInputRef.current?.click()}>
                       {user?.avatarUrl ? (
-                        <img src={user.avatarUrl} alt="" className="w-28 h-28 rounded-full object-cover border-4 border-[#3ECFC0]/20 shadow-lg" />
+                        <img loading="lazy" src={user.avatarUrl} alt="" className="w-28 h-28 rounded-full object-cover border-4 border-[#3ECFC0]/20 shadow-lg" />
                       ) : (
                         <div className="w-28 h-28 rounded-full bg-gradient-to-br from-[#3ECFC0]/20 to-[#3ECFC0]/5 flex items-center justify-center border-4 border-dashed border-[#3ECFC0]/30">
                           <User className="h-10 w-10 text-[#3ECFC0]/60" />
@@ -1018,7 +1018,7 @@ function TenantEmergencyTab({ lang, isAr }: { lang: string; isAr: boolean }) {
                     {mediaFiles.map((f, i) => (
                       <div key={i} className="relative group rounded-lg overflow-hidden border bg-muted aspect-square">
                         {f.type === "image" ? (
-                          <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
+                          <img loading="lazy" src={f.url} alt={f.name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center bg-black/80">
                             <Play className="h-8 w-8 text-white mb-1" />

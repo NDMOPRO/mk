@@ -56,7 +56,7 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <img 
+            <img loading="lazy" 
               src="/assets/brand/mk-logo-transparent.svg" 
               alt="Monthly Key - المفتاح الشهري" 
               className="h-28 sm:h-32 w-auto object-contain mx-auto" 

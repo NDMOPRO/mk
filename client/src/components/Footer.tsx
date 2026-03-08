@@ -37,7 +37,7 @@ export default function Footer() {
           {/* Brand column */}
           <div className="md:col-span-4 flex flex-col items-center md:items-start">
             {/* Logo — light variant on dark footer, locale-aware */}
-            <img 
+            <img loading="lazy" 
               src="/assets/brand/mk-logo-dark.svg"
               alt={lang === "ar" ? "المفتاح الشهري" : "Monthly Key"} 
               className="h-16 sm:h-20 w-auto object-contain mb-5"

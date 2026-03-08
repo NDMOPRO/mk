@@ -733,7 +733,7 @@ export default function Home() {
           <div className="max-w-3xl mx-auto text-center px-2 sm:px-0">
             {/* Brand Logo in Hero — locale-aware, light variant on dark hero */}
             <div className="hero-logo mb-3 animate-slide-right">
-              <img 
+              <img loading="lazy" 
                 src="/assets/brand/mk-logo-dark.svg"
                 alt={lang === "ar" ? "المفتاح الشهري" : "Monthly Key"}
                 className="h-[48px] sm:h-[64px] md:h-[80px] w-auto object-contain"
@@ -946,8 +946,7 @@ export default function Home() {
                 className="group cursor-pointer card-hover relative rounded-2xl overflow-hidden aspect-[4/3] shadow-md"
               >
                 {getCityImage(city) ? (
-                  <img
-                    src={getCityImage(city)!}
+                  <img loading="lazy"                     src={getCityImage(city)!}
                     alt={lang === "ar" ? city.nameAr : city.nameEn}
                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                   />
@@ -979,8 +978,7 @@ export default function Home() {
                 className="relative rounded-2xl overflow-hidden aspect-[4/3] shadow-md opacity-75"
               >
                 {getCityImage(city) ? (
-                  <img
-                    src={getCityImage(city)!}
+                  <img loading="lazy"                     src={getCityImage(city)!}
                     alt={lang === "ar" ? city.nameAr : city.nameEn}
                     className="absolute inset-0 w-full h-full object-cover opacity-60"
                   />
@@ -1063,7 +1061,7 @@ export default function Home() {
         
         <ScrollSection className="container relative text-center">
           {/* Brand watermark */}
-          <img 
+          <img loading="lazy" 
             src="/assets/brand/mk-logo-transparent.svg" 
             alt="" 
             className="h-20 sm:h-24 w-auto object-contain mx-auto mb-6 opacity-10" 
