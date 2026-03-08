@@ -222,24 +222,49 @@ export async function getTaqnyatBalance(bearerToken: string): Promise<{
   try {
     const resp = await fetch(`${TAQNYAT_SMS_BASE_URL}/account/balance`, {
       headers: { "Authorization": `Bearer ${bearerToken}` },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
 
-    const data = await resp.json();
+    const rawText = await resp.text();
+    console.log(`[Taqnyat Balance] HTTP ${resp.status}, body: ${rawText.substring(0, 500)}`);
 
-    // Taqnyat may return balance directly or wrapped in statusCode
-    if (resp.ok) {
+    // Try to parse as JSON
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      // Response is not JSON — might be plain text balance or error
+      if (resp.ok || resp.status === 201) {
+        return { success: true, balance: rawText.trim() || 'N/A', currency: 'SAR', accountStatus: 'active' };
+      }
+      return { success: false, error: `Non-JSON response (HTTP ${resp.status}): ${rawText.substring(0, 200)}` };
+    }
+
+    // Taqnyat balance endpoint returns HTTP 201 on success per their OpenAPI spec
+    // resp.ok covers 200-299, so 201 is included
+    if (resp.ok || resp.status === 201) {
       // Success — extract balance from whichever format Taqnyat uses
       return {
         success: true,
-        balance: data.balance ?? data.data?.balance ?? 'N/A',
-        currency: data.currency ?? data.data?.currency ?? 'SAR',
-        accountStatus: data.accountStatus ?? data.status ?? 'active',
+        balance: String(data.balance ?? data.data?.balance ?? 'N/A'),
+        currency: String(data.currency ?? data.data?.currency ?? 'SAR'),
+        accountStatus: String(data.accountStatus ?? data.status ?? data.accountstatus ?? 'active'),
+      };
+    }
+
+    // Also treat statusCode 200/201 in body as success even if HTTP status differs
+    if (data.statusCode === 200 || data.statusCode === 201) {
+      return {
+        success: true,
+        balance: String(data.balance ?? 'N/A'),
+        currency: String(data.currency ?? 'SAR'),
+        accountStatus: String(data.accountStatus ?? 'active'),
       };
     }
 
     return { success: false, error: data.message || data.error || `HTTP ${resp.status}` };
   } catch (err: any) {
+    console.error('[Taqnyat Balance] Request error:', err.message);
     return { success: false, error: err.message };
   }
 }
