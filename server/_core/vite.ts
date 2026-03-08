@@ -87,9 +87,9 @@ export function serveStatic(app: Express) {
     lastModified: true,
     index: false,           // Don't serve index.html for / - let SPA fallback handle it
     setHeaders: (res, filePath) => {
-      // HTML files should not be cached aggressively
+      // HTML files: short cache with stale-while-revalidate for fast repeat loads
       if (filePath.endsWith('.html')) {
-        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
       }
       // Service worker MUST NOT be cached — browsers need to check for updates
       else if (filePath.endsWith('sw.js') || filePath.endsWith('service-worker.js')) {
@@ -126,7 +126,10 @@ export function serveStatic(app: Express) {
   // SPA fallback: serve index.html for all non-file requests
   app.use("*", (_req, res) => {
     if (htmlTemplate) {
-      res.status(200).set({ 'Content-Type': 'text/html; charset=utf-8' }).send(htmlTemplate);
+      res.status(200).set({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+      }).send(htmlTemplate);
     } else {
       res.sendFile(indexPath);
     }

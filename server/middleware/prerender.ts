@@ -574,7 +574,10 @@ export function prerenderMiddleware(htmlTemplate: string) {
         html = html.replace('</head>', `${metaTags}\n</head>`);
       }
 
-      res.status(200).set({ 'Content-Type': 'text/html; charset=utf-8' }).send(html);
+      res.status(200).set({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+      }).send(html);
     } catch (err) {
       console.error('[Prerender] Middleware error:', err);
       next(); // Fall through to normal serving

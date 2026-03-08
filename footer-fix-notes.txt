@@ -1,0 +1,4 @@
+Footer phone alignment issue:
+- Line 85: the phone <a> has dir="ltr" which causes the entire flex row to flip direction
+- The phone icon ends up on the wrong side compared to email and address icons
+- Fix: keep dir="ltr" only on the phone number text span, not the entire flex container
