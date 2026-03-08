@@ -33,6 +33,7 @@ export async function seedCitiesAndDistricts() {
       }
       console.log("[Seed] City images updated to authentic Saudi CDN URLs.");
       await seedDefaultRoles(db);
+      await seedAdditionalDistricts(db);
       return;
     }
 
@@ -169,6 +170,8 @@ export async function seedCitiesAndDistricts() {
 
     // Seed default roles
     await seedDefaultRoles(db);
+    // Seed additional districts for Riyadh, Jeddah, Madinah
+    await seedAdditionalDistricts(db);
 
   } catch (error) {
     console.error("[Seed] Error seeding cities/districts:", error);
@@ -267,5 +270,352 @@ async function seedDefaultRoles(db: ReturnType<typeof drizzle>) {
     console.log(`[Seed] ${defaultRoles.length} default roles seeded.`);
   } catch (error) {
     console.error("[Seed] Error seeding roles:", error);
+  }
+}
+
+/**
+ * Seed additional districts for Riyadh, Jeddah, and Madinah.
+ * Only adds districts that don't already exist (checked by nameAr + city).
+ * All new districts are added as inactive (isActive: false).
+ */
+async function seedAdditionalDistricts(db: ReturnType<typeof drizzle>) {
+  try {
+    // Get city IDs
+    const allCities = await db.select().from(cities);
+    const cityIdMap = new Map<string, number>();
+    for (const c of allCities) {
+      cityIdMap.set(c.nameEn, c.id);
+    }
+
+    // Get all existing districts to avoid duplicates
+    const existingDistricts = await db.select({
+      nameAr: districts.nameAr,
+      city: districts.city,
+    }).from(districts);
+
+    const existingSet = new Set(
+      existingDistricts.map((d) => `${d.nameAr}__${d.city}`)
+    );
+
+    const additionalDistricts: Array<{ city: string; cityAr: string; nameEn: string; nameAr: string; isActive: boolean }> = [
+      // ─── Riyadh additional districts ───
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Falah", nameAr: "الفلاح", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Wadi", nameAr: "الوادي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Nada", nameAr: "الندى", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Rabi", nameAr: "الربيع", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Nafl", nameAr: "النفل", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Ghadir", nameAr: "الغدير", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Aqiq", nameAr: "العقيق", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Hittin", nameAr: "حطين", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Malqa", nameAr: "الملقا", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Narjis", nameAr: "النرجس", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Arid", nameAr: "العارض", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Qairawan", nameAr: "القيروان", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Banban", nameAr: "بنبان", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mughrazat", nameAr: "المغرزات", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Izdihar", nameAr: "الازدهار", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "King Abdulaziz", nameAr: "الملك عبد العزيز", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "King Abdullah South", nameAr: "الملك عبد الله الجنوبي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "King Abdullah North", nameAr: "الملك عبد الله الشمالي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Wahah", nameAr: "الواحة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Salah Al Din", nameAr: "صلاح الدين", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "King Fahd", nameAr: "الملك فهد", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mursalat", nameAr: "المرسلات", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Nuzha", nameAr: "النزهة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Taawun", nameAr: "التعاون", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Masif", nameAr: "المصيف", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Rimal", nameAr: "الرمال", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Munisiyah", nameAr: "المونسية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Qurtubah", nameAr: "قرطبة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Janadriyah", nameAr: "الجنادرية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Qadisiyah", nameAr: "القادسية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Yarmuk", nameAr: "اليرموك", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Ghirnatah", nameAr: "غرناطة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Ishbiliyah", nameAr: "أشبيلية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Hamra", nameAr: "الحمراء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Muaiziliyah", nameAr: "المعيزلية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Khaleej", nameAr: "الخليج", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "King Faisal", nameAr: "الملك فيصل", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Quds", nameAr: "القدس", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Nahdah", nameAr: "النهضة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Andalus", nameAr: "الأندلس", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mathar", nameAr: "المعذر", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mohammadiyah", nameAr: "المحمدية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Rahmaniyah", nameAr: "الرحمانية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Raid", nameAr: "الرائد", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Umm Al Hamam East", nameAr: "أم الحمام الشرقي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Umm Al Hamam West", nameAr: "أم الحمام الغربي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Safarat", nameAr: "السفارات", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mahdiyah", nameAr: "المهدية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Irqah", nameAr: "عرقة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Dhahrat Laban", nameAr: "ظهرة لبن", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Khuzama", nameAr: "الخزامى", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Naseem East", nameAr: "النسيم الشرقي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Naseem West", nameAr: "النسيم الغربي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Salam", nameAr: "السلام", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Rayyan", nameAr: "الريان", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Rawabi", nameAr: "الروابي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Nadheem", nameAr: "النظيم", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Manar", nameAr: "المنار", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Nadwah", nameAr: "الندوة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Jarir", nameAr: "جرير", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Zahra", nameAr: "الزهراء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Safa", nameAr: "الصفا", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Dubbat", nameAr: "الضباط", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Wizarat", nameAr: "الوزارات", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Faruq", nameAr: "الفاروق", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Amal", nameAr: "العمل", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Thulaim", nameAr: "ثليم", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Murabba", nameAr: "المربع", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Futah", nameAr: "الفوطة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Rafiah", nameAr: "الرفيعة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Hada", nameAr: "الهدا", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Sharqiyah", nameAr: "الشرقية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Nasiriyah", nameAr: "الناصرية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Siyah", nameAr: "صياح", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Wisham", nameAr: "الوشام", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Namudhajiyah", nameAr: "النموذجية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mutamarat", nameAr: "المؤتمرات", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Badiah", nameAr: "البديعة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Umm Sulaim", nameAr: "أم سليم", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Shumaisi", nameAr: "الشميسي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Jaradiyah", nameAr: "الجرادية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Fakhriyah", nameAr: "الفاخرية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Ulaysha", nameAr: "عليشة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Hijrat Wadi Laban", nameAr: "هجرة وادي لبن", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Urayja", nameAr: "العريجاء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Urayja Central", nameAr: "العريجاء الوسطى", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Urayja West", nameAr: "العريجاء الغربية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Duraihimiyah", nameAr: "الدريهمية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Shubra", nameAr: "شبرا", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Suwaidi", nameAr: "السويدي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Suwaidi West", nameAr: "السويدي الغربي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Dhahrat Al Badiah", nameAr: "ظهرة البديعة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Sultanah", nameAr: "سلطانة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Zahrah", nameAr: "الزهرة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Wadi Laban", nameAr: "وادي لبن", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Dhahrat Namar", nameAr: "ظهرة نمار", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Dirab", nameAr: "ديراب", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Namar", nameAr: "نمار", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Hazm", nameAr: "الحزم", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Tuwaiq", nameAr: "طويق", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Uhud", nameAr: "أحد", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Ukaz", nameAr: "عكاظ", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Shifa", nameAr: "الشفاء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Shualan", nameAr: "الشعلان", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Marwah", nameAr: "المروة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Badr", nameAr: "بدر", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Masani", nameAr: "المصانع", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mansuriyah", nameAr: "المنصورية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Uraid", nameAr: "عريض", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Amajiyah", nameAr: "العماجية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Khashm Al Aan", nameAr: "خشم العان", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Difaa", nameAr: "الدفاع", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Manakh", nameAr: "المناخ", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Sili", nameAr: "السلي", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Noor", nameAr: "النور", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Iskan", nameAr: "الإسكان", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Sinaiyah Al Jadidah", nameAr: "الصناعية الجديدة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Fayha", nameAr: "الفيحاء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Jazirah", nameAr: "الجزيرة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Saadah", nameAr: "السعادة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Heet", nameAr: "هيت", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Bariyah", nameAr: "البرية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mashael", nameAr: "المشاعل", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Batha", nameAr: "البطحاء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Dubiyah", nameAr: "الدوبية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Qura", nameAr: "القرى", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Sinaiyah", nameAr: "الصناعية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Wusayta", nameAr: "الوسيطاء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Mankal", nameAr: "معكال", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Faisaliyah", nameAr: "الفيصلية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Manfuhah", nameAr: "منفوحة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Mansurah", nameAr: "المنصورة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Yamamah", nameAr: "اليمامة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Salam", nameAr: "سلام", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Jabrah", nameAr: "جبرة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Atiqah", nameAr: "عتيقة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Ghubayra", nameAr: "غبيراء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Butaiha", nameAr: "البطيحا", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Khalidiyah", nameAr: "الخالدية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Dirah", nameAr: "الديرة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Dhahirah", nameAr: "الظهيرة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Oud", nameAr: "العود", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Murqab", nameAr: "المرقب", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Manfuhah Al Jadidah", nameAr: "منفوحة الجديدة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Dahu", nameAr: "الدحو", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Sukayrinah", nameAr: "سكيرينة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Aziziyah", nameAr: "العزيزية", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Taibah", nameAr: "طيبة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Misfat", nameAr: "المصفاة", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Dar Al Bayda", nameAr: "الدار البيضاء", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Hair", nameAr: "الحاير", isActive: false },
+      { city: "Riyadh", cityAr: "الرياض", nameEn: "Al Ghanamiyah", nameAr: "الغنامية", isActive: false },
+      // ─── Jeddah additional districts ───
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Kanadirah", nameAr: "الكنادرة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Baharah", nameAr: "البحارة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sawalihah", nameAr: "الصوالحة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Shuruq", nameAr: "الشروق", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Zanabiqah", nameAr: "الزنابقة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sarahin", nameAr: "السراحين", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Shamiyah", nameAr: "الشامية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Muqayta", nameAr: "المقيطع", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Ghawla", nameAr: "الغولاء", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Khalij Salman", nameAr: "خليج سلمان", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Abhur Al Shamaliyah", nameAr: "أبحر الشمالية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Corniche", nameAr: "الكورنيش", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Dhahban East", nameAr: "ذهبان الشرقي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Dhahban West", nameAr: "ذهبان الغربي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Shati Al Dhahabi", nameAr: "الشاطئ الذهبي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Ajwad", nameAr: "الأجواد", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Manar", nameAr: "المنار", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Samir", nameAr: "السامر", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Huda", nameAr: "الهدى", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Hamdaniyah", nameAr: "الحمدانية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Salihiyah", nameAr: "الصالحية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Majid", nameAr: "الماجد", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Nahdah", nameAr: "النهضة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Basatin", nameAr: "البساتين", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Murjan", nameAr: "المرجان", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Abhur Al Janubi", nameAr: "أبحر الجنوبي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Nuzha", nameAr: "النزهة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Rabwah", nameAr: "الربوة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Bawadi", nameAr: "البوادي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Faisaliyah", nameAr: "الفيصلية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Zahrah", nameAr: "الزهرة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Khalidiyah", nameAr: "الخالدية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Mahamid", nameAr: "المحاميد", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Harazat", nameAr: "الحرازات", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Wahah", nameAr: "الواحة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Muntazahat", nameAr: "المنتزهات", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Nakheel", nameAr: "النخيل", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Salimiyah", nameAr: "السالمية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sulaimaniyah East", nameAr: "السليمانية الشرقية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Aziziyah", nameAr: "العزيزية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Mushrifah", nameAr: "مشرفة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Rihab", nameAr: "الرحاب", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Baghdadiyah", nameAr: "البغدادية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Naseem", nameAr: "النسيم", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Bani Malik", nameAr: "بني مالك", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Wurud", nameAr: "الورود", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sharafiyah", nameAr: "الشرفية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Ruwais", nameAr: "الرويس", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Rawabi", nameAr: "الروابي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Jamiah", nameAr: "الجامعة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sulaimaniyah", nameAr: "السليمانية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Fayha", nameAr: "الفيحاء", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Thaghr", nameAr: "الثغر", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Nazlah Al Yamaniyah", nameAr: "النزلة اليمانية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Nazlah Al Sharqiyah", nameAr: "النزلة الشرقية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Qurayyat", nameAr: "القريات", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Thaalibah", nameAr: "الثعالبة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Petromin", nameAr: "بترومين", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Ghulail", nameAr: "غليل", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Madain Al Fahd", nameAr: "مدائن الفهد", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Adl West", nameAr: "العدل الغربي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Waziriyah", nameAr: "الوزيرية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Kandarah", nameAr: "الكندرة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Baghdadiyah East", nameAr: "البغدادية الشرقية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Baghdadiyah West", nameAr: "البغدادية الغربية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Hindawiyah", nameAr: "الهنداوية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sabil", nameAr: "السبيل", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sahifah", nameAr: "الصحيفة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Amariyah", nameAr: "العمارية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Balad", nameAr: "البلد", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Mazlum", nameAr: "المظلوم", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sham", nameAr: "الشام", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Yaman", nameAr: "اليمن", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Bahr", nameAr: "البحر", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Amir Fawaz South", nameAr: "الأمير فواز الجنوبي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Amir Fawaz North", nameAr: "الأمير فواز الشمالي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Amir Abdulmajid", nameAr: "الأمير عبد المجيد", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Adl", nameAr: "العدل", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Umm Al Silm", nameAr: "أم السلم", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Hudhayfat", nameAr: "الحذيفات", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Mursalat", nameAr: "المرسلات", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Ajawid", nameAr: "الأجاويد", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Khalid South", nameAr: "خالد الجنوبي", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Shifa", nameAr: "الشفا", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Fal", nameAr: "فال", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Jawharah", nameAr: "الجوهرة", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Sanabil", nameAr: "السنابل", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Suruuriyah", nameAr: "السرورية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Qurainiyah", nameAr: "القرينية", isActive: false },
+      { city: "Jeddah", cityAr: "جدة", nameEn: "Al Qawzain", nameAr: "القوزين", isActive: false },
+      // ─── Madinah additional districts ───
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "King Fahd", nameAr: "الملك فهد", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Rabwah", nameAr: "الربوة", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Sayyid Al Shuhada", nameAr: "سيد الشهداء", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Anabis", nameAr: "العنابس", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Sahman", nameAr: "السحمان", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Mustarah", nameAr: "المستراح", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Bahr", nameAr: "البحر", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Jubur", nameAr: "الجبور", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Nasr", nameAr: "النصر", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Anbariyah", nameAr: "العنبرية", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Awali", nameAr: "العوالي", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Manakhah", nameAr: "المناخة", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Aghwat", nameAr: "الأغوات", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Sahah", nameAr: "الساحة", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Zuqaq Al Tayyar", nameAr: "زقاق الطيار", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Harrah Al Sharqiyah", nameAr: "الحرة الشرقية", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Tajuri", nameAr: "التاجوري", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Bab Al Majidi", nameAr: "باب المجيدي", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Bab Al Shami", nameAr: "باب الشامي", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Harrah Al Gharbiyah", nameAr: "الحرة الغربية", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Jurf", nameAr: "الجرف", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Duwaymah", nameAr: "الدويمة", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Qiblatain", nameAr: "القبلتين", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Abyar Ali", nameAr: "أبيار علي", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Iskan", nameAr: "الاسكان", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Matar", nameAr: "المطار", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Bayda", nameAr: "البيداء", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Talat Al Hubub", nameAr: "تلعة الهبوب", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Mabuth", nameAr: "المبعوث", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Aqul", nameAr: "العاقول", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Khadra", nameAr: "الخضراء", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Wairah", nameAr: "وعيره", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Faisal", nameAr: "الفيصل", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Harrah Al Shamaliyah Al Sharqiyah", nameAr: "الحرة الشمالية الشرقية", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Qurban", nameAr: "قربان", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Munshiyah", nameAr: "المنشية", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Sih", nameAr: "السيح", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Wabrah", nameAr: "الوبرة", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Urwah", nameAr: "عروة", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Dakhl Al Mahdud", nameAr: "الدخل المحدود", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Usbah", nameAr: "العصبة", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Shawran", nameAr: "شوران", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Rayah", nameAr: "الراية", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Fath", nameAr: "الفتح", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Hamra", nameAr: "الحمراء", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Abu Markhah", nameAr: "أبو مرخه", isActive: false },
+      { city: "Madinah", cityAr: "المدينة المنورة", nameEn: "Al Masani", nameAr: "المصانع", isActive: false },
+    ];
+
+    // Filter out already existing districts
+    const newDistricts = additionalDistricts.filter(
+      (d) => !existingSet.has(`${d.nameAr}__${d.city}`)
+    );
+
+    if (newDistricts.length === 0) {
+      console.log("[Seed] Additional districts already seeded, skipping.");
+      return;
+    }
+
+    // Add cityId to each district
+    const toInsert = newDistricts.map((d) => ({
+      ...d,
+      cityId: cityIdMap.get(d.city) ?? null,
+    }));
+
+    // Insert in batches of 20
+    const batchSize = 20;
+    for (let i = 0; i < toInsert.length; i += batchSize) {
+      const batch = toInsert.slice(i, i + batchSize);
+      await db.insert(districts).values(batch as any[]);
+    }
+    console.log(`[Seed] ${newDistricts.length} additional districts added (inactive) for Riyadh, Jeddah, Madinah.`);
+  } catch (error) {
+    console.error("[Seed] Error seeding additional districts:", error);
   }
 }
