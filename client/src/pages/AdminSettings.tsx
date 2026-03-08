@@ -1264,6 +1264,28 @@ export default function AdminSettings() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Bank Page Image */}
+                  <div className="space-y-2">
+                    <Label>{lang === "ar" ? "صورة صفحة البنك" : "Bank Page Image"}</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {lang === "ar" ? "الصورة التي تظهر في صفحة مشاركة البنك (monthlykey.com/bank)" : "Image shown on the bank share page (monthlykey.com/bank)"}
+                    </p>
+                    <div className="flex items-center gap-4">
+                      {settings["bank.pageImage"] && (
+                        <img loading="lazy" src={settings["bank.pageImage"]} alt="Bank Page" className="h-16 w-16 object-contain rounded-xl border border-border" />
+                      )}
+                      <Button variant="outline" onClick={() => handleFileUpload("bank.pageImage")} disabled={!isCurrentUserRootAdmin}>
+                        <Upload className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
+                        {lang === "ar" ? "رفع صورة" : "Upload Image"}
+                      </Button>
+                      {settings["bank.pageImage"] && isCurrentUserRootAdmin && (
+                        <Button variant="ghost" size="sm" onClick={() => updateSetting("bank.pageImage", "")}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Bank Card 1 Preview */}
