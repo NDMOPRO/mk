@@ -1,4 +1,5 @@
 import { useI18n } from "@/lib/i18n";
+import DOMPurify from 'dompurify';
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -337,7 +338,7 @@ For any inquiries or requests regarding your personal data privacy, please conta
           </div>
         </div>
         <div className="prose prose-sm sm:prose-base max-w-none dark:prose-invert prose-headings:font-heading prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-table:text-sm">
-          <div dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }} />
+          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formatMarkdown(content)) }} />
         </div>
       </main>
       <Footer />

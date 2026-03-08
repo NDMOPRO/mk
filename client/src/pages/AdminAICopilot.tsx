@@ -1,5 +1,6 @@
 import SEOHead from "@/components/SEOHead";
 import { useI18n } from "@/lib/i18n";
+import DOMPurify from 'dompurify';
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import Navbar from "@/components/Navbar";
@@ -190,7 +191,7 @@ export default function AdminAICopilot() {
                     {msg.role === "assistant" ? (
                       <div
                         className="prose prose-sm dark:prose-invert max-w-none [&_p]:mb-2 [&_li]:mb-1"
-                        dangerouslySetInnerHTML={{ __html: simpleMarkdown(msg.content) }}
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(simpleMarkdown(msg.content)) }}
                       />
                     ) : (
                       msg.content

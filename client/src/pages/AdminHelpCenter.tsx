@@ -1,5 +1,6 @@
 import SEOHead from "@/components/SEOHead";
 import { useI18n } from "@/lib/i18n";
+import DOMPurify from 'dompurify';
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import Navbar from "@/components/Navbar";
@@ -131,7 +132,7 @@ export default function AdminHelpCenter() {
                       className="prose prose-sm dark:prose-invert max-w-none mt-4"
                       style={{ direction: lang === "ar" ? "rtl" : "ltr" }}
                       dangerouslySetInnerHTML={{
-                        __html: renderMarkdown(section.content),
+                        __html: DOMPurify.sanitize(renderMarkdown(section.content)),
                       }}
                     />
                   </CardContent>

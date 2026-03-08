@@ -592,7 +592,9 @@ export default function Home() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {}
+    } catch (e) {
+      console.warn('Failed to parse testimonials:', e);
+    }
     // Fallback: individual keys (backward compatible)
     return defaultTestimonials.map((def, idx) => {
       const i = idx + 1;
