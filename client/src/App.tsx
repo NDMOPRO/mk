@@ -72,6 +72,7 @@ const AdminBookings = lazy(() => import("./pages/AdminBookings"));
 const AdminAuditLog = lazy(() => import("./pages/AdminAuditLog"));
 const AdminCMS = lazy(() => import("./pages/AdminCMS"));
 const SubmitProperty = lazy(() => import("./pages/SubmitProperty"));
+const BankInfo = lazy(() => import("./pages/BankInfo"));
 
 function PageLoader() {
   return (
@@ -92,6 +93,7 @@ function Router() {
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/search" component={Search} />
         <Route path="/map" component={MapViewPage} />
+        <Route path="/bank" component={BankInfo} />
         <Route path="/property/:id" component={PropertyDetail} />
         <Route path="/list-property" component={CreateProperty} />
         <Route path="/edit-property/:id" component={CreateProperty} />
