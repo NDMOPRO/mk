@@ -21,6 +21,8 @@ export function normalizeImageUrl(url: string | null | undefined): string {
   if (url.startsWith("/")) return url;
   // R2 public URL — pass through (already publicly accessible)
   if (url.includes(".r2.dev/")) return url;
+  // CloudFront URL — pass through (already publicly accessible)
+  if (url.includes(".cloudfront.net/")) return url;
   // External URL (Unsplash, etc.) → proxy through our server to avoid hotlink blocking
   if (url.startsWith("http://") || url.startsWith("https://")) {
     return `/api/img-proxy?url=${encodeURIComponent(url)}`;
