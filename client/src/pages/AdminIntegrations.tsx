@@ -423,8 +423,15 @@ export default function AdminIntegrations() {
                 <FileText className="h-5 w-5" />
                 {isAr ? "سجل عمليات المزامنة" : "Sync Operation Logs"}
               </h2>
-              <Button variant="outline" size="sm" onClick={() => logsQuery.refetch()}>
-                <RefreshCw className="h-3.5 w-3.5" /> {isAr ? "تحديث" : "Refresh"}
+              <Button variant="outline" size="sm" disabled={logsQuery.isFetching} onClick={async () => {
+                try {
+                  await logsQuery.refetch();
+                  toast.success(isAr ? "تم تحديث السجلات بنجاح" : "Logs refreshed successfully");
+                } catch {
+                  toast.error(isAr ? "فشل في تحديث السجلات" : "Failed to refresh logs");
+                }
+              }}>
+                <RefreshCw className={`h-3.5 w-3.5 ${logsQuery.isFetching ? "animate-spin" : ""}`} /> {isAr ? "تحديث" : "Refresh"}
               </Button>
             </div>
 
