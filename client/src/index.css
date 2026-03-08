@@ -574,8 +574,17 @@
 /* Auto-reverse ALL horizontal flex containers in RTL mode within .rtl-dashboard.
    This catches all flex rows without needing individual class-based overrides.
    Scoped to .rtl-dashboard to avoid breaking public pages (Home, Search, etc.) */
-[dir="rtl"] .rtl-dashboard .flex:not(.flex-col):not(.flex-col-reverse):not([class*="flex-col"]) {
+[dir="rtl"] .rtl-dashboard .flex:not(.flex-col):not(.flex-col-reverse):not([class*="flex-col"]):not([data-slot="sidebar-wrapper"]):not([data-slot="sidebar-container"]):not([data-slot="sidebar-gap"]) {
   flex-direction: row-reverse;
+}
+
+/* Sidebar wrapper must keep normal flex direction — the sidebar component
+   handles RTL positioning via data-side="right" internally */
+[dir="rtl"] .rtl-dashboard [data-slot="sidebar-wrapper"] {
+  flex-direction: row !important;
+}
+[dir="rtl"] .rtl-dashboard [data-slot="sidebar-container"] {
+  flex-direction: column !important;
 }
 
 /* Inline-flex elements (badges, buttons with icons) also reverse */
