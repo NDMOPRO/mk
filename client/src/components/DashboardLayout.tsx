@@ -167,7 +167,7 @@ export default function DashboardLayout({
   const sidebarSide = lang === "ar" ? "right" : "left";
 
   return (
-    <div dir={dir}>
+    <div dir={dir} className="rtl-dashboard">
       <SidebarProvider
         style={
           {

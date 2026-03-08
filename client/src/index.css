@@ -570,9 +570,50 @@
   text-align: right;
 }
 
-/* ── Tenant dashboard: force all row-flex containers to reverse ── */
-[dir="rtl"] .rtl-row {
+/* ═══ UNIVERSAL RTL FLEX REVERSAL (Dashboard Scoped) ═══ */
+/* Auto-reverse ALL horizontal flex containers in RTL mode within .rtl-dashboard.
+   This catches all flex rows without needing individual class-based overrides.
+   Scoped to .rtl-dashboard to avoid breaking public pages (Home, Search, etc.) */
+[dir="rtl"] .rtl-dashboard .flex:not(.flex-col):not(.flex-col-reverse):not([class*="flex-col"]) {
   flex-direction: row-reverse;
+}
+
+/* Inline-flex elements (badges, buttons with icons) also reverse */
+[dir="rtl"] .rtl-dashboard .inline-flex:not(.flex-col) {
+  flex-direction: row-reverse;
+}
+
+/* Restore column direction explicitly — prevent accidental reversal */
+[dir="rtl"] .rtl-dashboard .flex.flex-col {
+  flex-direction: column !important;
+}
+[dir="rtl"] .rtl-dashboard .flex.flex-col-reverse {
+  flex-direction: column-reverse !important;
+}
+
+/* sm:flex-row should also reverse in RTL within dashboard */
+@media (min-width: 640px) {
+  [dir="rtl"] .rtl-dashboard .sm\:flex-row {
+    flex-direction: row-reverse !important;
+  }
+}
+@media (min-width: 768px) {
+  [dir="rtl"] .rtl-dashboard .md\:flex-row {
+    flex-direction: row-reverse !important;
+  }
+}
+@media (min-width: 1024px) {
+  [dir="rtl"] .rtl-dashboard .lg\:flex-row {
+    flex-direction: row-reverse !important;
+  }
+}
+
+/* Preserve flex-wrap behavior in RTL dashboard */
+[dir="rtl"] .rtl-dashboard .flex-wrap {
+  flex-wrap: wrap-reverse;
+}
+[dir="rtl"] .rtl-dashboard .flex-wrap-reverse {
+  flex-wrap: wrap;
 }
 
 /* ── Tabs: reverse tab order and icon position ── */
@@ -632,10 +673,7 @@
   text-align: left;
 }
 
-/* ── Card header row: booking info + amount ── */
-[dir="rtl"] .booking-header-row {
-  flex-direction: row-reverse;
-}
+/* ── Booking amount text alignment in RTL ── */
 [dir="rtl"] .booking-header-row .booking-amount {
   text-align: left;
 }
@@ -643,64 +681,14 @@
   text-align: right;
 }
 
-/* ── Payment row: info + amount ── */
-[dir="rtl"] .payment-row {
+/* ── Keep specific elements from double-reversing ── */
+/* Navigation bar should keep its own layout */
+[dir="rtl"] nav .flex {
   flex-direction: row-reverse;
 }
-
-/* ── Invoice row: code + amount ── */
-[dir="rtl"] .invoice-row {
-  flex-direction: row-reverse;
-}
-
-/* ── Maintenance row: title + priority ── */
-[dir="rtl"] .maintenance-row {
-  flex-direction: row-reverse;
-}
-
-/* ── Notification row: dot + content ── */
-[dir="rtl"] .notification-row {
-  flex-direction: row-reverse;
-}
-
-/* ── Service row: info + price ── */
-[dir="rtl"] .service-row {
-  flex-direction: row-reverse;
-}
-
-/* ── Emergency row: info + badges ── */
-[dir="rtl"] .emergency-row {
-  flex-direction: row-reverse;
-}
-
-/* ── Alert/CTA rows with icon + text ── */
-[dir="rtl"] .alert-row {
-  flex-direction: row-reverse;
-}
-
-/* ── Badge/tag rows ── */
-[dir="rtl"] .badge-row {
-  flex-direction: row-reverse;
-}
-
-/* ── Section header rows (icon + label) ── */
-[dir="rtl"] .section-header-row {
-  flex-direction: row-reverse;
-}
-
-/* ── Profile info rows ── */
-[dir="rtl"] .profile-row {
-  flex-direction: row-reverse;
-}
-
-/* ── ID document row ── */
-[dir="rtl"] .doc-row {
-  flex-direction: row-reverse;
-}
-
-/* ── My requests row ── */
-[dir="rtl"] .request-row {
-  flex-direction: row-reverse;
+/* Grid columns should not be affected */
+[dir="rtl"] .grid {
+  direction: rtl;
 }
 
 /* ═══ Mobile FAB Stacking Rules ═══ */

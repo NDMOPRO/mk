@@ -162,7 +162,7 @@ export default function TenantDashboard() {
   if (!isAuthenticated) { window.location.href = getLoginUrl(); return null; }
 
   return (
-    <div className="min-h-screen flex flex-col" dir={dir}>
+    <div className="min-h-screen flex flex-col rtl-dashboard" dir={dir}>
       <SEOHead title={isAr ? "لوحة المستأجر" : "Tenant Dashboard"} titleAr="لوحة المستأجر" path="/tenant" noindex={true} />
       <Navbar />
       <div className="container py-6">
@@ -241,7 +241,7 @@ export default function TenantDashboard() {
                           <span>{isAr ? "الجدول الزمني" : "Timeline"}</span>
                         </div>
                         {/* UI Fix [3] — Stop timeline at rejection point */}
-                        <div className={`flex items-center gap-1 flex-wrap ${isAr ? "flex-row-reverse" : ""}`}>
+                        <div className="flex items-center gap-1 flex-wrap">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${b.status === "pending" || b.status === "approved" || b.status === "active" || b.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
                             {isAr ? "تم الطلب" : "Requested"}
                           </span>
