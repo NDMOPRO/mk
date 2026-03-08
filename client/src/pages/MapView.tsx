@@ -339,7 +339,7 @@ export default function MapViewPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <SEOHead title="Map View | المفتاح الشهري - Monthly Key" />
+      <SEOHead title="Property Map" titleAr="خريطة العقارات" description="Explore available rental properties on the interactive map" descriptionAr="استكشف العقارات المتاحة للإيجار على الخريطة التفاعلية" path="/map" />
       <Navbar />
 
       {/* Header bar */}

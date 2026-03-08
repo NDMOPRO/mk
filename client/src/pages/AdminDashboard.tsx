@@ -35,7 +35,7 @@ import {
 import { Link } from "wouter";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { HardDrive } from "lucide-react";
 
 // Storage warning banner
@@ -105,11 +105,14 @@ export default function AdminDashboard() {
   const [userRoleFilter, setUserRoleFilter] = useState("all");
   const [roleChangeUser, setRoleChangeUser] = useState<{ id: number; name: string; currentRole: string } | null>(null);
   const [newRole, setNewRole] = useState("");
-  const searchTimeoutRef = useState<ReturnType<typeof setTimeout> | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
+  }, []);
   const handleUserSearch = (val: string) => {
     setUserSearch(val);
-    if (searchTimeoutRef[0]) clearTimeout(searchTimeoutRef[0]);
-    searchTimeoutRef[1](setTimeout(() => setUserSearchDebounced(val), 400));
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => setUserSearchDebounced(val), 400);
   };
 
   const stats = trpc.admin.stats.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });

@@ -476,7 +476,10 @@ function HeroSearchBar({ lang, cities, onSearch }: {
             <button
               key={cityName}
               type="button"
+              disabled={isComingSoon}
               onClick={() => { if (!isComingSoon) { setCity(cityEn); onSearch("", cityEn, "", ""); } }}
+              title={isComingSoon ? (lang === "ar" ? "قريباً" : "Coming Soon") : undefined}
+              aria-label={isComingSoon ? `${lang === "ar" ? cityName : cityEn} - ${lang === "ar" ? "قريباً" : "Coming Soon"}` : (lang === "ar" ? cityName : cityEn)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 backdrop-blur-sm ${
                 isComingSoon
                   ? "bg-white/5 text-white/40 border-white/5 cursor-not-allowed"

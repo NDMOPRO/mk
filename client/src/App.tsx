@@ -185,7 +185,10 @@ function App() {
           <TooltipProvider>
             <Toaster />
             <MaintenanceGate>
-              <Router />
+              <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:bg-[#3ECFC0] focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg focus:text-sm focus:font-medium">تخطي إلى المحتوى الرئيسي</a>
+              <main id="main-content">
+                <Router />
+              </main>
               <AiAssistant />
               <WhatsAppButton />
               <CookieConsent />

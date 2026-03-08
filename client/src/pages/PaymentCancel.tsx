@@ -16,7 +16,7 @@ export default function PaymentCancel() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <SEOHead title="Payment Cancelled | المفتاح الشهري - Monthly Key" />
+      <SEOHead title="Payment Cancelled" titleAr="تم إلغاء الدفع" description="Payment was cancelled" descriptionAr="تم إلغاء عملية الدفع" noindex />
       <Navbar />
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="max-w-md w-full">

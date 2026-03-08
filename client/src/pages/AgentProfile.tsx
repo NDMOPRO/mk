@@ -43,7 +43,7 @@ export default function AgentProfile() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col">
-      <SEOHead title="Agent Profile | المفتاح الشهري - Monthly Key" />
+      <SEOHead title="Agent Profile" titleAr="ملف الوكيل العقاري" description="View real estate agent profile and listings" descriptionAr="تعرف على وكلاء العقارات المعتمدين" />
         <Navbar />
         <div className="container py-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -52,7 +52,7 @@ export default function PaymentSuccess() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <SEOHead title="Payment Successful | المفتاح الشهري - Monthly Key" />
+      <SEOHead title="Payment Successful" titleAr="تم الدفع بنجاح" description="Payment confirmation" descriptionAr="تأكيد الدفع الناجح" noindex />
       <Navbar />
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
