@@ -341,7 +341,7 @@ function SubmissionDetailDialog({ id, open, onClose, onRefresh, onConvert }: {
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-3xl max-h-[92vh] p-0 overflow-hidden">
+        <DialogContent className="max-w-3xl max-h-[92vh] p-0 overflow-hidden flex flex-col">
           <DialogHeader className="px-6 pt-5 pb-0">
             <div className="flex items-center justify-between">
               <div>
@@ -361,7 +361,7 @@ function SubmissionDetailDialog({ id, open, onClose, onRefresh, onConvert }: {
 
           <Separator className="mt-4" />
 
-          <ScrollArea className="max-h-[calc(92vh-180px)]">
+          <ScrollArea className="flex-1 overflow-auto">
             {isLoading ? (
               <div className="space-y-4 p-6">
                 <Skeleton className="h-6 w-48" />
@@ -559,7 +559,7 @@ function SubmissionDetailDialog({ id, open, onClose, onRefresh, onConvert }: {
 
           {/* ═══ Footer Actions ═══ */}
           {data && (
-            <>
+            <div className="flex-shrink-0">
               <Separator />
               <div className="px-6 py-4 flex flex-wrap items-center gap-2 bg-muted/20">
                 {/* Status Actions */}
@@ -628,7 +628,7 @@ function SubmissionDetailDialog({ id, open, onClose, onRefresh, onConvert }: {
                   </Badge>
                 )}
               </div>
-            </>
+            </div>
           )}
         </DialogContent>
       </Dialog>
