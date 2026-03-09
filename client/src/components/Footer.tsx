@@ -99,7 +99,7 @@ export default function Footer() {
               <h4 className="font-heading font-semibold text-sm mb-4 text-white/80 uppercase tracking-wider">{t("footer.quickLinks")}</h4>
               <ul className="space-y-2.5 text-xs text-white/75">
                 <li><Link href="/search" className="hover:text-[#3ECFC0] transition-colors inline-flex items-center gap-1">{t("nav.search")}</Link></li>
-                <li><Link href="/list-property" className="hover:text-[#3ECFC0] transition-colors inline-flex items-center gap-1">{t("nav.listProperty")}</Link></li>
+                <li><Link href="/submit-property" className="hover:text-[#3ECFC0] transition-colors inline-flex items-center gap-1">{t("nav.listProperty")}</Link></li>
                 <li><Link href="/" className="hover:text-[#3ECFC0] transition-colors inline-flex items-center gap-1">{t("nav.home")}</Link></li>
               </ul>
             </div>

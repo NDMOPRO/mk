@@ -113,7 +113,7 @@ export default function LandlordDashboard() {
               {lang === "ar" ? `مرحباً، ${user?.name || ""}` : `Welcome, ${user?.name || ""}`}
             </p>
           </div>
-          <Button onClick={() => setLocation("/list-property")} className="bg-[#3ECFC0] text-[#0B1E2D] hover:bg-[#2ab5a6] btn-animate border-0 font-semibold">
+          <Button onClick={() => setLocation("/submit-property")} className="bg-[#3ECFC0] text-[#0B1E2D] hover:bg-[#2ab5a6] btn-animate border-0 font-semibold">
             <Plus className="h-4 w-4 me-1.5" />
             {t("nav.listProperty")}
           </Button>
@@ -190,7 +190,7 @@ export default function LandlordDashboard() {
               <Card className="p-12 text-center">
                 <Building2 className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                 <p className="text-muted-foreground">{lang === "ar" ? "لم تضف أي عقارات بعد" : "No properties listed yet"}</p>
-                <Button className="mt-4 bg-[#3ECFC0] text-[#0B1E2D] hover:bg-[#2ab5a6] btn-animate border-0 font-semibold" onClick={() => setLocation("/list-property")}>{t("nav.listProperty")}</Button>
+                <Button className="mt-4 bg-[#3ECFC0] text-[#0B1E2D] hover:bg-[#2ab5a6] btn-animate border-0 font-semibold" onClick={() => setLocation("/submit-property")}>{t("nav.listProperty")}</Button>
               </Card>
             )}
           </TabsContent>

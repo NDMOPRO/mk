@@ -399,7 +399,7 @@ export default function Navbar() {
 
             {/* List Property CTA */}
             {isAuthenticated && (
-              <Link href="/list-property" className="hidden lg:block">
+              <Link href="/submit-property" className="hidden lg:block">
                 <Button size="sm" className="bg-[#3ECFC0] text-[#0B1E2D] hover:bg-[#2ab5a6] border-0 font-semibold btn-animate">
                   <Plus className="h-4 w-4 me-1.5" />
                   {t("nav.listProperty")}
@@ -427,7 +427,7 @@ export default function Navbar() {
                     <LayoutDashboard className="h-4 w-4 me-2" />
                     {t("nav.dashboard")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => window.location.href = "/list-property"}>
+                  <DropdownMenuItem onClick={() => window.location.href = "/submit-property"}>
                     <Plus className="h-4 w-4 me-2" />
                     {t("nav.listProperty")}
                   </DropdownMenuItem>
@@ -502,7 +502,7 @@ export default function Navbar() {
                 </Link>
                 {/* List property — only for landlord role; tenants use footer/menu link */}
                 {user?.role === "landlord" && (
-                  <Link href="/list-property" onClick={() => setMobileMenuOpen(false)}>
+                  <Link href="/submit-property" onClick={() => setMobileMenuOpen(false)}>
                     <Button variant="ghost" className={`w-full ${lang === "ar" ? "justify-end" : "justify-start"} text-white/90 hover:text-white hover:bg-white/10`}>
                       <Plus className="h-4 w-4 me-2" />
                       {t("nav.listProperty")}

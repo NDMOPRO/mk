@@ -95,7 +95,8 @@ function Router() {
         <Route path="/map" component={MapViewPage} />
         <Route path="/bank" component={BankInfo} />
         <Route path="/property/:id" component={PropertyDetail} />
-        <Route path="/list-property" component={CreateProperty} />
+        {/* Redirect old /list-property to new /submit-property */}
+        <Route path="/list-property">{() => { useEffect(() => { window.location.replace("/submit-property"); }, []); return <PageLoader />; }}</Route>
         <Route path="/edit-property/:id" component={CreateProperty} />
         <Route path="/tenant" component={TenantDashboard} />
         <Route path="/landlord" component={LandlordDashboard} />
