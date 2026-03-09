@@ -197,7 +197,7 @@ export default function Register() {
       return;
     }
 
-    if (form.password.length < 12) {
+    if (form.password.length < 7) {
       setError(t("auth.passwordTooShort"));
       return;
     }
@@ -509,7 +509,7 @@ export default function Register() {
                       type={showPassword ? "text" : "password"}
                       value={form.password}
                       onChange={(e) => update("password", e.target.value)}
-                      placeholder={lang === "ar" ? "12 حرف على الأقل" : "At least 12 characters"}
+                      placeholder={lang === "ar" ? "7 أحرف على الأقل" : "At least 7 characters"}
                       required
                       className={`h-10 pe-10 ${lang === "ar" ? "text-right" : "text-left"}`}
                     />

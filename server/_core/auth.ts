@@ -7,7 +7,7 @@
  * Authentication events are logged for auditing.
  *
  * Security hardening (2026-02-26):
- * - Password policy: 12+ chars, uppercase, lowercase, digit, special char
+ * - Password policy: 7+ chars, uppercase, lowercase, digit, special char
  * - Session TTL: 30 min in production (configurable via SESSION_TTL_MS)
  * - JWT fail-fast: server refuses to start without strong JWT_SECRET in production
  */
@@ -35,11 +35,11 @@ export interface PasswordValidationResult {
 }
 
 export function validatePassword(password: string): PasswordValidationResult {
-  if (password.length < 12) {
+  if (password.length < 7) {
     return {
       valid: false,
-      error: "Password must be at least 12 characters",
-      errorAr: "كلمة المرور يجب أن تكون 12 حرفاً على الأقل",
+      error: "Password must be at least 7 characters",
+      errorAr: "كلمة المرور يجب أن تكون 7 أحرف على الأقل",
     };
   }
   if (!/[A-Z]/.test(password)) {
@@ -199,7 +199,7 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      // Enforce 12+ char password with complexity requirements
+      // Enforce 7+ char password with complexity requirements
       const pwCheck = validatePassword(password);
       if (!pwCheck.valid) {
         res.status(400).json({ error: pwCheck.error, errorAr: pwCheck.errorAr });
@@ -305,7 +305,7 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      // Enforce 12+ char password with complexity requirements
+      // Enforce 7+ char password with complexity requirements
       const pwCheck = validatePassword(newPassword);
       if (!pwCheck.valid) {
         res.status(400).json({ error: pwCheck.error, errorAr: pwCheck.errorAr });
@@ -604,7 +604,7 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      // Enforce 12+ char password with complexity requirements
+      // Enforce 7+ char password with complexity requirements
       const pwCheck = validatePassword(password);
       if (!pwCheck.valid) {
         res.status(400).json({ error: pwCheck.error, errorAr: pwCheck.errorAr });
