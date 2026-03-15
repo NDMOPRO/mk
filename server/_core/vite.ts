@@ -6,11 +6,9 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
 import { prerenderMiddleware } from "../middleware/prerender";
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
 import { eq } from "drizzle-orm";
 import { integrationConfigs } from "../../drizzle/schema";
-import { ENV } from "./env";
+import { getDb } from "../db";
 
 // ── GA4 measurement ID cache (loaded from DB, refreshed every 5 min) ──
 let ga4MeasurementId: string = '';
@@ -20,11 +18,11 @@ async function getGA4MeasurementId(): Promise<string> {
   const now = Date.now();
   if (ga4MeasurementId && now < ga4CacheExpiry) return ga4MeasurementId;
   try {
-    const pool = mysql.createPool(ENV.databaseUrl);
-    const db = drizzle(pool);
+    // Reuse the shared DB connection instead of creating a new pool each time
+    const db = await getDb();
+    if (!db) return ga4MeasurementId; // DB not ready yet, return cached/empty
     const [row] = await db.select().from(integrationConfigs)
       .where(eq(integrationConfigs.integrationKey, 'ga4'));
-    await pool.end();
     if (row?.isEnabled && row.configJson) {
       const config = JSON.parse(row.configJson);
       ga4MeasurementId = config.measurementId || '';
