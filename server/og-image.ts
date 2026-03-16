@@ -3,7 +3,7 @@
  * 
  * Generates premium 1200x630 Open Graph images using Sharp + SVG overlay.
  * Two types:
- *   1. Homepage: branded hero with logo prominently centered, tagline, and property types
+ *   1. Homepage: branded hero with logo + Arabic/English name in navbar style
  *   2. Property: property photo background with dark overlay + text details
  * 
  * Arabic text is rendered via system Noto Sans Arabic font.
@@ -71,9 +71,22 @@ function truncate(str: string, max: number): string {
   return str.length > max ? str.substring(0, max) + "..." : str;
 }
 
-/** Resolve the logo path (works in both dev and production) */
-function getLogoPath(): string {
-  // Try multiple locations
+/** Resolve the logo SVG path (works in both dev and production) */
+function getLogoSvgPath(): string {
+  const candidates = [
+    path.resolve(process.cwd(), "client/public/assets/brand/mk-logo-transparent.svg"),
+    path.resolve(import.meta.dirname, "../client/public/assets/brand/mk-logo-transparent.svg"),
+    path.resolve(import.meta.dirname, "public/assets/brand/mk-logo-transparent.svg"),
+    path.resolve(process.cwd(), "dist/public/assets/brand/mk-logo-transparent.svg"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return candidates[0];
+}
+
+/** Resolve the logo PNG path (fallback) */
+function getLogoPngPath(): string {
   const candidates = [
     path.resolve(process.cwd(), "client/public/logo-mark-light.png"),
     path.resolve(import.meta.dirname, "../client/public/logo-mark-light.png"),
@@ -83,83 +96,152 @@ function getLogoPath(): string {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
-  return candidates[0]; // fallback
+  return candidates[0];
 }
 
 /**
  * Generate the homepage OG image
- * Premium branded design matching the silver logo style:
- * - Large silver/white logo centered at top
- * - Arabic name "المفتاح الشهري" in large white bold text
- * - English name "MONTHLY KEY" in silver/light gray below
- * - Clean dark navy background
+ * Premium branded design matching the navbar style:
+ * - Dark navy background with subtle gradient
+ * - MK key logo centered with glow effect
+ * - Arabic name "المفتاح الشهري" in elegant white text
+ * - "MONTHLY KEY" in teal accent below
+ * - Tagline and property type pills
+ * - Gold accent line separator
+ * - Clean, modern, premium feel
  */
 export async function generateHomepageOG(): Promise<Buffer> {
-  const cacheKey = "og:homepage";
+  const cacheKey = "og:homepage:v3";
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  // Load and resize logo — large and prominently centered
+  // Load logo — try SVG first, then PNG fallback
   let logoComposite: sharp.OverlayOptions[] = [];
+  const logoSize = 160;
   try {
-    const logoPath = getLogoPath();
-    if (fs.existsSync(logoPath)) {
-      const logoBuf = await sharp(logoPath)
-        .resize(200, 200, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    const svgPath = getLogoSvgPath();
+    const pngPath = getLogoPngPath();
+    
+    if (fs.existsSync(svgPath)) {
+      const svgContent = fs.readFileSync(svgPath, "utf-8");
+      const logoBuf = await sharp(Buffer.from(svgContent))
+        .resize(logoSize, logoSize, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png()
         .toBuffer();
-      // Center the logo horizontally, position at top
-      logoComposite = [{ input: logoBuf, top: 60, left: Math.round((WIDTH - 200) / 2) }];
+      logoComposite = [{ input: logoBuf, top: 50, left: Math.round((WIDTH - logoSize) / 2) }];
+    } else if (fs.existsSync(pngPath)) {
+      const logoBuf = await sharp(pngPath)
+        .resize(logoSize, logoSize, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer();
+      logoComposite = [{ input: logoBuf, top: 50, left: Math.round((WIDTH - logoSize) / 2) }];
     }
   } catch (e) {
     console.warn("[OG] Logo load failed:", e);
   }
 
+  // Property type pills
+  const pills = ["شقق مفروشة", "استوديوهات", "فلل", "دوبلكس", "شقق فندقية"];
+  const pillWidth = 130;
+  const pillGap = 14;
+  const totalPillsWidth = pills.length * pillWidth + (pills.length - 1) * pillGap;
+  const pillStartX = (WIDTH - totalPillsWidth) / 2;
+  const pillY = 460;
+
+  const pillsSvg = pills.map((pill, i) => {
+    const x = pillStartX + i * (pillWidth + pillGap);
+    return [
+      `<rect x="${x}" y="${pillY}" width="${pillWidth}" height="34" rx="17" fill="#3ECFC0" opacity="0.12"/>`,
+      `<rect x="${x}" y="${pillY}" width="${pillWidth}" height="34" rx="17" fill="none" stroke="#3ECFC0" stroke-width="0.8" opacity="0.3"/>`,
+      `<text x="${x + pillWidth / 2}" y="${pillY + 23}" text-anchor="middle" font-size="15" fill="#3ECFC0" font-family="'Noto Sans Arabic', 'Cairo', sans-serif" font-weight="600">${esc(pill)}</text>`,
+    ].join("");
+  }).join("");
+
+  // Dot separators between pills
+  const dotsSvg = pills.slice(0, -1).map((_, i) => {
+    const x = pillStartX + (i + 1) * pillWidth + i * pillGap + pillGap / 2;
+    return `<circle cx="${x}" cy="${pillY + 17}" r="2.5" fill="#3ECFC0" opacity="0.5"/>`;
+  }).join("");
+
   const svg = [
     `<svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">`,
     `<defs>`,
-    // Deep dark navy background — clean and premium
-    `<linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">`,
-    `<stop offset="0%" style="stop-color:#0B1929;stop-opacity:1" />`,
-    `<stop offset="100%" style="stop-color:#0E1E33;stop-opacity:1" />`,
+    // Premium dark navy background gradient
+    `<linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">`,
+    `<stop offset="0%" style="stop-color:#071420;stop-opacity:1" />`,
+    `<stop offset="35%" style="stop-color:#0B1E2D;stop-opacity:1" />`,
+    `<stop offset="65%" style="stop-color:#0D2236;stop-opacity:1" />`,
+    `<stop offset="100%" style="stop-color:#091A28;stop-opacity:1" />`,
     `</linearGradient>`,
-    // Silver/white gradient for text accents
-    `<linearGradient id="silver" x1="0%" y1="0%" x2="100%" y2="0%">`,
-    `<stop offset="0%" style="stop-color:#A0AEC0;stop-opacity:0" />`,
-    `<stop offset="30%" style="stop-color:#CBD5E0;stop-opacity:0.5" />`,
-    `<stop offset="50%" style="stop-color:#E2E8F0;stop-opacity:0.8" />`,
-    `<stop offset="70%" style="stop-color:#CBD5E0;stop-opacity:0.5" />`,
-    `<stop offset="100%" style="stop-color:#A0AEC0;stop-opacity:0" />`,
-    `</linearGradient>`,
-    // Subtle glow behind logo
-    `<radialGradient id="glow" cx="50%" cy="35%" r="25%">`,
-    `<stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.04" />`,
-    `<stop offset="100%" style="stop-color:#ffffff;stop-opacity:0" />`,
+    // Subtle radial glow behind logo
+    `<radialGradient id="logoGlow" cx="50%" cy="25%" r="30%">`,
+    `<stop offset="0%" style="stop-color:#3ECFC0;stop-opacity:0.06" />`,
+    `<stop offset="50%" style="stop-color:#3ECFC0;stop-opacity:0.02" />`,
+    `<stop offset="100%" style="stop-color:#3ECFC0;stop-opacity:0" />`,
     `</radialGradient>`,
+    // Gold gradient for separator
+    `<linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="0%">`,
+    `<stop offset="0%" style="stop-color:#C5A55A;stop-opacity:0" />`,
+    `<stop offset="20%" style="stop-color:#C5A55A;stop-opacity:0.6" />`,
+    `<stop offset="50%" style="stop-color:#D4B96E;stop-opacity:1" />`,
+    `<stop offset="80%" style="stop-color:#C5A55A;stop-opacity:0.6" />`,
+    `<stop offset="100%" style="stop-color:#C5A55A;stop-opacity:0" />`,
+    `</linearGradient>`,
+    // Silver gradient for text
+    `<linearGradient id="silverText" x1="0%" y1="0%" x2="0%" y2="100%">`,
+    `<stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />`,
+    `<stop offset="100%" style="stop-color:#C0C8D0;stop-opacity:1" />`,
+    `</linearGradient>`,
     `</defs>`,
 
     // Background
     `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>`,
 
-    // Subtle glow behind logo area
-    `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glow)"/>`,
+    // Subtle radial glow
+    `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#logoGlow)"/>`,
 
-    // Space for logo (composited separately) — logo at y=60 to y=260
+    // Very subtle border frame
+    `<rect x="30" y="25" width="${WIDTH - 60}" height="${HEIGHT - 50}" rx="12" fill="none" stroke="#3ECFC0" stroke-width="0.5" opacity="0.08"/>`,
 
-    // Arabic brand name — large, bold, white, prominent
-    `<text x="${WIDTH / 2}" y="360" text-anchor="middle" font-size="90" font-weight="900" fill="#FFFFFF" font-family="Noto Sans Arabic">${esc("المفتاح الشهري")}</text>`,
+    // Space for logo composite (y=50 to y=210)
 
-    // Thin silver separator line
-    `<rect x="${WIDTH / 2 - 60}" y="390" width="120" height="1.5" fill="url(#silver)"/>`,
+    // Gold separator line below logo
+    `<rect x="${WIDTH / 2 - 80}" y="225" width="160" height="2" rx="1" fill="url(#gold)"/>`,
 
-    // English brand name — silver/light gray, elegant spacing
-    `<text x="${WIDTH / 2}" y="440" text-anchor="middle" font-size="28" fill="#A0AEC0" font-family="Noto Sans" letter-spacing="12" font-weight="500">MONTHLY KEY</text>`,
+    // Arabic brand name — large, elegant, white with slight gradient
+    `<text x="${WIDTH / 2}" y="295" text-anchor="middle" font-size="72" font-weight="800" fill="url(#silverText)" font-family="'Noto Sans Arabic', 'Cairo', 'Tajawal', sans-serif">${esc("المفتاح الشهري")}</text>`,
 
-    // Tagline — subtle, below
-    `<text x="${WIDTH / 2}" y="500" text-anchor="middle" font-size="22" fill="#5A6E85" font-family="Noto Sans Arabic" font-weight="400">${esc("منصة التأجير الشهري الرائدة في السعودية")}</text>`,
+    // English brand name — teal accent, wide letter spacing
+    `<text x="${WIDTH / 2}" y="340" text-anchor="middle" font-size="22" fill="#3ECFC0" font-family="'Inter', 'DM Sans', 'Noto Sans', sans-serif" letter-spacing="10" font-weight="600">MONTHLY KEY</text>`,
 
-    // Website URL — bottom center
-    `<text x="${WIDTH / 2}" y="${HEIGHT - 30}" text-anchor="middle" font-size="14" fill="#3A4F66" font-family="Noto Sans" letter-spacing="3" font-weight="400">monthlykey.com</text>`,
+    // Thin separator
+    `<rect x="${WIDTH / 2 - 40}" y="365" width="80" height="1" rx="0.5" fill="#3ECFC0" opacity="0.3"/>`,
+
+    // Tagline — Arabic
+    `<text x="${WIDTH / 2}" y="405" text-anchor="middle" font-size="24" fill="#8899AA" font-family="'Noto Sans Arabic', 'Cairo', sans-serif" font-weight="500">${esc("منصة التأجير الشهري الرائدة في السعودية")}</text>`,
+
+    // Property type pills
+    pillsSvg,
+    dotsSvg,
+
+    // Bottom section — English tagline
+    `<text x="${WIDTH / 2}" y="540" text-anchor="middle" font-size="16" fill="#4A6070" font-family="'Inter', 'Noto Sans', sans-serif" letter-spacing="3" font-weight="400">Monthly Key — Premium Monthly Rentals in Saudi Arabia</text>`,
+
+    // Bottom gold accent line
+    `<rect x="${WIDTH / 2 - 100}" y="${HEIGHT - 25}" width="200" height="2" rx="1" fill="url(#gold)" opacity="0.6"/>`,
+
+    // Bottom corner dots (decorative)
+    `<circle cx="50" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+    `<circle cx="62" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+    `<circle cx="74" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+    `<circle cx="86" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+    `<circle cx="98" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+
+    `<circle cx="${WIDTH - 50}" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+    `<circle cx="${WIDTH - 62}" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+    `<circle cx="${WIDTH - 74}" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+    `<circle cx="${WIDTH - 86}" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
+    `<circle cx="${WIDTH - 98}" cy="${HEIGHT - 40}" r="3" fill="#3ECFC0" opacity="0.15"/>`,
 
     `</svg>`,
   ].join("");
@@ -260,13 +342,19 @@ export async function generatePropertyOG(prop: PropertyOGData): Promise<Buffer> 
 
   let logoComposite: sharp.OverlayOptions[] = [];
   try {
-    const logoPath = getLogoPath();
+    const svgPath = getLogoSvgPath();
+    const pngPath = getLogoPngPath();
+    const logoPath = fs.existsSync(svgPath) ? svgPath : pngPath;
+    
     if (fs.existsSync(logoPath)) {
-      const logoBuf = await sharp(logoPath)
-        .resize(60, 60, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      const inputBuf = logoPath.endsWith(".svg") 
+        ? Buffer.from(fs.readFileSync(logoPath, "utf-8"))
+        : fs.readFileSync(logoPath);
+      const logoBuf = await sharp(inputBuf)
+        .resize(50, 50, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png()
         .toBuffer();
-      logoComposite = [{ input: logoBuf, top: HEIGHT - 80, left: WIDTH - 80 }];
+      logoComposite = [{ input: logoBuf, top: HEIGHT - 70, left: WIDTH - 70 }];
     }
   } catch {}
 
@@ -276,24 +364,24 @@ export async function generatePropertyOG(prop: PropertyOGData): Promise<Buffer> 
     `<rect x="0" y="0" width="${WIDTH}" height="5" fill="#3ECFC0"/>`,
     // Property type badge
     `<rect x="40" y="40" width="${typeAr.length * 22 + 40}" height="44" rx="22" fill="#3ECFC0" opacity="0.9"/>`,
-    `<text x="${40 + (typeAr.length * 22 + 40) / 2}" y="68" text-anchor="middle" font-size="20" font-weight="bold" fill="#0A1628" font-family="Noto Sans Arabic">${esc(typeAr)}</text>`,
+    `<text x="${40 + (typeAr.length * 22 + 40) / 2}" y="68" text-anchor="middle" font-size="20" font-weight="bold" fill="#0A1628" font-family="'Noto Sans Arabic', 'Cairo', sans-serif">${esc(typeAr)}</text>`,
     // Title
-    `<text x="${WIDTH / 2}" y="240" text-anchor="middle" font-size="52" font-weight="bold" fill="#ffffff" font-family="Noto Sans Arabic">${esc(title)}</text>`,
+    `<text x="${WIDTH / 2}" y="240" text-anchor="middle" font-size="52" font-weight="bold" fill="#ffffff" font-family="'Noto Sans Arabic', 'Cairo', sans-serif">${esc(title)}</text>`,
     // Location
     location
-      ? `<text x="${WIDTH / 2}" y="300" text-anchor="middle" font-size="26" fill="#D1D5DB" font-family="Noto Sans Arabic">${esc(location)}</text>`
+      ? `<text x="${WIDTH / 2}" y="300" text-anchor="middle" font-size="26" fill="#D1D5DB" font-family="'Noto Sans Arabic', 'Cairo', sans-serif">${esc(location)}</text>`
       : "",
     // Price
     `<rect x="${WIDTH / 2 - 180}" y="340" width="360" height="56" rx="28" fill="#C5A55A" opacity="0.9"/>`,
-    `<text x="${WIDTH / 2}" y="376" text-anchor="middle" font-size="28" font-weight="bold" fill="#0A1628" font-family="Noto Sans Arabic">${esc(price)}</text>`,
+    `<text x="${WIDTH / 2}" y="376" text-anchor="middle" font-size="28" font-weight="bold" fill="#0A1628" font-family="'Noto Sans Arabic', 'Cairo', sans-serif">${esc(price)}</text>`,
     // Highlights
     highlightText
-      ? `<text x="${WIDTH / 2}" y="450" text-anchor="middle" font-size="22" fill="#E5E7EB" font-family="Noto Sans Arabic">${esc(highlightText)}</text>`
+      ? `<text x="${WIDTH / 2}" y="450" text-anchor="middle" font-size="22" fill="#E5E7EB" font-family="'Noto Sans Arabic', 'Cairo', sans-serif">${esc(highlightText)}</text>`
       : "",
     // Bottom branding bar
     `<rect x="0" y="${HEIGHT - 5}" width="${WIDTH}" height="5" fill="#C5A55A"/>`,
     // Branding text
-    `<text x="40" y="${HEIGHT - 25}" font-size="16" fill="#9CA3AF" font-family="Noto Sans Arabic">المفتاح الشهري  |  monthlykey.com</text>`,
+    `<text x="40" y="${HEIGHT - 25}" font-size="16" fill="#9CA3AF" font-family="'Noto Sans Arabic', 'Cairo', sans-serif">المفتاح الشهري  |  monthlykey.com</text>`,
     `</svg>`,
   ].join("");
 
