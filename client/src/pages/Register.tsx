@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha"; // SEC-1: hCaptcha integration
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,6 +152,10 @@ export default function Register() {
   const [error, setError] = useState("");
   const [showCountryPicker, setShowCountryPicker] = useState(false);
 
+  // SEC-1: hCaptcha state
+  const hCaptchaRef = useRef<HCaptcha>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
   // OTP state
   const [phoneOtp, setPhoneOtp] = useState("");
   const [emailOtp, setEmailOtp] = useState("");
@@ -197,7 +202,13 @@ export default function Register() {
       return;
     }
 
-    if (form.password.length < 7) {
+    // SEC-1: Validate hCaptcha token before submission (only if hCaptcha is configured)
+    if (import.meta.env.VITE_HCAPTCHA_SITE_KEY && !captchaToken) {
+      setError(lang === "ar" ? "يرجى إتمام التحقق من أنك لست روبوتاً" : "Please complete the CAPTCHA verification");
+      return;
+    }
+
+    if (form.password.length < 8) {
       setError(t("auth.passwordTooShort"));
       return;
     }
@@ -227,6 +238,7 @@ export default function Register() {
           nameAr: form.nameAr,
           email: form.email,
           phone: fullPhone,
+          captchaToken, // SEC-1: Include hCaptcha token
         }),
       });
 
@@ -246,6 +258,9 @@ export default function Register() {
       setError(lang === "ar" ? "فشل التسجيل" : "Registration failed");
     } finally {
       setLoading(false);
+      // SEC-1: Reset captcha after every submit attempt
+      hCaptchaRef.current?.resetCaptcha();
+      setCaptchaToken(null);
     }
   };
 
@@ -509,7 +524,7 @@ export default function Register() {
                       type={showPassword ? "text" : "password"}
                       value={form.password}
                       onChange={(e) => update("password", e.target.value)}
-                      placeholder={lang === "ar" ? "7 أحرف على الأقل" : "At least 7 characters"}
+                      placeholder={lang === "ar" ? "8 أحرف على الأقل" : "At least 8 characters"}
                       required
                       className={`h-10 pe-10 ${lang === "ar" ? "text-right" : "text-left"}`}
                     />
@@ -595,10 +610,25 @@ export default function Register() {
                   )}
                 </div>
 
+                {/* SEC-1: hCaptcha widget */}
+                {import.meta.env.VITE_HCAPTCHA_SITE_KEY && (
+                  <div className="flex justify-center pt-2">
+                    <HCaptcha
+                      ref={hCaptchaRef}
+                      sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY}
+                      onVerify={(token) => setCaptchaToken(token)}
+                      onExpire={() => setCaptchaToken(null)}
+                      onError={() => setCaptchaToken(null)}
+                      languageOverride={lang === "ar" ? "ar" : "en"}
+                      theme="light"
+                    />
+                  </div>
+                )}
+
                 <Button
                   type="submit"
                   className="w-full h-11 bg-[#3ECFC0] hover:bg-[#2ab5a6] text-white text-base font-semibold mt-2"
-                  disabled={loading || !agreedToTerms}
+                  disabled={loading || !agreedToTerms || (!!import.meta.env.VITE_HCAPTCHA_SITE_KEY && !captchaToken)}
                 >
                   {loading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
