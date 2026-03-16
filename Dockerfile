@@ -18,6 +18,8 @@ RUN pnpm install --frozen-lockfile
 FROM base AS build
 ARG RAILWAY_GIT_COMMIT_SHA
 ENV RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA}
+ARG VITE_HCAPTCHA_SITE_KEY
+ENV VITE_HCAPTCHA_SITE_KEY=${VITE_HCAPTCHA_SITE_KEY}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build
