@@ -74,16 +74,16 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   // ─── Cross-Origin headers ─────────────────────────────────────────
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   // SEC-9: Add COEP and CORP headers
-  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
   res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
 
   // ─── Content Security Policy (Enforcing mode) ─────────────────────
   const csp = [
     "default-src 'self'",
     // Scripts: self + Google Maps + Analytics + CDNs (removed unsafe-eval)
-    "script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://cdn.jsdelivr.net https://unpkg.com",
+    "script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://cdn.jsdelivr.net https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com",
     // Styles: self + Google Fonts + Leaflet CDN + inline (needed for React)
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com",
     // Fonts: self + Google Fonts
     "font-src 'self' https://fonts.gstatic.com data:",
     // SEC-6: Images: self + data/blob + OpenStreetMap tiles + Google Maps tiles + HTTPS only (removed http:)
@@ -91,9 +91,9 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
     // Media
     "media-src 'self' https://cdn.jsdelivr.net blob:",
     // Connect: self + Google Maps APIs + OpenStreetMap + Analytics + PayPal + R2 storage
-    "connect-src 'self' https://pub-38c4c6d7eb714a07a24cd2d4c7870282.r2.dev https://*.r2.dev https://maps.googleapis.com https://maps.gstatic.com https://*.tile.openstreetmap.org https://*.openstreetmap.org https://www.google-analytics.com https://www.googletagmanager.com https://*.paypal.com https://api.moyasar.com wss:",
+    "connect-src 'self' https://pub-38c4c6d7eb714a07a24cd2d4c7870282.r2.dev https://*.r2.dev https://maps.googleapis.com https://maps.gstatic.com https://*.tile.openstreetmap.org https://*.openstreetmap.org https://www.google-analytics.com https://www.googletagmanager.com https://*.paypal.com https://api.moyasar.com https://hcaptcha.com https://*.hcaptcha.com wss:",
     // Frames: self + PayPal + Google Maps
-    "frame-src 'self' https://*.paypal.com https://maps.google.com",
+    "frame-src 'self' https://*.paypal.com https://maps.google.com https://hcaptcha.com https://*.hcaptcha.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
