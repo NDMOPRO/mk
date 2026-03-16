@@ -1,0 +1,3 @@
+Contact: security@monthlykey.com
+Preferred-Languages: ar, en
+Policy: https://monthlykey.com/security-policy

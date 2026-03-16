@@ -14,6 +14,8 @@ import { seedCitiesAndDistricts } from "../seed-cities";
 import { seedDefaultSettings } from "../seed-settings";
 import { securityHeaders } from "../middleware/security-headers";
 import { compressionMiddleware } from "../middleware/compression";
+import { sanitizeInputMiddleware } from "../middleware/sanitize-input"; // SEC-2
+import { wwwRedirectMiddleware } from "../middleware/www-redirect"; // SEC-8
 import { sitemapHandler } from "../middleware/sitemap";
 import { generateHomepageOG, generatePropertyOG, invalidateCache as invalidateOGCache } from "../og-image";
 import { getDb } from "../db";
@@ -117,16 +119,22 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  // SEC-8: WWW → non-WWW redirect (must be before everything else)
+  app.use(wwwRedirectMiddleware);
+
   // ─── Security Headers (must be first) ──────────────────────────────
   app.use(securityHeaders);
 
-  // ─── Compression (Gzip/Brotli) ────────────────────────────────────
+  // ─── Compression (Gzip/Brotli) ──────────────────────────────────
   app.use(compressionMiddleware);
 
   // ─── Body Parser (route-specific limits) ───────────────────────────
   // Global default: 1MB (prevents large payload DoS)
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ limit: "1mb", extended: true }));
+
+  // SEC-2: Global input sanitization (after body parser, before routes)
+  app.use(sanitizeInputMiddleware);
   // Upload-specific routes: 10MB for base64 image/file uploads
   const uploadJsonParser = express.json({ limit: "10mb" });
   app.use('/api/trpc/submission.uploadPhoto', uploadJsonParser);
@@ -180,8 +188,20 @@ async function startServer() {
   // ─── Dynamic Sitemap ──────────────────────────────────────────────
   app.get("/sitemap.xml", sitemapHandler);
 
-  // Health check endpoint
-  app.get("/api/health", async (_req, res) => {
+  // SEC-3: Health check endpoint — full data requires Authorization header
+  app.get("/api/health", async (req, res) => {
+    // SEC-3: Check for internal token to expose full health data
+    const authHeader = req.headers.authorization;
+    const internalToken = process.env.HEALTH_CHECK_TOKEN;
+    const isAuthorized = internalToken && authHeader === `Bearer ${internalToken}`;
+
+    if (!isAuthorized) {
+      // SEC-3: Public response — minimal info only
+      res.json({ status: "ok" });
+      return;
+    }
+
+    // Authorized: return full health data
     try {
       const { getPool } = await import("../db");
       const pool = getPool();

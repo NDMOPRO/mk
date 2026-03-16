@@ -7,9 +7,12 @@
  * Authentication events are logged for auditing.
  *
  * Security hardening (2026-02-26):
- * - Password policy: 7+ chars, uppercase, lowercase, digit, special char
+ * - Password policy: 8+ chars, uppercase, lowercase, digit, special char (SEC-7)
  * - Session TTL: 30 min in production (configurable via SESSION_TTL_MS)
  * - JWT fail-fast: server refuses to start without strong JWT_SECRET in production
+ * - hCaptcha on registration (SEC-1)
+ * - Common password blacklist (SEC-7)
+ * - Registration toggle via ALLOW_REGISTRATION env (SEC-1)
  */
 import { COOKIE_NAME } from "@shared/const";
 import type { Express, Request, Response } from "express";
@@ -20,6 +23,20 @@ import { sdk } from "./sdk";
 import { rateLimiter, RATE_LIMITS, getClientIP, recordFailedLogin, resetLoginAttempts } from "../rate-limiter";
 import { sendOtp, verifyOtp } from "../otp";
 import { ENV } from "./env";
+import { verifyCaptcha } from "../middleware/captcha"; // SEC-1
+import { zxcvbnAsync, zxcvbnOptions } from "@zxcvbn-ts/core"; // SEC-7
+import * as zxcvbnCommon from "@zxcvbn-ts/language-common"; // SEC-7
+import * as zxcvbnEn from "@zxcvbn-ts/language-en"; // SEC-7
+import { COMMON_PASSWORDS } from "../common-passwords"; // SEC-7
+
+// SEC-7: Initialize zxcvbn with dictionaries
+zxcvbnOptions.setOptions({
+  graphs: zxcvbnCommon.adjacencyGraphs,
+  dictionary: {
+    ...zxcvbnCommon.dictionary,
+    ...zxcvbnEn.dictionary,
+  },
+});
 
 // ─── Auth Event Logger ────────────────────────────────────────────
 function logAuthEvent(event: string, details: Record<string, unknown>) {
@@ -35,11 +52,12 @@ export interface PasswordValidationResult {
 }
 
 export function validatePassword(password: string): PasswordValidationResult {
-  if (password.length < 7) {
+  // SEC-7: Minimum 8 characters (raised from 7)
+  if (password.length < 8) {
     return {
       valid: false,
-      error: "Password must be at least 7 characters",
-      errorAr: "كلمة المرور يجب أن تكون 7 أحرف على الأقل",
+      error: "Password must be at least 8 characters",
+      errorAr: "كلمة المرور يجب أن تكون 8 أحرف على الأقل",
     };
   }
   if (!/[A-Z]/.test(password)) {
@@ -69,6 +87,35 @@ export function validatePassword(password: string): PasswordValidationResult {
       error: "Password must contain at least one special character",
       errorAr: "كلمة المرور يجب أن تحتوي على رمز خاص واحد على الأقل",
     };
+  }
+  // SEC-7: Check against common passwords blacklist (case-insensitive)
+  if (COMMON_PASSWORDS.has(password) || COMMON_PASSWORDS.has(password.toLowerCase())) {
+    return {
+      valid: false,
+      error: "This password is too common. Please choose a stronger password.",
+      errorAr: "كلمة المرور شائعة جداً. يرجى اختيار كلمة مرور أقوى.",
+    };
+  }
+  return { valid: true };
+}
+
+// SEC-7: Async password strength check using zxcvbn (for enhanced validation)
+export async function validatePasswordStrength(password: string): Promise<PasswordValidationResult> {
+  const basicCheck = validatePassword(password);
+  if (!basicCheck.valid) return basicCheck;
+
+  try {
+    const result = await zxcvbnAsync(password);
+    // Score 0-1 = too weak, require at least score 2
+    if (result.score < 2) {
+      return {
+        valid: false,
+        error: "Password is too weak. Avoid common patterns and dictionary words.",
+        errorAr: "كلمة المرور ضعيفة جداً. تجنب الأنماط الشائعة وكلمات القاموس.",
+      };
+    }
+  } catch {
+    // If zxcvbn fails, fall through to basic validation only
   }
   return { valid: true };
 }
@@ -177,6 +224,16 @@ export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     const ip = getClientIP(req);
 
+    // SEC-1: Check if registration is enabled
+    if (process.env.ALLOW_REGISTRATION === "false") {
+      logAuthEvent("REGISTER_DISABLED", { ip });
+      res.status(403).json({
+        error: "Registration is currently disabled",
+        errorAr: "التسجيل معطل حالياً",
+      });
+      return;
+    }
+
     // Rate limiting: 10 attempts per 5 minutes per IP
     const rl = await Promise.resolve(rateLimiter.check(`auth:register:${ip}`, RATE_LIMITS.AUTH.maxRequests, RATE_LIMITS.AUTH.windowMs));
     if (!rl.allowed) {
@@ -190,7 +247,18 @@ export function registerAuthRoutes(app: Express) {
     }
 
     try {
-      const { userId, password, displayName, name, nameAr, email, phone } = req.body;
+      const { userId, password, displayName, name, nameAr, email, phone, captchaToken } = req.body;
+
+      // SEC-1: Verify hCaptcha token
+      const captchaResult = await verifyCaptcha(captchaToken);
+      if (!captchaResult.success) {
+        logAuthEvent("REGISTER_CAPTCHA_FAILED", { ip });
+        res.status(400).json({
+          error: captchaResult.error,
+          errorAr: captchaResult.errorAr,
+        });
+        return;
+      }
 
       if (!userId || !password || !displayName) {
         res.status(400).json({
@@ -200,8 +268,8 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      // Enforce 7+ char password with complexity requirements
-      const pwCheck = validatePassword(password);
+      // SEC-7: Enforce 8+ char password with complexity + strength requirements
+      const pwCheck = await validatePasswordStrength(password);
       if (!pwCheck.valid) {
         res.status(400).json({ error: pwCheck.error, errorAr: pwCheck.errorAr });
         return;
@@ -306,8 +374,8 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      // Enforce 7+ char password with complexity requirements
-      const pwCheck = validatePassword(newPassword);
+      // SEC-7: Enforce 8+ char password with complexity + strength requirements
+      const pwCheck = await validatePasswordStrength(newPassword);
       if (!pwCheck.valid) {
         res.status(400).json({ error: pwCheck.error, errorAr: pwCheck.errorAr });
         return;
@@ -370,8 +438,8 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      // Validate new password
-      const pwCheck = validatePassword(newPassword);
+      // SEC-7: Validate new password with strength check
+      const pwCheck = await validatePasswordStrength(newPassword);
       if (!pwCheck.valid) {
         res.status(400).json({ error: pwCheck.error, errorAr: pwCheck.errorAr });
         return;
@@ -583,6 +651,16 @@ export function registerAuthRoutes(app: Express) {
   app.post("/api/v1/auth/register", async (req: Request, res: Response) => {
     const ip = getClientIP(req);
 
+    // SEC-1: Check if registration is enabled
+    if (process.env.ALLOW_REGISTRATION === "false") {
+      logAuthEvent("REGISTER_V1_DISABLED", { ip });
+      res.status(403).json({
+        error: "Registration is currently disabled",
+        errorAr: "التسجيل معطل حالياً",
+      });
+      return;
+    }
+
     const rl = await Promise.resolve(rateLimiter.check(`auth:register:${ip}`, RATE_LIMITS.AUTH.maxRequests, RATE_LIMITS.AUTH.windowMs));
     if (!rl.allowed) {
       logAuthEvent("REGISTER_V1_RATE_LIMITED", { ip, resetIn: rl.resetIn });
@@ -595,7 +673,18 @@ export function registerAuthRoutes(app: Express) {
     }
 
     try {
-      const { userId, password, displayName, name, nameAr, email, phone } = req.body;
+      const { userId, password, displayName, name, nameAr, email, phone, captchaToken } = req.body;
+
+      // SEC-1: Verify hCaptcha token
+      const captchaResult = await verifyCaptcha(captchaToken);
+      if (!captchaResult.success) {
+        logAuthEvent("REGISTER_V1_CAPTCHA_FAILED", { ip });
+        res.status(400).json({
+          error: captchaResult.error,
+          errorAr: captchaResult.errorAr,
+        });
+        return;
+      }
 
       if (!userId || !password || !displayName || !email || !phone) {
         res.status(400).json({
@@ -605,8 +694,8 @@ export function registerAuthRoutes(app: Express) {
         return;
       }
 
-      // Enforce 7+ char password with complexity requirements
-      const pwCheck = validatePassword(password);
+      // SEC-7: Enforce 8+ char password with complexity + strength requirements
+      const pwCheck = await validatePasswordStrength(password);
       if (!pwCheck.valid) {
         res.status(400).json({ error: pwCheck.error, errorAr: pwCheck.errorAr });
         return;

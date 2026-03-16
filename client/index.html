@@ -184,10 +184,9 @@
     </noscript>
     
     <script type="module" src="/src/main.tsx"></script>
-    <script
-      defer
-      src="%VITE_ANALYTICS_ENDPOINT%/umami"
-      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+    <!-- SEC-4: Umami analytics script removed — VITE_ANALYTICS_ENDPOINT and
+         VITE_ANALYTICS_WEBSITE_ID were undefined, causing broken script tags.
+         Re-add when Umami is configured with proper env vars. -->
   </body>
 
 </html>

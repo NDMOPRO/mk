@@ -11,10 +11,13 @@
 import type { Request, Response, NextFunction } from "express";
 
 /** Allowed CORS origins — add your production domains here */
+// SEC-5: Added monthlykey.sa origins
 const ALLOWED_ORIGINS = new Set([
   "https://monthlykey.com",
   "https://www.monthlykey.com",
   "https://mk.monthlykey.com",
+  "https://monthlykey.sa",       // SEC-5
+  "https://www.monthlykey.sa",   // SEC-5
 ]);
 
 function isAllowedOrigin(origin: string | undefined): boolean {
@@ -70,6 +73,9 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
 
   // ─── Cross-Origin headers ─────────────────────────────────────────
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  // SEC-9: Add COEP and CORP headers
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
 
   // ─── Content Security Policy (Enforcing mode) ─────────────────────
   const csp = [
@@ -80,8 +86,8 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
     // Fonts: self + Google Fonts
     "font-src 'self' https://fonts.gstatic.com data:",
-    // Images: self + data/blob + OpenStreetMap tiles + Google Maps tiles + any HTTPS
-    "img-src 'self' data: blob: https: http: https://*.tile.openstreetmap.org https://maps.gstatic.com https://maps.googleapis.com https://*.ggpht.com",
+    // SEC-6: Images: self + data/blob + OpenStreetMap tiles + Google Maps tiles + HTTPS only (removed http:)
+    "img-src 'self' data: blob: https: https://*.tile.openstreetmap.org https://maps.gstatic.com https://maps.googleapis.com https://*.ggpht.com",
     // Media
     "media-src 'self' https://cdn.jsdelivr.net blob:",
     // Connect: self + Google Maps APIs + OpenStreetMap + Analytics + PayPal + R2 storage
