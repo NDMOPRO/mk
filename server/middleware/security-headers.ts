@@ -73,9 +73,10 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
 
   // ─── Cross-Origin headers ─────────────────────────────────────────
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-  // SEC-9: Add COEP and CORP headers
-  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
-  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  // Note: COEP require-corp and CORP same-origin were removed because they
+  // block cross-origin resources (R2 storage images, hCaptcha iframes,
+  // Google Maps tiles, etc.). The CSP img-src / connect-src directives
+  // already restrict which external origins are allowed.
 
   // ─── Content Security Policy (Enforcing mode) ─────────────────────
   const csp = [
