@@ -75,6 +75,7 @@ export const INTEGRATION_REGISTRY: Record<string, {
       { key: "bearerToken", label: "Bearer Token (API Key)", labelAr: "رمز الوصول (Bearer Token)", isSecret: true },
       { key: "webhookMode", label: "Webhook Mode", labelAr: "وضع الويب هوك", isSecret: false },
       { key: "defaultCountryCode", label: "Default Country Code", labelAr: "رمز الدولة الافتراضي", isSecret: false },
+      { key: "whatsappSupportEmail", label: "Support/Escalation Email", labelAr: "بريد الدعم والتصعيد", isSecret: false },
     ],
   },
 };

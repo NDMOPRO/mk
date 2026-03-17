@@ -151,6 +151,35 @@ function SettingsTab({ isRtl }: { isRtl: boolean }) {
         </CardContent>
       </Card>
 
+      {/* WhatsApp Support/Escalation Email */}
+      <Card className="border-border/40">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MessageCircle className="w-5 h-5" style={{ color: WA_GREEN }} />
+            {isRtl ? "بريد دعم واتساب" : "WhatsApp Support Email"}
+          </CardTitle>
+          <CardDescription>
+            {isRtl
+              ? "بريد الدعم والتصعيد لعمليات واتساب — يستقبل إشعارات الرسائل الواردة"
+              : "Support & escalation email for WhatsApp operations — receives inbound message notifications"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 flex-wrap">
+            <code className="bg-muted px-3 py-1.5 rounded text-sm font-mono" dir="ltr">whatsapp@monthlykey.com</code>
+            <Badge variant="outline" className="text-green-600 border-green-300">
+              <CheckCircle2 className="w-3.5 h-3.5 ml-1" />
+              {isRtl ? "مُعد عبر Taqnyat" : "Configured via Taqnyat"}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            {isRtl
+              ? "يمكن تعديل هذا البريد من التكاملات ← تقنيات واتساب ← بريد الدعم والتصعيد"
+              : "Editable from Integrations → Taqnyat WhatsApp → Support/Escalation Email"}
+          </p>
+        </CardContent>
+      </Card>
+
       <Card className="border-border/40">
         <CardHeader>
           <div className="flex items-center justify-between">

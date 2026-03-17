@@ -33,6 +33,7 @@ export interface TaqnyatWhatsAppConfig {
   webhookMode: "chatbot_livechat" | "livechat_only" | "other";
   defaultCountryCode: string;
   isEnabled: boolean;
+  whatsappSupportEmail?: string;
 }
 
 export interface TaqnyatSendResult {
@@ -113,6 +114,7 @@ export async function getTaqnyatWhatsAppConfig(): Promise<TaqnyatWhatsAppConfig 
       webhookMode: config.webhookMode || "other",
       defaultCountryCode: config.defaultCountryCode || "+966",
       isEnabled: row.isEnabled,
+      whatsappSupportEmail: config.whatsappSupportEmail || "",
     };
   } catch (err) {
     console.error("[Taqnyat WhatsApp] Failed to load config:", err);
@@ -601,6 +603,35 @@ export async function handleTaqnyatWhatsAppWebhook(req: Request, res: Response) 
         // TODO: Route incoming messages to conversation system or chatbot
         // This is where you'd integrate with the existing conversations/messages tables
         // or trigger automated responses based on message content.
+
+        // ─── Email notification to WhatsApp support/escalation email ───
+        if (config.whatsappSupportEmail && messageBody) {
+          try {
+            const { sendEmail, isSmtpConfigured } = await import("./email");
+            if (isSmtpConfigured()) {
+              await sendEmail({
+                to: config.whatsappSupportEmail,
+                subject: `[WhatsApp] رسالة واردة من ${senderPhone}`,
+                html: `
+                  <div dir="rtl" style="font-family: sans-serif; padding: 20px;">
+                    <h3>رسالة واتساب واردة</h3>
+                    <table style="border-collapse: collapse; width: 100%;">
+                      <tr><td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">المرسل</td><td style="padding: 8px; border: 1px solid #ddd;">${senderPhone}</td></tr>
+                      <tr><td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">النوع</td><td style="padding: 8px; border: 1px solid #ddd;">${messageType}</td></tr>
+                      <tr><td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">الرسالة</td><td style="padding: 8px; border: 1px solid #ddd;">${messageBody.substring(0, 500)}</td></tr>
+                      <tr><td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">الوقت</td><td style="padding: 8px; border: 1px solid #ddd;">${new Date().toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</td></tr>
+                    </table>
+                    <p style="margin-top: 16px; color: #666;">هذا إشعار تلقائي من نظام المفتاح الشهري. يرجى الرد عبر لوحة التحكم.</p>
+                  </div>
+                `,
+                replyTo: config.whatsappSupportEmail,
+              });
+              console.log(`[Taqnyat WhatsApp Webhook] Email notification sent to ${config.whatsappSupportEmail}`);
+            }
+          } catch (emailErr: any) {
+            console.error("[Taqnyat WhatsApp Webhook] Email notification failed:", emailErr.message);
+          }
+        }
 
       } catch (auditErr) {
         console.error("[Taqnyat WhatsApp Webhook] Audit log failed:", auditErr);
