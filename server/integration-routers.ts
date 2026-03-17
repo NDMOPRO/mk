@@ -144,6 +144,7 @@ function getConfigFields(key: string): { name: string; label: string; labelAr: s
         { name: 'bearerToken', label: 'Bearer Token (API Key)', labelAr: 'رمز الوصول (Bearer Token)', isSecret: true },
         { name: 'webhookMode', label: 'Webhook Mode (chatbot_livechat / livechat_only / other)', labelAr: 'وضع الويب هوك (chatbot_livechat / livechat_only / other)', isSecret: false },
         { name: 'defaultCountryCode', label: 'Default Country Code (e.g. +966)', labelAr: 'رمز الدولة الافتراضي (مثال: +966)', isSecret: false },
+        { name: 'whatsappSupportEmail', label: 'Support/Escalation Email', labelAr: 'بريد الدعم والتصعيد', isSecret: false },
       ];
     default:
       return [];
