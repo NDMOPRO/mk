@@ -94,35 +94,43 @@ function OtpInput({ length = 6, value, onChange }: { length?: number; value: str
 // ─── Step Indicator ─────────────────────────────────────────────────
 function StepIndicator({ currentStep, steps, lang }: { currentStep: number; steps: string[]; lang: string }) {
   return (
-    <div className="flex items-center justify-center gap-1 mb-6">
-      {steps.map((label, i) => {
-        const stepNum = i + 1;
-        const isActive = stepNum === currentStep;
-        const isDone = stepNum < currentStep;
-        return (
-          <div key={i} className="flex items-center gap-1">
-            <div className="flex flex-col items-center">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                  isDone
-                    ? "bg-[#3ECFC0] text-white"
-                    : isActive
-                    ? "bg-[#0B1E2D] text-white dark:bg-[#3ECFC0]"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-400"
-                }`}
-              >
-                {isDone ? <Check className="w-4 h-4" /> : stepNum}
+    <div className="mb-5">
+      {/* Step context text */}
+      <p className="text-center text-xs text-gray-400 dark:text-gray-500 mb-3">
+        {lang === "ar" ? `الخطوة ${currentStep} من ${steps.length}` : `Step ${currentStep} of ${steps.length}`}
+      </p>
+      <div className="flex items-center justify-center gap-1">
+        {steps.map((label, i) => {
+          const stepNum = i + 1;
+          const isActive = stepNum === currentStep;
+          const isDone = stepNum < currentStep;
+          return (
+            <div key={i} className="flex items-center gap-1">
+              <div className="flex flex-col items-center">
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${
+                    isDone
+                      ? "bg-[#3ECFC0] text-white shadow-md shadow-[#3ECFC0]/30"
+                      : isActive
+                      ? "bg-[#0B1E2D] text-white dark:bg-[#3ECFC0] ring-2 ring-[#3ECFC0]/30 shadow-md"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-400"
+                  }`}
+                >
+                  {isDone ? <Check className="w-4 h-4" /> : stepNum}
+                </div>
+                <span className={`text-[10px] mt-1.5 whitespace-nowrap transition-colors ${
+                  isActive ? "text-[#3ECFC0] font-semibold" : isDone ? "text-foreground font-medium" : "text-gray-400"
+                }`}>
+                  {label}
+                </span>
               </div>
-              <span className={`text-[10px] mt-1 whitespace-nowrap ${isActive || isDone ? "text-foreground font-medium" : "text-gray-400"}`}>
-                {label}
-              </span>
+              {i < steps.length - 1 && (
+                <div className={`w-10 h-0.5 mb-5 rounded-full transition-colors duration-300 ${isDone ? "bg-[#3ECFC0]" : "bg-gray-200 dark:bg-gray-700"}`} />
+              )}
             </div>
-            {i < steps.length - 1 && (
-              <div className={`w-8 h-0.5 mb-4 ${isDone ? "bg-[#3ECFC0]" : "bg-gray-200 dark:bg-gray-700"}`} />
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -151,6 +159,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [termsError, setTermsError] = useState(false);
 
   // SEC-1: hCaptcha state
   const hCaptchaRef = useRef<HCaptcha>(null);
@@ -167,6 +177,7 @@ export default function Register() {
   const update = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setError("");
+    setFieldErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
   // Countdown timers
@@ -196,34 +207,46 @@ export default function Register() {
   const handleStep1 = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    const errors: Record<string, string> = {};
+    let hasError = false;
 
+    if (!form.userId.trim()) {
+      errors.userId = lang === "ar" ? "معرف المستخدم مطلوب" : "User ID is required";
+      hasError = true;
+    }
+    if (!form.displayName.trim()) {
+      errors.displayName = lang === "ar" ? "الاسم الظاهر مطلوب" : "Display name is required";
+      hasError = true;
+    }
+    if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      errors.email = lang === "ar" ? "أدخل بريد إلكتروني صحيح" : "Enter a valid email";
+      hasError = true;
+    }
+    if (!form.phone || form.phone.length < 5) {
+      errors.phone = lang === "ar" ? "رقم الجوال مطلوب" : "Phone number is required";
+      hasError = true;
+    }
+    if (form.password.length < 8) {
+      errors.password = lang === "ar" ? "كلمة المرور يجب أن تكون 8 أحرف على الأقل" : "Password must be at least 8 characters";
+      hasError = true;
+    }
+    if (form.password !== form.confirmPassword) {
+      errors.confirmPassword = lang === "ar" ? "كلمتا المرور غير متطابقتين" : "Passwords do not match";
+      hasError = true;
+    }
     if (!agreedToTerms) {
-      setError(lang === "ar" ? "يجب الموافقة على الشروط والأحكام وسياسة الخصوصية للمتابعة" : "You must agree to the Terms & Conditions and Privacy Policy to continue");
-      return;
+      setTermsError(true);
+      hasError = true;
     }
 
     // SEC-1: Validate hCaptcha token before submission (only if hCaptcha is configured)
     if (import.meta.env.VITE_HCAPTCHA_SITE_KEY && !captchaToken) {
       setError(lang === "ar" ? "يرجى إتمام التحقق من أنك لست روبوتاً" : "Please complete the CAPTCHA verification");
-      return;
+      hasError = true;
     }
 
-    if (form.password.length < 8) {
-      setError(t("auth.passwordTooShort"));
-      return;
-    }
-    if (form.password !== form.confirmPassword) {
-      setError(t("auth.passwordMismatch"));
-      return;
-    }
-    if (!form.phone || form.phone.length < 5) {
-      setError(lang === "ar" ? "رقم الجوال مطلوب" : "Phone number is required");
-      return;
-    }
-    if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      setError(lang === "ar" ? "البريد الإلكتروني مطلوب" : "Email is required");
-      return;
-    }
+    setFieldErrors(errors);
+    if (hasError) return;
 
     setLoading(true);
     try {
@@ -404,160 +427,197 @@ export default function Register() {
 
             {/* ─── Step 1: Account Form ───────────────────────────── */}
             {step === 1 && (
-              <form onSubmit={handleStep1} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="userId">{t("auth.userId")}</Label>
-                  <Input
-                    id="userId"
-                    type="text"
-                    value={form.userId}
-                    onChange={(e) => update("userId", e.target.value)}
-                    placeholder={lang === "ar" ? "اختر معرف المستخدم" : "Choose a user ID"}
-                    required
-                    className={`h-10 ${lang === "ar" ? "text-right" : "text-left"}`}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="displayName">{t("auth.displayName")}</Label>
-                  <Input
-                    id="displayName"
-                    type="text"
-                    value={form.displayName}
-                    onChange={(e) => update("displayName", e.target.value)}
-                    placeholder={lang === "ar" ? "الاسم الظاهر" : "Display name"}
-                    required
-                    className="h-10"
-                  />
-                </div>
-
-                {lang === "ar" ? (
+              <form onSubmit={handleStep1} className="space-y-4">
+                {/* ── Section: Account Info ── */}
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    {lang === "ar" ? "معلومات الحساب" : "Account Info"}
+                  </p>
                   <div className="space-y-1.5">
-                    <Label htmlFor="nameAr">{t("auth.nameAr")}</Label>
+                    <Label htmlFor="userId">{t("auth.userId")}</Label>
                     <Input
-                      id="nameAr"
+                      id="userId"
                       type="text"
-                      value={form.nameAr}
-                      onChange={(e) => { update("nameAr", e.target.value); update("name", e.target.value); }}
-                      placeholder="الاسم الكامل بالعربي"
+                      value={form.userId}
+                      onChange={(e) => update("userId", e.target.value)}
+                      placeholder={lang === "ar" ? "مثال: ahmed123" : "e.g. ahmed123"}
                       required
-                      className={`h-10 ${lang === "ar" ? "text-right" : "text-left"}`}
+                      className={`h-10 ${lang === "ar" ? "text-right" : "text-left"} ${fieldErrors.userId ? "border-red-400 focus-visible:ring-red-400" : ""}`}
                     />
+                    {fieldErrors.userId && <p className="text-[11px] text-red-500 mt-0.5">{fieldErrors.userId}</p>}
                   </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="name">{t("auth.nameEn")}</Label>
-                    <Input
-                      id="name"
-                      type="text"
-                      value={form.name}
-                      onChange={(e) => { update("name", e.target.value); update("nameAr", e.target.value); }}
-                      placeholder="Full name"
-                      required
-                      className="h-10 text-left"
-                    />
-                  </div>
-                )}
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">{t("auth.email")}</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-                    placeholder="email@example.com"
-                    required
-                    className={`h-10 ${lang === "ar" ? "text-right" : "text-left"}`}
-                  />
+                  <div className="space-y-1.5">
+                    <Label htmlFor="displayName">{t("auth.displayName")}</Label>
+                    <Input
+                      id="displayName"
+                      type="text"
+                      value={form.displayName}
+                      onChange={(e) => update("displayName", e.target.value)}
+                      placeholder={lang === "ar" ? "مثال: أحمد محمد" : "e.g. Ahmed Mohammed"}
+                      required
+                      className={`h-10 ${fieldErrors.displayName ? "border-red-400 focus-visible:ring-red-400" : ""}`}
+                    />
+                    {fieldErrors.displayName && <p className="text-[11px] text-red-500 mt-0.5">{fieldErrors.displayName}</p>}
+                  </div>
+
+                  {lang === "ar" ? (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="nameAr">{t("auth.nameAr")}</Label>
+                      <Input
+                        id="nameAr"
+                        type="text"
+                        value={form.nameAr}
+                        onChange={(e) => { update("nameAr", e.target.value); update("name", e.target.value); }}
+                        placeholder="مثال: أحمد بن محمد العلي"
+                        required
+                        className={`h-10 ${lang === "ar" ? "text-right" : "text-left"}`}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="name">{t("auth.nameEn")}</Label>
+                      <Input
+                        id="name"
+                        type="text"
+                        value={form.name}
+                        onChange={(e) => { update("name", e.target.value); update("nameAr", e.target.value); }}
+                        placeholder="e.g. Ahmed Al-Ali"
+                        required
+                        className="h-10 text-left"
+                      />
+                    </div>
+                  )}
                 </div>
 
-                {/* International Phone Input */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="phone">{t("auth.phone")}</Label>
-                  <div className="flex gap-2" dir="ltr">
+                {/* ── Divider ── */}
+                <div className="h-px bg-gray-100 dark:bg-gray-700/50" />
+
+                {/* ── Section: Contact Info ── */}
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    {lang === "ar" ? "معلومات التواصل" : "Contact Info"}
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">{t("auth.email")}</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => update("email", e.target.value)}
+                      placeholder="name@example.com"
+                      required
+                      className={`h-10 ${lang === "ar" ? "text-right" : "text-left"} ${fieldErrors.email ? "border-red-400 focus-visible:ring-red-400" : ""}`}
+                    />
+                    {fieldErrors.email && <p className="text-[11px] text-red-500 mt-0.5">{fieldErrors.email}</p>}
+                  </div>
+
+                  {/* International Phone Input */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone">{t("auth.phone")}</Label>
+                    <div className="flex gap-2" dir="ltr">
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowCountryPicker(!showCountryPicker)}
+                          className="h-10 px-2 border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-foreground flex items-center gap-1 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors min-w-[90px]"
+                        >
+                          <span className="text-lg">{selectedCountry.flag}</span>
+                          <span className="font-mono text-xs">{selectedCountry.code}</span>
+                        </button>
+                        {showCountryPicker && (
+                          <div className="absolute top-full mt-1 start-0 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-48 overflow-y-auto w-56">
+                            {COUNTRY_CODES.map((c) => (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => { update("countryCode", c.code); setShowCountryPicker(false); }}
+                                className={`w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-foreground ${
+                                  c.code === form.countryCode ? "bg-[#3ECFC0]/10" : ""
+                                }`}
+                              >
+                                <span className="text-lg">{c.flag}</span>
+                                <span className="font-mono text-xs">{c.code}</span>
+                                <span className="text-gray-500 text-xs">{lang === "ar" ? c.nameAr : c.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <Input
+                        id="phone"
+                        type="tel"
+                        value={form.phone}
+                        onChange={(e) => update("phone", e.target.value.replace(/[^\d]/g, ""))}
+                        placeholder="5XXXXXXXX"
+                        required
+                        className={`h-10 flex-1 text-start ${fieldErrors.phone ? "border-red-400 focus-visible:ring-red-400" : ""}`}
+                      />
+                    </div>
+                    {fieldErrors.phone && <p className="text-[11px] text-red-500 mt-0.5">{fieldErrors.phone}</p>}
+                  </div>
+                </div>
+
+                {/* ── Divider ── */}
+                <div className="h-px bg-gray-100 dark:bg-gray-700/50" />
+
+                {/* ── Section: Security ── */}
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    {lang === "ar" ? "الأمان" : "Security"}
+                  </p>
+                  <div className="space-y-1">
+                    <Label htmlFor="password">{t("auth.password")}</Label>
                     <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={form.password}
+                        onChange={(e) => update("password", e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        className={`h-10 pe-10 ${lang === "ar" ? "text-right" : "text-left"} ${fieldErrors.password ? "border-red-400 focus-visible:ring-red-400" : ""}`}
+                      />
                       <button
                         type="button"
-                        onClick={() => setShowCountryPicker(!showCountryPicker)}
-                        className="h-10 px-2 border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-foreground flex items-center gap-1 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors min-w-[90px]"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-400 hover:text-gray-600"
                       >
-                        <span className="text-lg">{selectedCountry.flag}</span>
-                        <span className="font-mono text-xs">{selectedCountry.code}</span>
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
-                      {showCountryPicker && (
-                        <div className="absolute top-full mt-1 start-0 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-48 overflow-y-auto w-56">
-                          {COUNTRY_CODES.map((c) => (
-                            <button
-                              key={c.code}
-                              type="button"
-                              onClick={() => { update("countryCode", c.code); setShowCountryPicker(false); }}
-                              className={`w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-foreground ${
-                                c.code === form.countryCode ? "bg-[#3ECFC0]/10" : ""
-                              }`}
-                            >
-                              <span className="text-lg">{c.flag}</span>
-                              <span className="font-mono text-xs">{c.code}</span>
-                              <span className="text-gray-500 text-xs">{lang === "ar" ? c.nameAr : c.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={form.phone}
-                      onChange={(e) => update("phone", e.target.value.replace(/[^\d]/g, ""))}
-                      placeholder="5XXXXXXXX"
-                      required
-                      className="h-10 flex-1 text-start"
-                    />
+                    {fieldErrors.password
+                      ? <p className="text-[11px] text-red-500 mt-0.5">{fieldErrors.password}</p>
+                      : <p className="text-[10px] text-gray-400 mt-0.5">{lang === "ar" ? "8 أحرف على الأقل، حروف وأرقام" : "Min 8 chars, letters & numbers"}</p>
+                    }
                   </div>
-                </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">{t("auth.password")}</Label>
-                  <div className="relative">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirmPassword">{t("auth.confirmPassword")}</Label>
                     <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      value={form.password}
-                      onChange={(e) => update("password", e.target.value)}
-                      placeholder={lang === "ar" ? "8 أحرف على الأقل" : "At least 8 characters"}
+                      id="confirmPassword"
+                      type="password"
+                      value={form.confirmPassword}
+                      onChange={(e) => update("confirmPassword", e.target.value)}
+                      placeholder="••••••••"
                       required
-                      className={`h-10 pe-10 ${lang === "ar" ? "text-right" : "text-left"}`}
+                      className={`h-10 ${lang === "ar" ? "text-right" : "text-left"} ${fieldErrors.confirmPassword ? "border-red-400 focus-visible:ring-red-400" : ""}`}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                    {fieldErrors.confirmPassword && <p className="text-[11px] text-red-500 mt-0.5">{fieldErrors.confirmPassword}</p>}
                   </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="confirmPassword">{t("auth.confirmPassword")}</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={form.confirmPassword}
-                    onChange={(e) => update("confirmPassword", e.target.value)}
-                    placeholder={lang === "ar" ? "أعد إدخال كلمة المرور" : "Re-enter password"}
-                    required
-                    className={`h-10 ${lang === "ar" ? "text-right" : "text-left"}`}
-                  />
                 </div>
 
                 {/* ─── Terms & Privacy Agreement ─────────────── */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="space-y-2 pt-1">
+                  <div className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                    termsError && !agreedToTerms
+                      ? "border-red-400 bg-red-50/50 dark:bg-red-900/10"
+                      : "border-gray-200 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/50"
+                  }`}>
                     <Checkbox
                       id="terms-agreement"
                       checked={agreedToTerms}
-                      onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+                      onCheckedChange={(checked) => { setAgreedToTerms(checked === true); if (checked) setTermsError(false); }}
                       className="mt-0.5 data-[state=checked]:bg-[#3ECFC0] data-[state=checked]:border-[#3ECFC0]"
                     />
                     <label htmlFor="terms-agreement" className="text-xs leading-relaxed text-gray-600 dark:text-gray-300 cursor-pointer select-none">
@@ -602,8 +662,8 @@ export default function Register() {
                       )}
                     </label>
                   </div>
-                  {!agreedToTerms && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+                  {termsError && !agreedToTerms && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-red-500">
                       <Shield className="w-3 h-3" />
                       <span>{lang === "ar" ? "يجب الموافقة على الشروط والأحكام للمتابعة" : "You must agree to the terms to continue"}</span>
                     </div>
@@ -612,7 +672,7 @@ export default function Register() {
 
                 {/* SEC-1: hCaptcha widget */}
                 {import.meta.env.VITE_HCAPTCHA_SITE_KEY && (
-                  <div className="flex justify-center pt-2">
+                  <div className="flex justify-center pt-1">
                     <HCaptcha
                       ref={hCaptchaRef}
                       sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY}
@@ -620,15 +680,15 @@ export default function Register() {
                       onExpire={() => setCaptchaToken(null)}
                       onError={() => setCaptchaToken(null)}
                       languageOverride={lang === "ar" ? "ar" : "en"}
-                      theme="light"
+                      theme={document.documentElement.classList.contains("dark") ? "dark" : "light"}
                     />
                   </div>
                 )}
 
                 <Button
                   type="submit"
-                  className="w-full h-11 bg-[#3ECFC0] hover:bg-[#2ab5a6] text-white text-base font-semibold mt-2"
-                  disabled={loading || !agreedToTerms || (!!import.meta.env.VITE_HCAPTCHA_SITE_KEY && !captchaToken)}
+                  className="w-full h-11 bg-[#3ECFC0] hover:bg-[#2ab5a6] text-white text-base font-semibold mt-3 transition-all duration-200 hover:shadow-lg hover:shadow-[#3ECFC0]/20"
+                  disabled={loading}
                 >
                   {loading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
