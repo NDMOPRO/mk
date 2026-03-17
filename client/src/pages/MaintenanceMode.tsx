@@ -1,14 +1,13 @@
 import SEOHead from "@/components/SEOHead";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import { useI18n } from "@/lib/i18n";
-import { useState, useEffect, useMemo, useRef } from "react";
-import { Clock, Globe, Mail } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Globe, Mail, ArrowUpRight } from "lucide-react";
 
 /* ── SVG Social Icons (inline for zero-dependency) ── */
 function TwitterIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <SEOHead title="Maintenance Mode | المفتاح الشهري - Monthly Key" />
       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
     </svg>
   );
@@ -56,31 +55,104 @@ function YouTubeIcon({ className }: { className?: string }) {
 
 /* ── Social links config ── */
 const socialPlatforms = [
-  { key: "social.twitter", icon: TwitterIcon, label: "X / Twitter", hoverColor: "hover:bg-white/20 hover:text-white" },
-  { key: "social.instagram", icon: InstagramIcon, label: "Instagram", hoverColor: "hover:bg-gradient-to-br hover:from-[#f09433] hover:to-[#bc1888] hover:text-white" },
-  { key: "social.snapchat", icon: SnapchatIcon, label: "Snapchat", hoverColor: "hover:bg-[#FFFC00] hover:text-black" },
-  { key: "social.tiktok", icon: TikTokIcon, label: "TikTok", hoverColor: "hover:bg-white/20 hover:text-white" },
-  { key: "social.linkedin", icon: LinkedInIcon, label: "LinkedIn", hoverColor: "hover:bg-[#0A66C2] hover:text-white" },
-  { key: "social.youtube", icon: YouTubeIcon, label: "YouTube", hoverColor: "hover:bg-[#FF0000] hover:text-white" },
+  { key: "social.twitter", icon: TwitterIcon, label: "X / Twitter" },
+  { key: "social.instagram", icon: InstagramIcon, label: "Instagram" },
+  { key: "social.snapchat", icon: SnapchatIcon, label: "Snapchat" },
+  { key: "social.tiktok", icon: TikTokIcon, label: "TikTok" },
+  { key: "social.linkedin", icon: LinkedInIcon, label: "LinkedIn" },
+  { key: "social.youtube", icon: YouTubeIcon, label: "YouTube" },
 ] as const;
 
-/* ── Animated Key Shimmer ── */
-function KeyShimmer() {
-  return (
-    <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
-      <div
-        className="absolute -inset-full"
-        style={{
-          background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.08) 45%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.08) 55%, transparent 60%)",
-          animation: "shimmer 4s ease-in-out infinite",
-        }}
-      />
-    </div>
-  );
+/* ── Animated Particles Background ── */
+function ParticleField() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    const particles: Array<{
+      x: number; y: number; vx: number; vy: number;
+      size: number; opacity: number; color: string;
+    }> = [];
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    // Create particles
+    const colors = ["#3ECFC0", "#C9A96E", "#ffffff"];
+    for (let i = 0; i < 60; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        size: Math.random() * 2 + 0.5,
+        opacity: Math.random() * 0.15 + 0.03,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.opacity;
+        ctx.fill();
+      });
+
+      // Draw subtle connection lines between nearby particles
+      ctx.globalAlpha = 0.03;
+      ctx.strokeStyle = "#3ECFC0";
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 150) {
+            ctx.globalAlpha = 0.03 * (1 - dist / 150);
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
+
+      animId = requestAnimationFrame(animate);
+    };
+    animate();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />;
 }
 
 /* ── Countdown Timer ── */
-function CountdownTimer({ targetDate }: { targetDate: string }) {
+function CountdownTimer({ targetDate, lang }: { targetDate: string; lang: string }) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
 
   useEffect(() => {
@@ -98,31 +170,27 @@ function CountdownTimer({ targetDate }: { targetDate: string }) {
     return () => clearInterval(interval);
   }, [targetDate]);
 
-  const { lang } = useI18n();
   const labels = lang === "ar"
     ? { days: "يوم", hours: "ساعة", minutes: "دقيقة", seconds: "ثانية" }
     : { days: "Days", hours: "Hours", minutes: "Min", seconds: "Sec" };
 
   return (
-    <div className="flex gap-3 sm:gap-5 justify-center flex-wrap">
+    <div className="flex gap-3 sm:gap-4 justify-center flex-wrap">
       {(["days", "hours", "minutes", "seconds"] as const).map((unit, i) => (
-        <div key={unit} className="flex flex-col items-center group">
-          <div className="relative">
-            <div className="w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] rounded-2xl bg-[#0B1E2D]/80 backdrop-blur-md border border-[#3ECFC0]/20 flex items-center justify-center shadow-[0_0_30px_rgba(62,207,192,0.08)] transition-all duration-500 group-hover:border-[#3ECFC0]/40 group-hover:shadow-[0_0_40px_rgba(62,207,192,0.15)]">
-              <span className="text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tight">
+        <div key={unit} className="flex flex-col items-center">
+          <div className="relative group">
+            <div className="w-[70px] h-[80px] sm:w-[80px] sm:h-[90px] rounded-2xl bg-gradient-to-b from-white/[0.06] to-white/[0.02] backdrop-blur-xl border border-white/[0.08] flex items-center justify-center transition-all duration-500 group-hover:border-[#3ECFC0]/30 group-hover:from-[#3ECFC0]/[0.06] group-hover:to-[#3ECFC0]/[0.02]">
+              <span className="text-3xl sm:text-4xl font-bold bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent tabular-nums tracking-tight">
                 {String(timeLeft[unit]).padStart(2, "0")}
               </span>
             </div>
-            {/* Subtle glow under each box */}
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-12 h-1 rounded-full bg-[#3ECFC0]/20 blur-sm" />
+            {/* Glow effect on hover */}
+            <div className="absolute -inset-1 rounded-2xl bg-[#3ECFC0]/0 group-hover:bg-[#3ECFC0]/[0.04] blur-xl transition-all duration-500 -z-10" />
           </div>
-          <span className="text-[11px] sm:text-xs text-white/40 mt-2.5 font-medium uppercase tracking-wider">{labels[unit]}</span>
-          {/* Separator dots between units */}
+          <span className="text-[10px] sm:text-[11px] text-white/30 mt-2.5 font-medium uppercase tracking-[0.15em]">{labels[unit]}</span>
+          {/* Separator colon */}
           {i < 3 && (
-            <div className="absolute hidden sm:flex flex-col gap-1.5 top-1/2 -translate-y-1/2" style={{ [lang === "ar" ? "left" : "right"]: "-8px" }}>
-              <div className="w-1 h-1 rounded-full bg-[#C9A96E]/40" />
-              <div className="w-1 h-1 rounded-full bg-[#C9A96E]/40" />
-            </div>
+            <span className="absolute hidden sm:block text-xl font-light text-[#C9A96E]/30" style={{ transform: "translateX(42px) translateY(28px)" }}>:</span>
           )}
         </div>
       ))}
@@ -130,34 +198,38 @@ function CountdownTimer({ targetDate }: { targetDate: string }) {
   );
 }
 
-/* ── Floating Orbs Background ── */
-function FloatingOrbs() {
-  const orbs = useMemo(() => [
-    { x: 15, y: 20, size: 300, color: "#3ECFC0", opacity: 0.04, duration: 25 },
-    { x: 75, y: 60, size: 400, color: "#C9A96E", opacity: 0.03, duration: 30 },
-    { x: 50, y: 80, size: 250, color: "#3ECFC0", opacity: 0.05, duration: 20 },
-    { x: 85, y: 15, size: 200, color: "#C9A96E", opacity: 0.04, duration: 22 },
-  ], []);
+/* ── Animated Logo ── */
+function AnimatedLogo() {
+  const [isLoaded, setIsLoaded] = useState(false);
 
   return (
-    <>
-      {orbs.map((orb, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            left: `${orb.x}%`,
-            top: `${orb.y}%`,
-            width: `${orb.size}px`,
-            height: `${orb.size}px`,
-            background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
-            opacity: orb.opacity,
-            transform: "translate(-50%, -50%)",
-            animation: `orb-drift-${i} ${orb.duration}s ease-in-out infinite alternate`,
-          }}
+    <div className="relative">
+      {/* Outer rotating ring */}
+      <div className="absolute -inset-6 sm:-inset-8">
+        <svg className="w-full h-full animate-[spin_20s_linear_infinite]" viewBox="0 0 200 200">
+          <defs>
+            <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#3ECFC0" stopOpacity="0.3" />
+              <stop offset="50%" stopColor="#C9A96E" stopOpacity="0.1" />
+              <stop offset="100%" stopColor="#3ECFC0" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="100" r="96" fill="none" stroke="url(#ring-grad)" strokeWidth="0.5" strokeDasharray="8 12" />
+        </svg>
+      </div>
+      {/* Inner glow */}
+      <div className="absolute -inset-4 rounded-full bg-[#3ECFC0]/[0.06] blur-2xl" />
+      {/* Logo container - NO background, fully transparent */}
+      <div className={`relative w-28 h-28 sm:w-36 sm:h-36 flex items-center justify-center transition-all duration-1000 ${isLoaded ? "opacity-100 scale-100" : "opacity-0 scale-90"}`}>
+        <img
+          loading="eager"
+          src="/assets/brand/mk-logo-transparent.svg"
+          alt="Monthly Key"
+          className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(62,207,192,0.2)]"
+          onLoad={() => setIsLoaded(true)}
         />
-      ))}
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -166,8 +238,7 @@ export default function MaintenanceMode() {
   const { get, getByLang } = useSiteSettings();
   const { lang, setLang } = useI18n();
   const isRtl = lang === "ar";
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
 
   const title = getByLang("maintenance.title", lang, lang === "ar" ? "قريباً... الانطلاق" : "Coming Soon");
   const subtitle = getByLang("maintenance.subtitle", lang, lang === "ar" ? "نعمل على تجهيز تجربة مميزة لكم" : "We're preparing an exceptional experience for you");
@@ -176,211 +247,189 @@ export default function MaintenanceMode() {
   const countdownDate = get("maintenance.countdownDate");
   const showCountdown = get("maintenance.showCountdown") === "true" && countdownDate;
   const contactEmail = get("site.email") || get("social.email");
-
   const activeSocials = socialPlatforms.filter((p) => get(p.key));
 
-  // Subtle parallax on mouse move
   useEffect(() => {
-    const handleMove = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      setMousePos({
-        x: ((e.clientX - rect.left) / rect.width - 0.5) * 20,
-        y: ((e.clientY - rect.top) / rect.height - 0.5) * 20,
-      });
-    };
-    window.addEventListener("mousemove", handleMove);
-    return () => window.removeEventListener("mousemove", handleMove);
+    setMounted(true);
   }, []);
 
   return (
     <div
-      ref={containerRef}
       className={`min-h-screen relative overflow-hidden ${isRtl ? "rtl" : "ltr"}`}
       dir={isRtl ? "rtl" : "ltr"}
     >
-      {/* Deep dark background */}
-      <div className="absolute inset-0 bg-[#060E15]" />
+      <SEOHead title={lang === "ar" ? "المفتاح الشهري - قريباً" : "Monthly Key - Coming Soon"} />
 
-      {/* Subtle noise texture */}
-      <div className="absolute inset-0 opacity-[0.015]" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+      {/* ── Background layers ── */}
+      {/* Base gradient */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#040B11] via-[#071520] to-[#0A1A2A]" />
+
+      {/* Radial accent glows */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-[#3ECFC0]/[0.03] rounded-full blur-[120px]" />
+      <div className="absolute bottom-0 right-0 w-[600px] h-[400px] bg-[#C9A96E]/[0.02] rounded-full blur-[100px]" />
+
+      {/* Particle field */}
+      <ParticleField />
+
+      {/* Grid pattern overlay */}
+      <div className="absolute inset-0 opacity-[0.02]" style={{
+        backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+        backgroundSize: "60px 60px",
       }} />
 
-      {/* Floating orbs */}
-      <FloatingOrbs />
-
       {/* Top accent line */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#3ECFC0]/30 to-transparent" />
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#3ECFC0]/40 to-transparent" />
 
-      {/* Language toggle — top corner */}
+      {/* ── Language toggle ── */}
       <button
         onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-        className="absolute top-6 z-20 flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/[0.03] backdrop-blur-md border border-white/[0.06] text-white/50 hover:text-white/80 hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-300"
-        style={{ [isRtl ? "left" : "right"]: "1.5rem" }}
+        className="absolute top-5 z-20 flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] text-white/50 hover:text-white hover:bg-white/[0.08] hover:border-[#3ECFC0]/30 transition-all duration-300 group"
+        style={{ [isRtl ? "left" : "right"]: "1.25rem" }}
       >
-        <Globe className="w-3.5 h-3.5" />
-        <span className="text-xs font-medium tracking-wide">{lang === "ar" ? "English" : "عربي"}</span>
+        <Globe className="w-3.5 h-3.5 group-hover:text-[#3ECFC0] transition-colors" />
+        <span className="text-xs font-medium">{lang === "ar" ? "English" : "عربي"}</span>
       </button>
 
-      {/* Main content */}
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 py-16">
+      {/* ── Main content ── */}
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 py-20">
 
-        {/* Logo with parallax and glow */}
-        <div
-          className="relative mb-10"
-          style={{
-            transform: `translate(${mousePos.x * 0.3}px, ${mousePos.y * 0.3}px)`,
-            transition: "transform 0.3s ease-out",
-          }}
-        >
-          {/* Outer glow ring */}
-          <div className="absolute -inset-8 rounded-full bg-gradient-to-b from-[#3ECFC0]/[0.06] to-[#C9A96E]/[0.04] blur-2xl animate-pulse" />
-          {/* Logo container */}
-          <div className="relative w-32 h-32 sm:w-40 sm:h-40 flex items-center justify-center">
-            <img loading="lazy"               src="/assets/brand/mk-logo-transparent.svg"
-              alt="Monthly Key"
-              className="w-full h-full object-contain drop-shadow-[0_0_40px_rgba(62,207,192,0.15)]"
-            />
-            <KeyShimmer />
-          </div>
+        {/* Logo */}
+        <div className={`mb-8 transition-all duration-1000 delay-100 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+          <AnimatedLogo />
         </div>
 
-        {/* Brand name — refined typography */}
-        <div className="text-center mb-3">
-          <span className="text-[11px] sm:text-xs font-semibold text-[#3ECFC0]/60 tracking-[0.35em] uppercase">
+        {/* Brand name */}
+        <div className={`text-center mb-2 transition-all duration-1000 delay-200 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+          <span className="text-[11px] sm:text-xs font-semibold tracking-[0.4em] uppercase bg-gradient-to-r from-[#3ECFC0] to-[#C9A96E] bg-clip-text text-transparent">
             {lang === "ar" ? "المفتاح الشهري" : "Monthly Key"}
           </span>
         </div>
 
-        {/* Thin separator */}
-        <div className="w-12 h-px bg-gradient-to-r from-transparent via-[#C9A96E]/40 to-transparent mb-8" />
+        {/* Separator */}
+        <div className={`flex items-center gap-3 mb-8 transition-all duration-1000 delay-300 ${mounted ? "opacity-100 scale-x-100" : "opacity-0 scale-x-0"}`}>
+          <div className="w-8 h-px bg-gradient-to-r from-transparent to-[#3ECFC0]/40" />
+          <div className="w-1.5 h-1.5 rounded-full bg-[#C9A96E]/50" />
+          <div className="w-8 h-px bg-gradient-to-l from-transparent to-[#3ECFC0]/40" />
+        </div>
 
-        {/* Title — large, elegant */}
-        <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white text-center mb-5 leading-[1.1] tracking-tight">
-          {title}
+        {/* Title */}
+        <h1 className={`text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-center mb-5 leading-[1.1] tracking-tight transition-all duration-1000 delay-400 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+          <span className="bg-gradient-to-b from-white via-white to-white/50 bg-clip-text text-transparent">
+            {title}
+          </span>
         </h1>
 
         {/* Subtitle */}
-        <p className="text-base sm:text-lg md:text-xl text-white/60 text-center max-w-xl mb-10 leading-relaxed font-light">
+        <p className={`text-base sm:text-lg md:text-xl text-white/50 text-center max-w-xl mb-10 leading-relaxed font-light transition-all duration-1000 delay-500 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
           {subtitle}
         </p>
 
         {/* Custom image from admin */}
         {imageUrl && (
-          <div className="relative mb-10 max-w-md w-full">
-            <div className="rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl">
+          <div className={`relative mb-10 max-w-md w-full transition-all duration-1000 delay-500 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+            <div className="rounded-2xl overflow-hidden border border-white/[0.08] shadow-2xl">
               <img loading="lazy" src={imageUrl} alt="" className="w-full h-auto object-cover" />
             </div>
-            <div className="absolute -inset-3 rounded-3xl bg-gradient-to-b from-[#3ECFC0]/[0.06] to-[#C9A96E]/[0.04] -z-10 blur-2xl" />
+            <div className="absolute -inset-4 rounded-3xl bg-gradient-to-b from-[#3ECFC0]/[0.04] to-[#C9A96E]/[0.03] -z-10 blur-3xl" />
           </div>
         )}
 
         {/* Countdown */}
         {showCountdown && (
-          <div className="mb-12">
-            <CountdownTimer targetDate={countdownDate} />
+          <div className={`mb-12 transition-all duration-1000 delay-600 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+            <CountdownTimer targetDate={countdownDate} lang={lang} />
           </div>
         )}
 
-        {/* Message card — glassmorphism */}
-        <div className="max-w-lg mx-auto mb-12 w-full">
-          <div className="relative px-8 py-7 rounded-2xl bg-white/[0.02] backdrop-blur-md border border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
-            <p className="text-sm sm:text-base text-white/60 text-center leading-relaxed">
+        {/* Message card */}
+        <div className={`max-w-lg mx-auto mb-10 w-full transition-all duration-1000 delay-700 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+          <div className="relative px-8 py-7 rounded-2xl bg-gradient-to-b from-white/[0.04] to-white/[0.01] backdrop-blur-xl border border-white/[0.06] overflow-hidden">
+            {/* Shimmer effect on card */}
+            <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+              <div className="absolute -inset-full" style={{
+                background: "linear-gradient(105deg, transparent 40%, rgba(62,207,192,0.03) 45%, rgba(62,207,192,0.06) 50%, rgba(62,207,192,0.03) 55%, transparent 60%)",
+                animation: "card-shimmer 6s ease-in-out infinite",
+              }} />
+            </div>
+            {/* Gold accent line at top */}
+            <div className="absolute top-0 left-1/4 right-1/4 h-px bg-gradient-to-r from-transparent via-[#C9A96E]/50 to-transparent" />
+            <p className="relative text-sm sm:text-base text-white/50 text-center leading-relaxed">
               {message}
             </p>
-            {/* Accent tag */}
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-[#C9A96E] to-[#B8943F] text-white text-[10px] font-bold uppercase tracking-wider shadow-lg">
-              {lang === "ar" ? "رسالة" : "Notice"}
-            </div>
           </div>
         </div>
 
-        {/* Contact email if available */}
-        {contactEmail && (
-          <a
-            href={`mailto:${contactEmail}`}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.03] border border-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-300 mb-10 group"
-          >
-            <Mail className="w-3.5 h-3.5 group-hover:text-[#3ECFC0] transition-colors" />
-            <span className="text-xs font-medium tracking-wide">{contactEmail}</span>
-          </a>
-        )}
+        {/* Contact & Social section */}
+        <div className={`flex flex-col items-center gap-6 transition-all duration-1000 delay-[800ms] ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
 
-        {/* Social Media Links */}
-        {activeSocials.length > 0 && (
-          <div className="mb-12">
-            <p className="text-[10px] text-white/30 text-center mb-4 font-medium uppercase tracking-[0.2em]">
-              {lang === "ar" ? "تابعنا" : "Follow Us"}
-            </p>
-            <div className="flex items-center justify-center gap-2.5 flex-wrap">
-              {activeSocials.map((social) => {
-                const Icon = social.icon;
-                return (
-                  <a
-                    key={social.key}
-                    href={get(social.key)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={social.label}
-                    className={`group relative w-11 h-11 rounded-xl bg-white/[0.03] backdrop-blur-sm border border-white/[0.06] flex items-center justify-center text-white/30 transition-all duration-300 ${social.hoverColor} hover:border-transparent hover:scale-110 hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)]`}
-                  >
-                    <Icon className="w-4 h-4 transition-transform duration-300 group-hover:scale-110" />
-                    <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 text-[10px] text-white/40 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                      {social.label}
-                    </span>
-                  </a>
-                );
-              })}
+          {/* Contact email */}
+          {contactEmail && (
+            <a
+              href={`mailto:${contactEmail}`}
+              className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-white/[0.03] border border-white/[0.06] text-white/40 hover:text-[#3ECFC0] hover:bg-[#3ECFC0]/[0.05] hover:border-[#3ECFC0]/20 transition-all duration-300 group"
+            >
+              <Mail className="w-4 h-4 transition-colors" />
+              <span className="text-xs font-medium tracking-wide">{contactEmail}</span>
+              <ArrowUpRight className="w-3 h-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+            </a>
+          )}
+
+          {/* Social Media */}
+          {activeSocials.length > 0 && (
+            <div>
+              <p className="text-[10px] text-white/20 text-center mb-3 font-medium uppercase tracking-[0.25em]">
+                {lang === "ar" ? "تابعنا" : "Follow Us"}
+              </p>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {activeSocials.map((social) => {
+                  const Icon = social.icon;
+                  return (
+                    <a
+                      key={social.key}
+                      href={get(social.key)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={social.label}
+                      className="group relative w-10 h-10 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-white/25 hover:text-white hover:bg-white/[0.08] hover:border-[#3ECFC0]/30 hover:scale-110 transition-all duration-300"
+                    >
+                      <Icon className="w-4 h-4 transition-transform duration-300 group-hover:scale-110" />
+                    </a>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Decorative divider */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-20 h-px bg-gradient-to-r from-transparent to-[#3ECFC0]/20" />
-          <Clock className="w-4 h-4 text-[#3ECFC0]/20" />
-          <div className="w-20 h-px bg-gradient-to-l from-transparent to-[#3ECFC0]/20" />
+          )}
         </div>
 
         {/* Footer */}
-        <p className="text-xs text-white/25 text-center max-w-sm leading-relaxed">
-          {lang === "ar"
-            ? "نعمل بجد لتقديم أفضل تجربة إيجار شهري في المملكة العربية السعودية"
-            : "Working hard to deliver the best monthly rental experience in Saudi Arabia"
-          }
-        </p>
-
-        {/* Subtle admin login */}
-        <a href="/login" className="mt-8 text-[10px] text-white/10 hover:text-white/30 transition-colors duration-500">
-          {lang === "ar" ? "دخول الإدارة" : "Admin"}
-        </a>
+        <div className={`mt-16 text-center transition-all duration-1000 delay-[900ms] ${mounted ? "opacity-100" : "opacity-0"}`}>
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="w-16 h-px bg-gradient-to-r from-transparent to-white/[0.06]" />
+            <div className="w-1 h-1 rounded-full bg-[#3ECFC0]/20" />
+            <div className="w-16 h-px bg-gradient-to-l from-transparent to-white/[0.06]" />
+          </div>
+          <p className="text-[11px] text-white/15 max-w-sm leading-relaxed">
+            {lang === "ar"
+              ? "نعمل بجد لتقديم أفضل تجربة إيجار شهري في المملكة العربية السعودية"
+              : "Working hard to deliver the best monthly rental experience in Saudi Arabia"
+            }
+          </p>
+          {/* Admin login - very subtle */}
+          <a href="/login" className="inline-block mt-6 text-[10px] text-white/[0.06] hover:text-white/20 transition-colors duration-700">
+            {lang === "ar" ? "دخول الإدارة" : "Admin"}
+          </a>
+        </div>
       </div>
 
       {/* Bottom accent line */}
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A96E]/20 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#C9A96E]/20 to-transparent" />
 
       {/* CSS animations */}
       <style>{`
-        @keyframes shimmer {
+        @keyframes card-shimmer {
           0% { transform: translateX(-100%); }
+          50% { transform: translateX(100%); }
           100% { transform: translateX(100%); }
-        }
-        @keyframes orb-drift-0 {
-          0% { transform: translate(-50%, -50%) scale(1); }
-          100% { transform: translate(-45%, -55%) scale(1.1); }
-        }
-        @keyframes orb-drift-1 {
-          0% { transform: translate(-50%, -50%) scale(1); }
-          100% { transform: translate(-55%, -45%) scale(0.9); }
-        }
-        @keyframes orb-drift-2 {
-          0% { transform: translate(-50%, -50%) scale(1); }
-          100% { transform: translate(-48%, -52%) scale(1.15); }
-        }
-        @keyframes orb-drift-3 {
-          0% { transform: translate(-50%, -50%) scale(1); }
-          100% { transform: translate(-52%, -48%) scale(0.95); }
         }
       `}</style>
     </div>
