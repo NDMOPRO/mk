@@ -17,6 +17,8 @@ const FLAG_DESCRIPTIONS: Record<string, { en: string; ar: string; category: stri
   "EMAIL_OTP_ENABLED": { en: "Kill switch for all email OTP sending", ar: "مفتاح إيقاف إرسال رمز البريد الإلكتروني", category: "Channels" },
   "WHATSAPP_ENABLED": { en: "Kill switch for all WhatsApp sending", ar: "مفتاح إيقاف إرسال واتساب", category: "Channels" },
   "WHATSAPP_OTP_EXPERIMENT": { en: "Reserved: WhatsApp OTP experiment (not implemented)", ar: "محجوز: تجربة رمز واتساب (غير مفعل)", category: "Channels" },
+  "TAQNYAT_SMS_ENABLED": { en: "Enable Taqnyat SMS provider integration", ar: "تفعيل تكامل مزود الرسائل النصية تقنيات", category: "Channels" },
+  "TAQNYAT_WHATSAPP_ENABLED": { en: "Enable Taqnyat WhatsApp provider integration (webhook + sending)", ar: "تفعيل تكامل واتساب تقنيات (الويب هوك + الإرسال)", category: "Channels" },
   "verification.requireForInstantBook": { en: "Require email+phone verification for Instant Book", ar: "طلب التحقق من البريد والهاتف للحجز الفوري", category: "Verification" },
   "verification.requireForPayment": { en: "Require email+phone verification before payment", ar: "طلب التحقق من البريد والهاتف قبل الدفع", category: "Verification" },
   "verification.smsRoutingEnabled": { en: "Smart SMS routing: +966→Unifonic, others→Twilio", ar: "توجيه ذكي: +966→يونيفونك، غيرها→تويليو", category: "Verification" },
