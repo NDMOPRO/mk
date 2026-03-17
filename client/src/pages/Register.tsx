@@ -268,6 +268,9 @@ export default function Register() {
       const data = await res.json();
       if (!res.ok) {
         setError(lang === "ar" ? (data.errorAr || data.error) : data.error);
+        // SEC-1: Reset captcha on server rejection so user can retry
+        hCaptchaRef.current?.resetCaptcha();
+        setCaptchaToken(null);
         return;
       }
 
@@ -279,11 +282,11 @@ export default function Register() {
       setStep(2);
     } catch (err) {
       setError(lang === "ar" ? "فشل التسجيل" : "Registration failed");
-    } finally {
-      setLoading(false);
-      // SEC-1: Reset captcha after every submit attempt
+      // SEC-1: Reset captcha on network/unexpected error so user can retry
       hCaptchaRef.current?.resetCaptcha();
       setCaptchaToken(null);
+    } finally {
+      setLoading(false);
     }
   };
 
