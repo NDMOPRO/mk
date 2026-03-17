@@ -168,12 +168,31 @@ export const integrationRouter = router({
         }
       }
       const all = await db.select().from(integrationConfigs);
-      return all.map(item => ({
-        ...item,
-        configJson: null, // Never send raw config to client
-        maskedConfig: maskConfig(parseConfig(item.configJson)),
-        configFields: getConfigFields(item.integrationKey),
-      }));
+      return all.map(item => {
+        // For email integration, reflect ENV-based SMTP config in status & maskedConfig
+        if (item.integrationKey === 'email' && isSmtpConfigured()) {
+          const envConfig: Record<string, string> = {
+            smtpHost: ENV.smtpHost,
+            smtpPort: String(ENV.smtpPort),
+            smtpUser: ENV.smtpUser,
+            smtpPassword: ENV.smtpPass,
+            fromEmail: ENV.smtpFrom,
+          };
+          return {
+            ...item,
+            status: item.status === 'healthy' ? 'healthy' : 'configured',
+            configJson: null,
+            maskedConfig: maskConfig(envConfig),
+            configFields: getConfigFields(item.integrationKey),
+          };
+        }
+        return {
+          ...item,
+          configJson: null, // Never send raw config to client
+          maskedConfig: maskConfig(parseConfig(item.configJson)),
+          configFields: getConfigFields(item.integrationKey),
+        };
+      });
     }),
 
   // Get single integration detail (with masked secrets)
