@@ -1070,3 +1070,48 @@ export const propertyEnquiries = mysqlTable("property_enquiries", {
 });
 export type PropertyEnquiry = typeof propertyEnquiries.$inferSelect;
 export type InsertPropertyEnquiry = typeof propertyEnquiries.$inferInsert;
+
+// ─── WhatsApp Inbound Conversations ────────────────────────────────
+// Dedicated inbox for inbound WhatsApp messages routed from Taqnyat webhook.
+// Separate from the internal tenant↔landlord conversations table.
+export const waConversations = mysqlTable("wa_conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  contactPhone: varchar("contactPhone", { length: 20 }).notNull(),
+  contactName: varchar("contactName", { length: 255 }),
+  userId: int("userId"),  // linked platform user if phone matches
+  status: mysqlEnum("status", ["open", "assigned", "resolved", "closed"]).default("open").notNull(),
+  assignedTo: int("assignedTo"),  // admin user ID
+  assignedToName: varchar("assignedToName", { length: 255 }),
+  priority: mysqlEnum("priority", ["normal", "high", "urgent"]).default("normal").notNull(),
+  subject: varchar("subject", { length: 255 }),  // auto-generated or admin-set
+  tags: json("tags").$type<string[]>(),
+  unreadCount: int("unreadCount").default(0).notNull(),
+  messageCount: int("messageCount").default(0).notNull(),
+  lastMessageAt: timestamp("lastMessageAt"),
+  lastInboundAt: timestamp("lastInboundAt"),  // for 24h reply window tracking
+  closedAt: timestamp("closedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type WaConversation = typeof waConversations.$inferSelect;
+export type InsertWaConversation = typeof waConversations.$inferInsert;
+
+// ─── WhatsApp Inbound/Outbound Messages ────────────────────────────
+export const waMessages = mysqlTable("wa_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(),
+  direction: mysqlEnum("direction", ["inbound", "outbound"]).notNull(),
+  senderPhone: varchar("senderPhone", { length: 20 }),
+  senderName: varchar("senderName", { length: 255 }),
+  content: text("content"),
+  messageType: mysqlEnum("messageType", ["text", "image", "audio", "video", "document", "location", "contact", "sticker"]).default("text").notNull(),
+  mediaUrl: text("mediaUrl"),
+  taqnyatMessageId: varchar("taqnyatMessageId", { length: 255 }),
+  status: mysqlEnum("status", ["received", "sent", "delivered", "read", "failed"]).default("received").notNull(),
+  sentById: int("sentById"),  // admin user who sent outbound reply
+  sentByName: varchar("sentByName", { length: 255 }),
+  metadata: json("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type WaMessage = typeof waMessages.$inferSelect;
+export type InsertWaMessage = typeof waMessages.$inferInsert;

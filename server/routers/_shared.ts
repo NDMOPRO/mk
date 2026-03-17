@@ -28,13 +28,14 @@ export { isFlagOn } from "../feature-flags";
 export { calculateBookingTotal, parseCalcSettings } from "../booking-calculator";
 export { sendBookingConfirmation, sendPaymentReceipt, sendMaintenanceUpdate, sendNewMaintenanceAlert, verifySmtpConnection, isSmtpConfigured } from "../email";
 export { savePushSubscription, removePushSubscription, sendPushToUser, sendPushBroadcast, isPushConfigured, getUserSubscriptionCount } from "../push";
-export { roles as rolesTable, aiMessages as aiMessagesTable, whatsappMessages, units, auditLog, integrationConfigs } from "../../drizzle/schema";
+export { roles as rolesTable, aiMessages as aiMessagesTable, whatsappMessages, units, auditLog, integrationConfigs, waConversations, waMessages } from "../../drizzle/schema";
 export { drizzle } from "drizzle-orm/mysql2";
 export { default as mysql } from "mysql2/promise";
 export { eq as eqDrizzle, and as andDrizzle, ne as neDrizzle } from "drizzle-orm";
 export { sanitizeText, sanitizeObject, validateContentType, validateFileExtension, MAX_BASE64_SIZE, MAX_AVATAR_BASE64_SIZE, ALLOWED_IMAGE_TYPES, ALLOWED_UPLOAD_TYPES, capLimit, capOffset, isOwnerOrAdmin, isBookingParticipant } from "../security";
 export { sendTemplateMessage, sendTextMessage, getWhatsAppConfig, formatPhoneForWhatsApp, maskPhone } from "../whatsapp-cloud";
 export { logAudit } from "../audit-log";
+export { sendTaqnyatWhatsAppText, formatPhoneForTaqnyat } from "../taqnyat";
 export { dbIdentity } from "../_core/env";
 
 // Shared drizzle instance (singleton — same as original routers.ts)

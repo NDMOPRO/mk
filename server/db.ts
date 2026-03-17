@@ -26,6 +26,8 @@ import {
   cmsContentVersions, InsertCmsContentVersion, cmsMedia, InsertCmsMedia,
   hiddenProperties, InsertHiddenProperty,
   propertyEnquiries, InsertPropertyEnquiry,
+  waConversations, InsertWaConversation,
+  waMessages, InsertWaMessage,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -576,6 +578,57 @@ export async function getDb() {
         await _pool.execute(`ALTER TABLE audit_log MODIFY COLUMN entityType ENUM('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','WHATSAPP_MESSAGE','WHATSAPP_TEMPLATE','KYC_REQUEST','INTEGRATION_CREDENTIAL','FEATURE_FLAG','USER_VERIFICATION') NOT NULL`);
       } catch (e: any) {
         console.warn("[Database] audit_log enum extension note:", e?.message?.substring(0, 120));
+      }
+      // Auto-migrate: WhatsApp inbound conversation routing tables
+      try {
+        await _pool.execute(`CREATE TABLE IF NOT EXISTS wa_conversations (
+          id int AUTO_INCREMENT PRIMARY KEY,
+          contactPhone varchar(20) NOT NULL,
+          contactName varchar(255) DEFAULT NULL,
+          userId int DEFAULT NULL,
+          status enum('open','assigned','resolved','closed') NOT NULL DEFAULT 'open',
+          assignedTo int DEFAULT NULL,
+          assignedToName varchar(255) DEFAULT NULL,
+          priority enum('normal','high','urgent') NOT NULL DEFAULT 'normal',
+          subject varchar(255) DEFAULT NULL,
+          tags json DEFAULT NULL,
+          unreadCount int NOT NULL DEFAULT 0,
+          messageCount int NOT NULL DEFAULT 0,
+          lastMessageAt timestamp NULL DEFAULT NULL,
+          lastInboundAt timestamp NULL DEFAULT NULL,
+          closedAt timestamp NULL DEFAULT NULL,
+          createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_wa_conv_phone (contactPhone),
+          INDEX idx_wa_conv_status (status),
+          INDEX idx_wa_conv_last_msg (lastMessageAt)
+        )`);
+        console.log("[Database] wa_conversations table ready");
+      } catch (e: any) {
+        if (e?.errno !== 1050) console.warn("[Database] wa_conversations table note:", e?.message?.substring(0, 120));
+      }
+      try {
+        await _pool.execute(`CREATE TABLE IF NOT EXISTS wa_messages (
+          id int AUTO_INCREMENT PRIMARY KEY,
+          conversationId int NOT NULL,
+          direction enum('inbound','outbound') NOT NULL,
+          senderPhone varchar(20) DEFAULT NULL,
+          senderName varchar(255) DEFAULT NULL,
+          content text DEFAULT NULL,
+          messageType enum('text','image','audio','video','document','location','contact','sticker') NOT NULL DEFAULT 'text',
+          mediaUrl text DEFAULT NULL,
+          taqnyatMessageId varchar(255) DEFAULT NULL,
+          status enum('received','sent','delivered','read','failed') NOT NULL DEFAULT 'received',
+          sentById int DEFAULT NULL,
+          sentByName varchar(255) DEFAULT NULL,
+          metadata json DEFAULT NULL,
+          createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_wa_msg_conv (conversationId),
+          INDEX idx_wa_msg_created (createdAt)
+        )`);
+        console.log("[Database] wa_messages table ready");
+      } catch (e: any) {
+        if (e?.errno !== 1050) console.warn("[Database] wa_messages table note:", e?.message?.substring(0, 120));
       }
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
@@ -2789,4 +2842,273 @@ export async function getPropertyEnquiries(propertyId: number) {
   return db.select().from(propertyEnquiries)
     .where(eq(propertyEnquiries.propertyId, propertyId))
     .orderBy(desc(propertyEnquiries.createdAt));
+}
+
+
+// ─── WhatsApp Inbox (Inbound Conversation Routing) ─────────────────
+
+/**
+ * Find or create a WhatsApp conversation by contact phone number.
+ * If the phone matches a registered user, auto-link userId.
+ */
+export async function getOrCreateWaConversation(contactPhone: string, contactName?: string): Promise<{ id: number; isNew: boolean }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Normalize phone: strip spaces, ensure starts with +
+  const phone = contactPhone.replace(/\s+/g, "");
+
+  // Look for existing open/assigned conversation with this phone
+  const existing = await db.select().from(waConversations)
+    .where(and(
+      eq(waConversations.contactPhone, phone),
+      inArray(waConversations.status, ["open", "assigned"])
+    ))
+    .orderBy(desc(waConversations.lastMessageAt))
+    .limit(1);
+
+  if (existing.length > 0) {
+    // Update contactName if provided and different
+    if (contactName && contactName !== existing[0].contactName) {
+      await db.update(waConversations)
+        .set({ contactName })
+        .where(eq(waConversations.id, existing[0].id));
+    }
+    return { id: existing[0].id, isNew: false };
+  }
+
+  // Try to find a matching registered user by phone
+  let matchedUserId: number | null = null;
+  try {
+    const phoneVariants = [phone];
+    // Also try without + prefix, and with/without country code
+    if (phone.startsWith("+")) phoneVariants.push(phone.substring(1));
+    if (phone.startsWith("+966")) phoneVariants.push("0" + phone.substring(4));
+    if (phone.startsWith("966")) phoneVariants.push("0" + phone.substring(3));
+
+    const userMatch = await db.select({ id: users.id, name: users.name })
+      .from(users)
+      .where(inArray(users.phone, phoneVariants))
+      .limit(1);
+    if (userMatch.length > 0) {
+      matchedUserId = userMatch[0].id;
+      if (!contactName) contactName = userMatch[0].name ?? undefined;
+    }
+  } catch { /* ignore user lookup errors */ }
+
+  // Create new conversation
+  const result = await db.insert(waConversations).values({
+    contactPhone: phone,
+    contactName: contactName ?? null,
+    userId: matchedUserId,
+    status: "open",
+    priority: "normal",
+    unreadCount: 0,
+    messageCount: 0,
+  } as any);
+
+  return { id: result[0].insertId, isNew: true };
+}
+
+/**
+ * Add an inbound message to a WhatsApp conversation.
+ */
+export async function addInboundWaMessage(data: {
+  conversationId: number;
+  senderPhone: string;
+  senderName?: string;
+  content?: string;
+  messageType?: string;
+  mediaUrl?: string;
+  taqnyatMessageId?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(waMessages).values({
+    conversationId: data.conversationId,
+    direction: "inbound",
+    senderPhone: data.senderPhone,
+    senderName: data.senderName ?? null,
+    content: data.content ?? null,
+    messageType: (data.messageType as any) ?? "text",
+    mediaUrl: data.mediaUrl ?? null,
+    taqnyatMessageId: data.taqnyatMessageId ?? null,
+    status: "received",
+    metadata: data.metadata ?? null,
+  } as any);
+
+  // Update conversation counters
+  const now = new Date();
+  await db.update(waConversations).set({
+    lastMessageAt: now,
+    lastInboundAt: now,
+    unreadCount: sql`unreadCount + 1`,
+    messageCount: sql`messageCount + 1`,
+  } as any).where(eq(waConversations.id, data.conversationId));
+
+  // Re-open if resolved/closed
+  const conv = await db.select({ status: waConversations.status })
+    .from(waConversations).where(eq(waConversations.id, data.conversationId)).limit(1);
+  if (conv.length > 0 && (conv[0].status === "resolved" || conv[0].status === "closed")) {
+    await db.update(waConversations).set({ status: "open", closedAt: null } as any)
+      .where(eq(waConversations.id, data.conversationId));
+  }
+
+  return result[0].insertId;
+}
+
+/**
+ * Add an outbound (admin reply) message to a WhatsApp conversation.
+ */
+export async function addOutboundWaMessage(data: {
+  conversationId: number;
+  content: string;
+  sentById: number;
+  sentByName: string;
+  taqnyatMessageId?: string;
+  messageType?: string;
+  mediaUrl?: string;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(waMessages).values({
+    conversationId: data.conversationId,
+    direction: "outbound",
+    content: data.content,
+    messageType: (data.messageType as any) ?? "text",
+    mediaUrl: data.mediaUrl ?? null,
+    taqnyatMessageId: data.taqnyatMessageId ?? null,
+    status: "sent",
+    sentById: data.sentById,
+    sentByName: data.sentByName,
+  } as any);
+
+  // Update conversation counters
+  await db.update(waConversations).set({
+    lastMessageAt: new Date(),
+    messageCount: sql`messageCount + 1`,
+  } as any).where(eq(waConversations.id, data.conversationId));
+
+  return result[0].insertId;
+}
+
+/**
+ * List WhatsApp conversations for the admin inbox.
+ */
+export async function listWaConversations(filters?: {
+  status?: string;
+  assignedTo?: number;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: any[]; total: number }> {
+  const db = await getDb();
+  if (!db) return { items: [], total: 0 };
+
+  const conditions: any[] = [];
+  if (filters?.status && filters.status !== "all") {
+    conditions.push(eq(waConversations.status, filters.status as any));
+  }
+  if (filters?.assignedTo) {
+    conditions.push(eq(waConversations.assignedTo, filters.assignedTo));
+  }
+  if (filters?.search) {
+    const term = `%${filters.search}%`;
+    conditions.push(or(
+      like(waConversations.contactPhone, term),
+      like(waConversations.contactName, term),
+      like(waConversations.subject, term),
+    ));
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const limit = filters?.limit ?? 50;
+  const offset = filters?.offset ?? 0;
+
+  const items = await db.select().from(waConversations)
+    .where(where!)
+    .orderBy(desc(waConversations.lastMessageAt))
+    .limit(limit).offset(offset);
+
+  const countResult = await db.select({ count: sql<number>`count(*)` })
+    .from(waConversations).where(where!);
+  const total = countResult[0]?.count ?? 0;
+
+  return { items, total };
+}
+
+/**
+ * Get a single WhatsApp conversation by ID.
+ */
+export async function getWaConversation(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(waConversations)
+    .where(eq(waConversations.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+/**
+ * Get messages for a WhatsApp conversation.
+ */
+export async function getWaMessages(conversationId: number, limit = 100, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(waMessages)
+    .where(eq(waMessages.conversationId, conversationId))
+    .orderBy(asc(waMessages.createdAt))
+    .limit(limit).offset(offset);
+}
+
+/**
+ * Update WhatsApp conversation status/assignment.
+ */
+export async function updateWaConversation(id: number, data: {
+  status?: string;
+  assignedTo?: number | null;
+  assignedToName?: string | null;
+  priority?: string;
+  subject?: string;
+  tags?: string[];
+}) {
+  const db = await getDb();
+  if (!db) return;
+
+  const sets: any = {};
+  if (data.status !== undefined) sets.status = data.status;
+  if (data.assignedTo !== undefined) sets.assignedTo = data.assignedTo;
+  if (data.assignedToName !== undefined) sets.assignedToName = data.assignedToName;
+  if (data.priority !== undefined) sets.priority = data.priority;
+  if (data.subject !== undefined) sets.subject = data.subject;
+  if (data.tags !== undefined) sets.tags = data.tags;
+  if (data.status === "closed" || data.status === "resolved") sets.closedAt = new Date();
+
+  if (Object.keys(sets).length > 0) {
+    await db.update(waConversations).set(sets).where(eq(waConversations.id, id));
+  }
+}
+
+/**
+ * Mark all messages in a WhatsApp conversation as read (reset unread count).
+ */
+export async function markWaConversationRead(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(waConversations).set({ unreadCount: 0 } as any)
+    .where(eq(waConversations.id, id));
+}
+
+/**
+ * Get total unread count across all WhatsApp conversations.
+ */
+export async function getWaUnreadTotal(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ total: sql<number>`COALESCE(SUM(unreadCount), 0)` })
+    .from(waConversations)
+    .where(inArray(waConversations.status, ["open", "assigned"]));
+  return result[0]?.total ?? 0;
 }

@@ -5,7 +5,7 @@
  * RBAC: MANAGE_WHATSAPP permission required
  * Features: Masked secrets, template CRUD, send dialog, delivery status
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -25,8 +25,10 @@ import { toast } from "sonner";
 import {
   MessageCircle, Settings, FileText, Send, Plus, Trash2, Eye, EyeOff,
   CheckCircle2, XCircle, Clock, AlertTriangle, RefreshCw, Phone, ExternalLink,
-  Copy, Loader2, CheckCheck, AlertCircle, Search, User, ArrowRight, ArrowLeft
+  Copy, Loader2, CheckCheck, AlertCircle, Search, User, ArrowRight, ArrowLeft,
+  Inbox, CircleDot, UserCheck, Archive, X, Timer, Tag, ChevronDown
 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link } from "wouter";
 
 const WA_GREEN = "#25D366";
@@ -66,6 +68,377 @@ const channelLabels: Record<string, { ar: string; en: string }> = {
   cloud_api: { ar: "Cloud API", en: "Cloud API" },
   both: { ar: "الكل", en: "Both" },
 };
+
+// ─── Inbox Badge (unread count) ─────────────────────────────────────
+function InboxBadge({ isRtl, isActive }: { isRtl: boolean; isActive: boolean }) {
+  const unread = trpc.waInbox.unreadCount.useQuery(undefined, { refetchInterval: 15000 });
+  const count = unread.data?.count ?? 0;
+  if (count === 0) return null;
+  return (
+    <span className={`absolute -top-1.5 ${isRtl ? '-left-1.5' : '-right-1.5'} min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1 ${
+      isActive ? 'bg-white text-[#25D366]' : 'bg-red-500 text-white'
+    }`}>
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
+// ─── Conversation Status Helpers ────────────────────────────────────
+const convStatusConfig: Record<string, { color: string; icon: any; label: string; labelAr: string }> = {
+  open: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CircleDot, label: "Open", labelAr: "مفتوح" },
+  assigned: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: UserCheck, label: "Assigned", labelAr: "مُعيَّن" },
+  resolved: { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", icon: CheckCircle2, label: "Resolved", labelAr: "محلول" },
+  closed: { color: "bg-gray-500/10 text-gray-500 border-gray-500/20", icon: Archive, label: "Closed", labelAr: "مغلق" },
+};
+
+const priorityConfig: Record<string, { color: string; label: string; labelAr: string }> = {
+  normal: { color: "text-muted-foreground", label: "Normal", labelAr: "عادي" },
+  high: { color: "text-orange-500", label: "High", labelAr: "عالي" },
+  urgent: { color: "text-red-500", label: "Urgent", labelAr: "عاجل" },
+};
+
+function get24hWindowInfo(lastInboundAt: string | null | undefined): { isOpen: boolean; hoursLeft: number; label: string; labelAr: string } {
+  if (!lastInboundAt) return { isOpen: false, hoursLeft: 0, label: "No inbound", labelAr: "لا رسائل واردة" };
+  const diff = Date.now() - new Date(lastInboundAt).getTime();
+  const hoursLeft = Math.max(0, 24 - diff / (1000 * 60 * 60));
+  if (hoursLeft > 0) return { isOpen: true, hoursLeft, label: `${hoursLeft.toFixed(1)}h left`, labelAr: `${hoursLeft.toFixed(1)} ساعة متبقية` };
+  return { isOpen: false, hoursLeft: 0, label: "Window closed", labelAr: "انتهت النافذة" };
+}
+
+function formatTimeAgo(dateStr: string | null | undefined, isRtl: boolean): string {
+  if (!dateStr) return "—";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return isRtl ? "الآن" : "now";
+  if (mins < 60) return isRtl ? `منذ ${mins} د` : `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return isRtl ? `منذ ${hrs} س` : `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return isRtl ? `منذ ${days} ي` : `${days}d ago`;
+}
+
+// ─── Inbox Tab ──────────────────────────────────────────────────────
+function InboxTab({ isRtl }: { isRtl: boolean }) {
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const utils = trpc.useUtils();
+
+  // Queries
+  const listQuery = trpc.waInbox.list.useQuery(
+    { status: statusFilter !== "all" ? statusFilter : undefined, search: searchQuery || undefined, limit: 50 },
+    { refetchInterval: 10000 }
+  );
+  const detailQuery = trpc.waInbox.get.useQuery(
+    { id: selectedId! },
+    { enabled: !!selectedId, refetchInterval: 5000 }
+  );
+
+  // Mutations
+  const replyMutation = trpc.waInbox.reply.useMutation({
+    onSuccess: () => {
+      setReplyText("");
+      utils.waInbox.get.invalidate({ id: selectedId! });
+      utils.waInbox.list.invalidate();
+      utils.waInbox.unreadCount.invalidate();
+      toast.success(isRtl ? "تم إرسال الرد" : "Reply sent");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const updateMutation = trpc.waInbox.update.useMutation({
+    onSuccess: () => {
+      utils.waInbox.get.invalidate({ id: selectedId! });
+      utils.waInbox.list.invalidate();
+      toast.success(isRtl ? "تم التحديث" : "Updated");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [detailQuery.data?.messages]);
+
+  const conversations = (listQuery.data?.items ?? []) as any[];
+  const total = listQuery.data?.total ?? 0;
+  const conv = detailQuery.data?.conversation as any;
+  const msgs = (detailQuery.data?.messages ?? []) as any[];
+  const windowInfo = conv ? get24hWindowInfo(conv.lastInboundAt) : null;
+
+  const handleReply = () => {
+    if (!replyText.trim() || !selectedId) return;
+    replyMutation.mutate({ conversationId: selectedId, content: replyText.trim() });
+  };
+
+  const handleStatusChange = (status: string) => {
+    if (!selectedId) return;
+    updateMutation.mutate({ id: selectedId, status: status as any });
+  };
+
+  return (
+    <div className="flex gap-0 border rounded-xl overflow-hidden" style={{ height: "calc(100vh - 16rem)" }}>
+      {/* Conversation List Panel */}
+      <div className={`w-full md:w-96 shrink-0 flex flex-col border-e bg-card/50 ${selectedId ? 'hidden md:flex' : 'flex'}`}>
+        {/* Filters */}
+        <div className="p-3 border-b space-y-2">
+          <div className="relative">
+            <Search className="absolute top-2.5 start-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={isRtl ? "بحث بالرقم أو الاسم..." : "Search phone or name..."}
+              className="ps-9 h-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-1 flex-wrap">
+            {["all", "open", "assigned", "resolved", "closed"].map(s => (
+              <Button key={s} size="sm" variant={statusFilter === s ? "default" : "ghost"}
+                className={`h-7 text-xs px-2 ${statusFilter === s ? 'bg-[#25D366] hover:bg-[#20BD5A] text-white' : ''}`}
+                onClick={() => setStatusFilter(s)}>
+                {s === "all" ? (isRtl ? "الكل" : "All") : (isRtl ? convStatusConfig[s]?.labelAr : convStatusConfig[s]?.label)}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Conversation List */}
+        <ScrollArea className="flex-1">
+          {listQuery.isLoading ? (
+            <div className="p-4 space-y-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />)}
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Inbox className="h-12 w-12 mb-3 opacity-40" />
+              <p className="text-sm">{isRtl ? "لا توجد محادثات" : "No conversations"}</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {conversations.map((c: any) => {
+                const isSelected = selectedId === c.id;
+                const statusCfg = convStatusConfig[c.status] || convStatusConfig.open;
+                const StatusIcon = statusCfg.icon;
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => setSelectedId(c.id)}
+                    className={`p-3 cursor-pointer transition-all hover:bg-muted/50 ${
+                      isSelected ? 'bg-[#25D366]/5 border-s-2 border-s-[#25D366]' : ''
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Avatar */}
+                      <div className="relative shrink-0">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
+                          c.unreadCount > 0 ? 'bg-[#25D366]/15 text-[#25D366]' : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {c.contactName ? c.contactName.charAt(0).toUpperCase() : <Phone className="h-4 w-4" />}
+                        </div>
+                        {c.unreadCount > 0 && (
+                          <span className="absolute -top-0.5 -end-0.5 w-4 h-4 bg-[#25D366] rounded-full flex items-center justify-center text-[9px] text-white font-bold">
+                            {c.unreadCount > 9 ? '9+' : c.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-sm truncate ${c.unreadCount > 0 ? 'font-bold' : 'font-medium'}`}>
+                            {c.contactName || c.contactPhone}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            {formatTimeAgo(c.lastMessageAt, isRtl)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <StatusIcon className={`h-3 w-3 shrink-0 ${statusCfg.color.includes('green') ? 'text-green-500' : statusCfg.color.includes('blue') ? 'text-blue-500' : statusCfg.color.includes('purple') ? 'text-purple-500' : 'text-gray-400'}`} />
+                          <span className="text-xs text-muted-foreground truncate" dir="ltr">
+                            {c.contactName ? c.contactPhone : ''}
+                          </span>
+                        </div>
+                        {c.priority !== 'normal' && (
+                          <Badge variant="outline" className={`mt-1 text-[10px] h-4 ${priorityConfig[c.priority]?.color}`}>
+                            {isRtl ? priorityConfig[c.priority]?.labelAr : priorityConfig[c.priority]?.label}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {total > conversations.length && (
+            <div className="p-3 text-center">
+              <p className="text-xs text-muted-foreground">
+                {isRtl ? `عرض ${conversations.length} من ${total}` : `Showing ${conversations.length} of ${total}`}
+              </p>
+            </div>
+          )}
+        </ScrollArea>
+      </div>
+
+      {/* Chat / Detail Panel */}
+      <div className={`flex-1 flex flex-col bg-background ${!selectedId ? 'hidden md:flex' : 'flex'}`}>
+        {selectedId && conv ? (
+          <>
+            {/* Chat Header */}
+            <div className="p-3 border-b bg-card flex items-center gap-3">
+              <Button variant="ghost" size="icon" className="md:hidden h-8 w-8" onClick={() => setSelectedId(null)}>
+                {isRtl ? <ArrowRight className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
+              </Button>
+              <div className="w-9 h-9 rounded-full bg-[#25D366]/15 flex items-center justify-center text-[#25D366] font-bold text-sm">
+                {conv.contactName ? conv.contactName.charAt(0).toUpperCase() : <Phone className="h-4 w-4" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm truncate">{conv.contactName || conv.contactPhone}</span>
+                  {conv.userId && (
+                    <Badge variant="outline" className="text-[10px] h-4 gap-0.5">
+                      <User className="h-2.5 w-2.5" /> #{conv.userId}
+                    </Badge>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground" dir="ltr">{conv.contactPhone}</span>
+              </div>
+              {/* 24h Window Indicator */}
+              {windowInfo && (
+                <Badge variant="outline" className={`gap-1 text-xs ${
+                  windowInfo.isOpen ? 'text-green-600 border-green-300 bg-green-50 dark:bg-green-950/20' : 'text-red-500 border-red-300 bg-red-50 dark:bg-red-950/20'
+                }`}>
+                  <Timer className="h-3 w-3" />
+                  {isRtl ? windowInfo.labelAr : windowInfo.label}
+                </Badge>
+              )}
+              {/* Status Actions */}
+              <Select value={conv.status} onValueChange={handleStatusChange}>
+                <SelectTrigger className="w-auto h-8 text-xs gap-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(convStatusConfig).map(([k, v]) => (
+                    <SelectItem key={k} value={k} className="text-xs">
+                      {isRtl ? v.labelAr : v.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Messages */}
+            <ScrollArea className="flex-1 p-4">
+              {detailQuery.isLoading ? (
+                <div className="space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-12 w-48 bg-muted/50 rounded-xl animate-pulse" />)}
+                </div>
+              ) : msgs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                  <MessageCircle className="h-10 w-10 mb-2 opacity-30" />
+                  <p className="text-sm">{isRtl ? "لا توجد رسائل بعد" : "No messages yet"}</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {msgs.map((msg: any) => {
+                    const isInbound = msg.direction === "inbound";
+                    return (
+                      <div key={msg.id} className={`flex ${isInbound ? 'justify-start' : 'justify-end'}`}>
+                        <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                          isInbound
+                            ? 'bg-muted rounded-es-sm'
+                            : 'bg-[#25D366] text-white rounded-ee-sm'
+                        }`}>
+                          {/* Media indicator */}
+                          {msg.messageType !== 'text' && msg.messageType && (
+                            <div className={`text-[10px] mb-1 font-medium uppercase tracking-wider ${
+                              isInbound ? 'text-muted-foreground' : 'text-white/70'
+                            }`}>
+                              {msg.messageType}
+                            </div>
+                          )}
+                          {msg.mediaUrl && (
+                            <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer"
+                              className={`text-xs underline block mb-1 ${isInbound ? 'text-blue-500' : 'text-white/80'}`}>
+                              {isRtl ? 'عرض المرفق' : 'View attachment'}
+                            </a>
+                          )}
+                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                          <div className={`flex items-center gap-1.5 mt-1 ${isInbound ? '' : 'justify-end'}`}>
+                            <span className={`text-[10px] ${isInbound ? 'text-muted-foreground' : 'text-white/60'}`}>
+                              {new Date(msg.createdAt).toLocaleTimeString(isRtl ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            {!isInbound && msg.sentByName && (
+                              <span className="text-[10px] text-white/50">— {msg.sentByName}</span>
+                            )}
+                            {!isInbound && (
+                              <CheckCheck className={`h-3 w-3 ${
+                                msg.status === 'delivered' || msg.status === 'read' ? 'text-white' : 'text-white/40'
+                              }`} />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </ScrollArea>
+
+            {/* Reply Input */}
+            <div className="p-3 border-t bg-card">
+              {windowInfo?.isOpen ? (
+                <div className="flex gap-2">
+                  <Input
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={isRtl ? "اكتب ردك هنا..." : "Type your reply..."}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleReply()}
+                    className="flex-1"
+                    disabled={replyMutation.isPending}
+                  />
+                  <Button
+                    onClick={handleReply}
+                    disabled={!replyText.trim() || replyMutation.isPending}
+                    size="icon"
+                    className="bg-[#25D366] hover:bg-[#20BD5A] text-white border-0"
+                  >
+                    {replyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                  <Timer className="h-4 w-4 text-amber-500 shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {isRtl
+                      ? 'نافذة الـ 24 ساعة انتهت. استخدم تبويب "إرسال" لإرسال قالب رسالة أولاً.'
+                      : 'The 24-hour window has expired. Use the "Send" tab to send a template message first.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-20 h-20 rounded-full bg-[#25D366]/10 flex items-center justify-center mx-auto mb-4">
+                <Inbox className="h-10 w-10 text-[#25D366]/50" />
+              </div>
+              <p className="text-muted-foreground font-medium">
+                {isRtl ? 'اختر محادثة لعرض الرسائل' : 'Select a conversation to view messages'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isRtl ? `${total} محادثة` : `${total} conversation${total !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 // ─── Settings Tab ───────────────────────────────────────────────────
 function SettingsTab({ isRtl }: { isRtl: boolean }) {
@@ -842,7 +1215,7 @@ export default function AdminWhatsApp() {
   const isRtl = lang === "ar";
   const BackIcon = isRtl ? ArrowRight : ArrowLeft;
 
-  const [activeTab, setActiveTab] = useState<"settings" | "send" | "templates" | "logs">("send");
+  const [activeTab, setActiveTab] = useState<"inbox" | "settings" | "send" | "templates" | "logs">("inbox");
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>;
   if (!isAuthenticated) { window.location.href = getLoginUrl(); return null; }
@@ -877,6 +1250,7 @@ export default function AdminWhatsApp() {
         {/* Tabs */}
         <div className="flex gap-2 border-b border-border/40 pb-3 flex-wrap">
           {[
+            { id: "inbox" as const, label: isRtl ? "صندوق الوارد" : "Inbox", icon: MessageCircle },
             { id: "send" as const, label: isRtl ? "إرسال" : "Send", icon: Send },
             { id: "templates" as const, label: isRtl ? "القوالب" : "Templates", icon: FileText },
             { id: "logs" as const, label: isRtl ? "السجلات" : "Logs", icon: Clock },
@@ -884,15 +1258,17 @@ export default function AdminWhatsApp() {
           ].map(tab => (
             <Button key={tab.id}
               variant={activeTab === tab.id ? "default" : "ghost"}
-              className={`gap-2 ${activeTab === tab.id ? "bg-[#25D366] hover:bg-[#20BD5A] text-white" : ""}`}
+              className={`gap-2 relative ${activeTab === tab.id ? "bg-[#25D366] hover:bg-[#20BD5A] text-white" : ""}`}
               onClick={() => setActiveTab(tab.id)}>
               <tab.icon className="h-4 w-4" />
               {tab.label}
+              {tab.id === "inbox" && <InboxBadge isRtl={isRtl} isActive={activeTab === "inbox"} />}
             </Button>
           ))}
         </div>
 
         {/* Tab Content */}
+        {activeTab === "inbox" && <InboxTab isRtl={isRtl} />}
         {activeTab === "settings" && <SettingsTab isRtl={isRtl} />}
         {activeTab === "send" && <SendTab isRtl={isRtl} />}
         {activeTab === "templates" && <TemplatesTab isRtl={isRtl} />}

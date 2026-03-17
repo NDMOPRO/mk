@@ -600,9 +600,53 @@ export async function handleTaqnyatWhatsAppWebhook(req: Request, res: Response) 
           },
         });
 
-        // TODO: Route incoming messages to conversation system or chatbot
-        // This is where you'd integrate with the existing conversations/messages tables
-        // or trigger automated responses based on message content.
+        // ─── Route inbound message into WhatsApp Inbox ───────────────
+        if (senderPhone && senderPhone !== "unknown") {
+          try {
+            const {
+              getOrCreateWaConversation,
+              addInboundWaMessage,
+            } = await import("./db");
+
+            // Normalize phone to +international format
+            let normalizedPhone = senderPhone.replace(/[^0-9+]/g, "");
+            if (!normalizedPhone.startsWith("+") && normalizedPhone.length > 0) {
+              normalizedPhone = "+" + normalizedPhone;
+            }
+
+            // Extract sender name from payload (Taqnyat may include profile name)
+            const senderName = payload.senderName || payload.pushName || payload.profileName || payload.name || undefined;
+
+            // Find or create conversation for this phone number
+            const { id: conversationId, isNew } = await getOrCreateWaConversation(normalizedPhone, senderName);
+
+            // Determine media URL if present
+            const mediaUrl = payload.mediaUrl || payload.media?.url || payload.image?.url || payload.document?.url || payload.audio?.url || payload.video?.url || undefined;
+
+            // Map Taqnyat message type to our enum
+            let mappedType: string = "text";
+            const rawType = (messageType || "").toLowerCase();
+            if (["image", "audio", "video", "document", "location", "contact", "sticker"].includes(rawType)) {
+              mappedType = rawType;
+            }
+
+            // Store the inbound message
+            const msgId = await addInboundWaMessage({
+              conversationId,
+              senderPhone: normalizedPhone,
+              senderName,
+              content: messageBody || (mappedType !== "text" ? `[${mappedType}]` : ""),
+              messageType: mappedType,
+              mediaUrl,
+              taqnyatMessageId: payload.messageId || payload.id || undefined,
+              metadata: payload,
+            });
+
+            console.log(`[Taqnyat WhatsApp Webhook] Routed to conversation #${conversationId} (msg #${msgId}, new=${isNew})`);
+          } catch (routeErr: any) {
+            console.error("[Taqnyat WhatsApp Webhook] Routing failed:", routeErr.message);
+          }
+        }
 
         // ─── Email notification to WhatsApp support/escalation email ───
         if (config.whatsappSupportEmail && messageBody) {
