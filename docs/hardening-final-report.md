@@ -183,5 +183,5 @@ HTTP 200: property1-photo3-original-9h8LR0a0ro.webp
 
 ---
 
-**أعد بواسطة:** Manus AI  
+**أعد بواسطة:** Monthly Key Team  
 **آخر تحديث:** 2 مارس 2026

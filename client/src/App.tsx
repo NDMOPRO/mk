@@ -145,7 +145,7 @@ function Router() {
         <Route path="/privacy" component={PrivacyPolicy} />
         <Route path="/terms" component={TermsOfService} />
         <Route path="/contact" component={ContactUs} />
-        {/* Removed routes: /admin/ai-ratings, /admin/ai-control, /admin/help-center, /admin/ai-copilot — not in Admin Map */}
+        <Route path="/admin/ai-control" component={AiControlPanel} />
         <Route path="/submit-property" component={SubmitProperty} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

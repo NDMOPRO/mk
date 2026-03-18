@@ -81,5 +81,5 @@ Payment:  pending → completed (manual override)
 
 ---
 
-**Prepared by:** Manus AI  
+**Prepared by:** Monthly Key Team  
 **Last updated:** 2 March 2026

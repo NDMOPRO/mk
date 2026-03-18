@@ -2,7 +2,7 @@
 
 **Version**: 1.0  
 **Date**: March 4, 2026  
-**Author**: Manus AI  
+**Author**: Monthly Key Team  
 **Repository**: `github.com/raneemndmo-collab/mk`  
 **Production URL**: `https://monthlykey.com`
 
