@@ -311,7 +311,7 @@ For any inquiries about these Terms and Conditions, please contact us through th
   const content = customContent || (lang === "ar" ? arContent : enContent);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background" dir={dir}>
+    <div className="min-h-screen flex flex-col bg-background">
       <SEOHead title="Terms of Service" titleAr="الشروط والأحكام" description="Terms and conditions for using المفتاح الشهري rental platform" path="/terms" />
       <Navbar />
       <main className="flex-1 container py-8 sm:py-12 max-w-4xl">

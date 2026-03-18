@@ -88,7 +88,7 @@ export default function ContactUs() {
   ];
 
   return (
-    <div className="min-h-screen bg-background" dir={isAr ? "rtl" : "ltr"}>
+    <div className="min-h-screen bg-background">
       <SEOHead
         title="Contact Us"
         titleAr="تواصل معنا"

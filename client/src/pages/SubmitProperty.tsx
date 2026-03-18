@@ -343,7 +343,7 @@ export default function SubmitProperty() {
       <>
         <SEOHead title={isAr ? "تم إرسال الطلب | المفتاح الشهري" : "Submission Received | Monthly Key"} />
         <Navbar />
-        <div className="min-h-[80vh] flex items-center justify-center px-4 py-16" dir={dir}>
+        <div className="min-h-[80vh] flex items-center justify-center px-4 py-16">
           <div className="max-w-md w-full text-center">
             {/* Animated success */}
             <div className="relative mx-auto w-24 h-24 mb-8">
@@ -815,7 +815,7 @@ export default function SubmitProperty() {
 
       {/* Draft Restore Prompt */}
       <Dialog open={showDraftPrompt} onOpenChange={setShowDraftPrompt}>
-        <DialogContent className="max-w-sm" dir={dir}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Save className="h-5 w-5 text-[#3ECFC0]" />
@@ -841,7 +841,7 @@ export default function SubmitProperty() {
 
       {/* Full Agreement Dialog */}
       <Dialog open={showAgreement} onOpenChange={setShowAgreement}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" dir={dir}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-[#3ECFC0]" />
@@ -861,7 +861,7 @@ export default function SubmitProperty() {
         </DialogContent>
       </Dialog>
 
-      <div className="min-h-screen bg-gradient-to-b from-[#0B1E2D] via-[#0f2a3d] to-background" dir={dir}>
+      <div className="min-h-screen bg-gradient-to-b from-[#0B1E2D] via-[#0f2a3d] to-background">
         {/* Hero Section */}
         <div className="relative overflow-hidden pt-8 pb-20 sm:pt-12 sm:pb-28 px-4">
           {/* Decorative elements */}

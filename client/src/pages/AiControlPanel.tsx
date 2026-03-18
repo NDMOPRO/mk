@@ -24,7 +24,7 @@ export default function AiControlPanel() {
   const [activeTab, setActiveTab] = useState<"overview" | "settings" | "documents" | "conversations" | "ratings">("overview");
 
   return (
-    <div className="min-h-screen bg-background" dir={dir}>
+    <div className="min-h-screen bg-background">
       <SEOHead title="AI Control Panel | المفتاح الشهري - Monthly Key" />
       {/* Header */}
       <div className="border-b bg-card">

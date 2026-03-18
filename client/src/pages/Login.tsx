@@ -50,7 +50,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50 dark:from-[#0B1E2D] dark:to-[#0f2a3d] flex items-center justify-center p-4" dir={dir}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50 dark:from-[#0B1E2D] dark:to-[#0f2a3d] flex items-center justify-center p-4">
       <SEOHead title="Login" titleAr="تسجيل الدخول" path="/login" noindex={true} />
       <div className="w-full max-w-md">
         {/* Logo */}

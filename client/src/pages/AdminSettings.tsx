@@ -285,7 +285,7 @@ export default function AdminSettings() {
       </div>
 
       <div className="px-6 py-6">
-        <Tabs defaultValue="general" dir={dir}>
+        <Tabs defaultValue="general">
           <TabsList className="flex flex-wrap gap-1 h-auto p-1 mb-6">
             <TabsTrigger value="general" className="gap-2"><Settings className="h-4 w-4" />{t("settings.general")}</TabsTrigger>
             <TabsTrigger value="hero" className="gap-2"><Image className="h-4 w-4" />{t("settings.hero")}</TabsTrigger>
@@ -1910,7 +1910,7 @@ export default function AdminSettings() {
 
           {/* Cities Management */}
           <TabsContent value="cities">
-            <CitiesManagement lang={lang} dir={dir} isRtl={isRtl} />
+            <CitiesManagement lang={lang} isRtl={isRtl} />
           </TabsContent>
 
           {/* Districts */}

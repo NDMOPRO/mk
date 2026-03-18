@@ -146,7 +146,7 @@ export default function FAQ() {
   }, [faqItems, searchQuery, activeCategory]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col" dir={dir}>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <SEOHead
         title="FAQ"
         titleAr="الأسئلة الشائعة"

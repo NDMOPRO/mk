@@ -59,7 +59,7 @@ export default function LeaseContract() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir={lang === "ar" ? "rtl" : "ltr"}>
+    <div className="min-h-screen bg-background flex flex-col">
       <SEOHead title="Lease Contract" titleAr="عقد الإيجار" description="View lease contract details" descriptionAr="عرض تفاصيل عقد الإيجار" />
       <Navbar />
       <main className="flex-1 container py-8">

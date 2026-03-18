@@ -162,7 +162,7 @@ export default function TenantDashboard() {
   if (!isAuthenticated) { window.location.href = getLoginUrl(); return null; }
 
   return (
-    <div className="min-h-screen flex flex-col rtl-dashboard" dir={dir}>
+    <div className="min-h-screen flex flex-col">
       <SEOHead title={isAr ? "لوحة المستأجر" : "Tenant Dashboard"} titleAr="لوحة المستأجر" path="/tenant" noindex={true} />
       <Navbar />
       <div className="container py-6">

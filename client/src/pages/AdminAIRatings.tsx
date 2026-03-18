@@ -45,7 +45,7 @@ export default function AdminAIRatings() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="container py-8" dir={isAr ? "rtl" : "ltr"}>
+      <div className="container py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Link href="/admin" className="text-muted-foreground hover:text-foreground transition-colors">

@@ -114,7 +114,7 @@ export default function AdminShomoos() {
   return (
     <DashboardLayout>
       <SEOHead title="Shomoos Integration | المفتاح الشهري - Monthly Key" />
-      <div className="space-y-6 max-w-5xl mx-auto" dir={isAr ? "rtl" : "ltr"}>
+      <div className="space-y-6 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>

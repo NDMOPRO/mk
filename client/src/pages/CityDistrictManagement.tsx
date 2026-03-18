@@ -289,7 +289,7 @@ export default function CityDistrictManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-background" dir={isAr ? "rtl" : "ltr"}>
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-card border-b">
         <div className="container py-6">
@@ -550,7 +550,7 @@ export default function CityDistrictManagement() {
 
       {/* ─── City Dialog ──────────────────────────────────────── */}
       <Dialog open={showCityDialog} onOpenChange={setShowCityDialog}>
-        <DialogContent className="max-w-lg" dir={isAr ? "rtl" : "ltr"}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingCity ? t("cityMgmt.editCity") : t("cityMgmt.addCity")}</DialogTitle>
             <DialogDescription>
@@ -712,7 +712,7 @@ export default function CityDistrictManagement() {
 
       {/* ─── District Dialog ──────────────────────────────────── */}
       <Dialog open={showDistrictDialog} onOpenChange={setShowDistrictDialog}>
-        <DialogContent className="max-w-lg" dir={isAr ? "rtl" : "ltr"}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingDistrict ? t("cityMgmt.editDistrict") : t("cityMgmt.addDistrict")}</DialogTitle>
             <DialogDescription>
@@ -819,7 +819,7 @@ export default function CityDistrictManagement() {
 
       {/* ─── Delete City Confirm ──────────────────────────────── */}
       <AlertDialog open={!!deletingCity} onOpenChange={() => setDeletingCity(null)}>
-        <AlertDialogContent dir={isAr ? "rtl" : "ltr"}>
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("cityMgmt.deleteCity")}</AlertDialogTitle>
             <AlertDialogDescription>{t("cityMgmt.deleteCityConfirm")}</AlertDialogDescription>
@@ -838,7 +838,7 @@ export default function CityDistrictManagement() {
 
       {/* ─── Delete District Confirm ──────────────────────────── */}
       <AlertDialog open={!!deletingDistrict} onOpenChange={() => setDeletingDistrict(null)}>
-        <AlertDialogContent dir={isAr ? "rtl" : "ltr"}>
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("cityMgmt.deleteDistrict")}</AlertDialogTitle>
             <AlertDialogDescription>{t("cityMgmt.deleteDistrictConfirm")}</AlertDialogDescription>

@@ -132,7 +132,7 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen" dir={dir}>
+      <div className="flex items-center justify-center min-h-screen">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-6">
             <img loading="lazy" 
@@ -167,7 +167,7 @@ export default function DashboardLayout({
   const sidebarSide = lang === "ar" ? "right" : "left";
 
   return (
-    <div dir={dir} className="rtl-dashboard">
+    <>
       <SidebarProvider
         style={
           {

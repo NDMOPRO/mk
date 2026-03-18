@@ -222,7 +222,6 @@ export default function AdminAICopilot() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={lang === "ar" ? "اكتب سؤالك هنا..." : "Type your question here..."}
                 className="flex-1 h-11"
-                dir={lang === "ar" ? "rtl" : "ltr"}
                 disabled={isThinking || !conversationId}
               />
               <Button

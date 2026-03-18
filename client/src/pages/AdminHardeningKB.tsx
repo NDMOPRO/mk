@@ -446,7 +446,7 @@ export default function AdminHardeningKB() {
 
   return (
     <DashboardLayout>
-    <div className="flex flex-col" dir="rtl">
+    <div className="flex flex-col">
 {/* Top Stats Bar */}
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-20">
         <div className="container py-3">

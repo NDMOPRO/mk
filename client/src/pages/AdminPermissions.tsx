@@ -176,7 +176,7 @@ export default function AdminPermissions() {
   return (
     <DashboardLayout>
     <>
-<div className="container py-8 space-y-8" dir="rtl">
+<div className="container py-8 space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -195,7 +195,7 @@ export default function AdminPermissions() {
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 ml-2" />دور جديد</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>إنشاء دور جديد</DialogTitle>
               </DialogHeader>
@@ -267,7 +267,7 @@ export default function AdminPermissions() {
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm"><Pencil className="w-3 h-3 ml-1" />تعديل</Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>تعديل الدور: {role.nameAr}</DialogTitle>
                       </DialogHeader>

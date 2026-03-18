@@ -315,7 +315,7 @@ For any inquiries or requests regarding your personal data privacy, please conta
   const content = customContent || (lang === "ar" ? arContent : enContent);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background" dir={dir}>
+    <div className="min-h-screen flex flex-col bg-background">
       <SEOHead
         title="Privacy Policy"
         titleAr="سياسة الخصوصية"

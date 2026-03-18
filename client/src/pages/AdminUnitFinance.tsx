@@ -108,7 +108,7 @@ function UnitForm({ unit, buildingId, onSuccess, onCancel, lang }: {
   const set = (key: string, val: string) => setForm(prev => ({ ...prev, [key]: val }));
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? "rtl" : "ltr"}>
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>{isRtl ? "رقم الوحدة" : "Unit Number"} *</Label>
@@ -351,7 +351,7 @@ function Beds24Form({ form, set, lang, saving, onSave, onCancel }: {
 }) {
   const isRtl = lang === "ar";
   return (
-    <div className="space-y-4" dir={isRtl ? "rtl" : "ltr"}>
+    <div className="space-y-4">
       <div className="space-y-2">
         <Label>{isRtl ? "نوع الاتصال" : "Connection Type"}</Label>
         <Select value={form.connectionType} onValueChange={v => set("connectionType", v)}>

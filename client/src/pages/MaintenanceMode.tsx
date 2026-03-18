@@ -256,7 +256,6 @@ export default function MaintenanceMode() {
   return (
     <div
       className={`min-h-screen relative overflow-hidden ${isRtl ? "rtl" : "ltr"}`}
-      dir={isRtl ? "rtl" : "ltr"}
     >
       <SEOHead title={lang === "ar" ? "المفتاح الشهري - قريباً" : "Monthly Key - Coming Soon"} />
 

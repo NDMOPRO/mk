@@ -391,7 +391,7 @@ export default function Register() {
   const selectedCountry = COUNTRY_CODES.find((c) => c.code === form.countryCode) || COUNTRY_CODES[0];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50 dark:from-[#0B1E2D] dark:to-[#0f2a3d] flex items-center justify-center p-4" dir={dir}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50 dark:from-[#0B1E2D] dark:to-[#0f2a3d] flex items-center justify-center p-4">
       <SEOHead title="Register" titleAr="إنشاء حساب" path="/register" noindex={true} />
       <div className="w-full max-w-md">
         {/* Logo */}
@@ -707,7 +707,7 @@ export default function Register() {
 
             {/* ─── Terms & Privacy Dialog ─────────────────────── */}
             <Dialog open={showTermsDialog} onOpenChange={setShowTermsDialog}>
-              <DialogContent className="max-w-lg max-h-[85vh] p-0 overflow-hidden" dir={dir}>
+              <DialogContent className="max-w-lg max-h-[85vh] p-0 overflow-hidden">
                 <DialogHeader className="px-6 pt-5 pb-0">
                   <DialogTitle className="text-lg font-bold text-[#0B1E2D] dark:text-foreground">
                     {activeDialogTab === "terms"

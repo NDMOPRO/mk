@@ -262,7 +262,6 @@ export default function Search() {
                         onChange={(e) => { setSearchText(e.target.value); setPage(0); }}
                         placeholder={lang === "ar" ? "اسم العقار، الحي، الوصف..." : "Property name, district, description..."}
                         className="ps-9 h-11"
-                        dir={lang === "ar" ? "rtl" : "ltr"}
                       />
                       {searchText && (
                         <button
@@ -421,7 +420,6 @@ export default function Search() {
                       onChange={(e) => { setSearchText(e.target.value); setPage(0); }}
                       placeholder={lang === "ar" ? "اسم العقار، الحي، الوصف..." : "Property name, district, description..."}
                       className="ps-9"
-                      dir={lang === "ar" ? "rtl" : "ltr"}
                     />
                     {searchText && (
                       <button

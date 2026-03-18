@@ -219,7 +219,7 @@ export default function KnowledgeBase() {
   if (!user || user.role !== "admin") {
     return (
       <DashboardLayout>
-      <div className="min-h-screen flex flex-col" dir={dir}>
+      <div className="min-h-screen flex flex-col">
 <main className="flex-1 flex items-center justify-center">
           <Card className="max-w-md mx-auto text-center p-8">
             <ShieldCheck className="w-16 h-16 mx-auto text-red-500 mb-4" />
@@ -247,7 +247,7 @@ export default function KnowledgeBase() {
 
   return (
     <DashboardLayout>
-    <div className="min-h-screen flex flex-col bg-background" dir={dir}>
+    <div className="min-h-screen flex flex-col bg-background">
 <main className="flex-1 py-8">
         <div className="container max-w-7xl">
           {/* Header */}
@@ -438,7 +438,7 @@ export default function KnowledgeBase() {
       </main>
 {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir={dir}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingId ? t("kb.editArticle") : t("kb.addArticle")}
@@ -565,7 +565,7 @@ export default function KnowledgeBase() {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent dir={dir}>
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("kb.deleteArticle")}</AlertDialogTitle>
             <AlertDialogDescription>{t("kb.deleteConfirm")}</AlertDialogDescription>

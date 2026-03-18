@@ -215,10 +215,8 @@
 @layer components {
   .container {
     width: 100%;
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: 1rem;
-    padding-right: 1rem;
+    margin-inline: auto;
+    padding-inline: 1rem;
   }
 
   .flex {
@@ -228,15 +226,13 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem;
-      padding-right: 1.5rem;
+      padding-inline: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem;
-      padding-right: 2rem;
+      padding-inline: 2rem;
       max-width: 1280px;
     }
   }
@@ -562,145 +558,89 @@
   animation: ripple 0.6s linear;
 }
 
-/* ═══ Comprehensive RTL Support ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   CENTRALIZED RTL / LTR DIRECTION SYSTEM
+   ─────────────────────────────────────────────────────────────────────
+   Single source of truth: <html dir="rtl|ltr" lang="ar|en">
+   All components inherit direction automatically — NO per-page dir= needed.
+   Uses CSS logical properties so layout adapts to any direction.
+   ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── Force RTL direction on the entire document when dir=rtl ── */
+/* ── 1. Root direction contract ── */
 [dir="rtl"] {
   direction: rtl;
-  text-align: right;
+  text-align: start;
 }
-
-/* ═══ UNIVERSAL RTL FLEX REVERSAL (Dashboard Scoped) ═══ */
-/* Auto-reverse ALL horizontal flex containers in RTL mode within .rtl-dashboard.
-   This catches all flex rows without needing individual class-based overrides.
-   Scoped to .rtl-dashboard to avoid breaking public pages (Home, Search, etc.) */
-[dir="rtl"] .rtl-dashboard .flex:not(.flex-col):not(.flex-col-reverse):not([class*="flex-col"]):not([data-slot="sidebar-wrapper"]):not([data-slot="sidebar-container"]):not([data-slot="sidebar-gap"]) {
-  flex-direction: row-reverse;
-}
-
-/* Sidebar wrapper must keep normal flex direction — the sidebar component
-   handles RTL positioning via data-side="right" internally */
-[dir="rtl"] .rtl-dashboard [data-slot="sidebar-wrapper"] {
-  flex-direction: row !important;
-}
-[dir="rtl"] .rtl-dashboard [data-slot="sidebar-container"] {
-  flex-direction: column !important;
-}
-
-/* Inline-flex elements (badges, buttons with icons) also reverse */
-[dir="rtl"] .rtl-dashboard .inline-flex:not(.flex-col) {
-  flex-direction: row-reverse;
-}
-
-/* Restore column direction explicitly — prevent accidental reversal */
-[dir="rtl"] .rtl-dashboard .flex.flex-col {
-  flex-direction: column !important;
-}
-[dir="rtl"] .rtl-dashboard .flex.flex-col-reverse {
-  flex-direction: column-reverse !important;
-}
-
-/* sm:flex-row should also reverse in RTL within dashboard */
-@media (min-width: 640px) {
-  [dir="rtl"] .rtl-dashboard .sm\:flex-row {
-    flex-direction: row-reverse !important;
-  }
-}
-@media (min-width: 768px) {
-  [dir="rtl"] .rtl-dashboard .md\:flex-row {
-    flex-direction: row-reverse !important;
-  }
-}
-@media (min-width: 1024px) {
-  [dir="rtl"] .rtl-dashboard .lg\:flex-row {
-    flex-direction: row-reverse !important;
-  }
-}
-
-/* Preserve flex-wrap behavior in RTL dashboard */
-[dir="rtl"] .rtl-dashboard .flex-wrap {
-  flex-wrap: wrap-reverse;
-}
-[dir="rtl"] .rtl-dashboard .flex-wrap-reverse {
-  flex-wrap: wrap;
-}
-
-/* ── Tabs: reverse tab order and icon position ── */
-[dir="rtl"] [data-slot="tabs-list"] {
-  direction: rtl;
-}
-[dir="rtl"] [data-slot="tabs-trigger"] {
-  flex-direction: row-reverse;
-}
-
-/* ── Invoice codes always LTR (INV-2026-XXXX) ── */
-.font-mono, .invoice-code {
+[dir="ltr"] {
   direction: ltr;
-  unicode-bidi: embed;
+  text-align: start;
 }
 
-/* ── Numbers and currency: keep LTR for readability ── */
+/* ── 2. Mixed-direction content isolation ── */
+/* Invoice codes, URLs, code snippets — always LTR */
+.font-mono, .invoice-code, .ltr-content {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Currency and numbers — always LTR for readability */
 .currency-amount {
   direction: ltr;
-  unicode-bidi: embed;
+  unicode-bidi: isolate;
   display: inline-block;
 }
 
-/* ── Select dropdowns in RTL ── */
-[dir="rtl"] [data-slot="select-trigger"] {
-  text-align: right;
-}
-[dir="rtl"] [data-slot="select-content"] {
-  text-align: right;
+/* Phone numbers — always LTR */
+input[type="tel"], .phone-number {
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
-/* ── Dialog/modal alignment in RTL ── */
-[dir="rtl"] [role="dialog"] {
-  text-align: right;
+/* Email and URL inputs — always LTR */
+input[type="email"], input[type="url"] {
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
-/* ── Progress bar direction ── */
-[dir="rtl"] .progress-bar-fill {
-  margin-left: auto;
-  margin-right: 0;
+/* Explicit LTR inputs (e.g., English-only fields in bilingual forms) */
+[dir="rtl"] input[dir="ltr"],
+[dir="rtl"] textarea[dir="ltr"],
+[dir="rtl"] .ltr-input {
+  direction: ltr;
+  text-align: start;
 }
 
-/* ── Toast notifications ── */
-[dir="rtl"] [data-sonner-toaster] {
-  direction: rtl;
-}
-
-/* ── Chevron/arrow icons that imply direction ── */
+/* ── 3. Directional icon flipping ── */
+/* Icons/chevrons that imply direction flip in RTL */
 [dir="rtl"] .rtl-flip-icon {
   transform: scaleX(-1);
 }
 
-/* ── Ensure text inputs with LTR content stay LTR ── */
-[dir="rtl"] input[dir="ltr"],
-[dir="rtl"] .ltr-input {
-  direction: ltr;
-  text-align: left;
+/* ── 4. Component-level direction inheritance ── */
+/* Select dropdowns inherit text alignment from root */
+[data-slot="select-trigger"],
+[data-slot="select-content"] {
+  text-align: start;
 }
 
-/* ── Booking amount text alignment in RTL ── */
-[dir="rtl"] .booking-header-row .booking-amount {
-  text-align: left;
-}
-[dir="rtl"] .booking-header-row .booking-info {
-  text-align: right;
+/* Dialog/modal inherits alignment from root */
+[role="dialog"] {
+  text-align: start;
 }
 
-/* ── Keep specific elements from double-reversing ── */
-/* Navigation bar should keep its own layout */
-[dir="rtl"] nav .flex:not(.flex-col) {
-  flex-direction: row-reverse;
+/* Toast notifications follow root direction */
+[data-sonner-toaster] {
+  direction: inherit;
 }
-[dir="rtl"] nav .flex.flex-col {
-  flex-direction: column !important;
+
+/* Progress bar fill — use logical margin */
+.progress-bar-fill {
+  margin-inline-start: 0;
+  margin-inline-end: auto;
 }
-/* Grid columns should not be affected */
-[dir="rtl"] .grid {
-  direction: rtl;
+[dir="rtl"] .progress-bar-fill {
+  margin-inline-start: auto;
+  margin-inline-end: 0;
 }
 
 /* ═══ Mobile FAB Stacking Rules ═══ */

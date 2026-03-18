@@ -404,7 +404,7 @@ export default function AdminPropertyEdit() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 max-w-5xl mx-auto" dir={dir}>
+      <div className="space-y-6 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>

@@ -3,6 +3,15 @@
 
   <head>
     <meta charset="UTF-8" />
+    <!-- Pre-React direction sync: prevents FOUC by reading stored language before any paint -->
+    <script>
+      (function(){
+        var lang = localStorage.getItem('monthlykey-lang') || 'ar';
+        var dir = lang === 'en' ? 'ltr' : 'rtl';
+        document.documentElement.lang = lang;
+        document.documentElement.dir = dir;
+      })();
+    </script>
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=5, viewport-fit=cover" />

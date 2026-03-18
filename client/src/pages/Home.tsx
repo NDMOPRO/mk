@@ -380,7 +380,6 @@ function HeroSearchBar({ lang, cities, onSearch }: {
             onChange={(e) => setQuery(e.target.value)}
             placeholder={lang === "ar" ? "ابحث بالمدينة، الحي، أو اسم العقار..." : "Search by city, neighborhood, or property..."}
             className="flex-1 py-3.5 text-sm sm:text-base text-white placeholder-white/70 focus:outline-none bg-transparent"
-            dir={lang === "ar" ? "rtl" : "ltr"}
           />
         </div>
         <button

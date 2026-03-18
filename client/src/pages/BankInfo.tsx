@@ -210,7 +210,7 @@ export default function BankInfo() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0c1524] relative overflow-hidden" dir={dir}>
+    <div className="min-h-screen bg-[#0c1524] relative overflow-hidden">
       {/* Background effects */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gradient-radial from-amber-500/[0.04] to-transparent rounded-full blur-3xl" />

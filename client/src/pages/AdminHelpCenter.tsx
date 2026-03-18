@@ -81,7 +81,6 @@ export default function AdminHelpCenter() {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={lang === "ar" ? "ابحث في قاعدة المعرفة..." : "Search knowledge base..."}
             className="ps-9 h-11"
-            dir={lang === "ar" ? "rtl" : "ltr"}
           />
         </div>
 
