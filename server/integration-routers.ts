@@ -720,7 +720,7 @@ export const integrationRouter = router({
         const p = getP();
         if (!p) return { success: false, error: "Database unavailable" };
         await p.execute(
-          `INSERT INTO platform_settings (settingKey, settingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE settingValue = VALUES(settingValue)`,
+          `INSERT INTO platformSettings (settingKey, settingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE settingValue = VALUES(settingValue)`,
           [input.key, input.value]
         );
         // Invalidate cache
