@@ -379,7 +379,14 @@ export async function sendTaqnyatWhatsAppText(
       signal: AbortSignal.timeout(15000),
     });
 
-    const data = await resp.json();
+    const rawText = await resp.text();
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch (jsonErr) {
+      console.error(`[Taqnyat WhatsApp] Non-JSON response (HTTP ${resp.status}):`, rawText.substring(0, 200));
+      return { success: false, error: `Taqnyat returned non-JSON response (HTTP ${resp.status})` };
+    }
 
     if (resp.ok || data.statusCode === 200 || data.statusCode === 201) {
       console.log(`[Taqnyat WhatsApp] Text sent to ${formattedRecipient.substring(0, 3)}****`);
