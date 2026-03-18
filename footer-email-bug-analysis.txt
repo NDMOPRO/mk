@@ -1,0 +1,13 @@
+Root Cause Analysis: Footer email/phone not reflecting on website
+
+PROBLEM:
+- Admin panel saves email as "footer.email" and phone as "footer.phone"
+- Footer.tsx reads: s("footer.emailAddress") || s("footer.email")
+- Footer.tsx reads: s("footer.phoneNumber") || s("footer.phone")
+- The CMS seed data (line 385-386) sets "footer.emailAddress" = "info@monthlykey.com" and "footer.phoneNumber" = "+966 55 000 0000"
+- Since "footer.emailAddress" exists in DB with old value, it takes priority over "footer.email" which is what the admin panel updates
+
+FIX NEEDED:
+- In Footer.tsx, change the priority order so "footer.email" is checked first (since that's what admin saves)
+- OR remove the old keys "footer.emailAddress" and "footer.phoneNumber" references entirely
+- Best approach: simplify to only use "footer.email" and "footer.phone" since that's what admin panel uses

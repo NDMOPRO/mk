@@ -275,6 +275,35 @@ export const adminRouterDefs = {
         return { success: true };
       }),
 
+    // ─── Reset User Password (RBAC: MANAGE_USERS) ────────────────────────────
+    resetUserPassword: adminWithPermission(PERMISSIONS.MANAGE_USERS)
+      .input(z.object({
+        userId: z.number(),
+        newPassword: z.string().min(6).max(100),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Protect root admin password from being changed by non-root
+        const targetPerms = await db.getAdminPermissions(input.userId);
+        if (targetPerms?.isRootAdmin) {
+          const callerPerms = await db.getAdminPermissions(ctx.user!.id);
+          if (!callerPerms?.isRootAdmin) {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Only root admin can reset root admin password' });
+          }
+        }
+        const bcrypt = await import('bcryptjs');
+        const salt = await bcrypt.genSalt(12);
+        const passwordHash = await bcrypt.hash(input.newPassword, salt);
+        await db.updateUserPassword(input.userId, passwordHash);
+        logAudit({
+          userId: ctx.user!.id,
+          action: 'UPDATE',
+          entityType: 'USER',
+          entityId: input.userId,
+          metadata: { action: 'password_reset' },
+        });
+        return { success: true };
+      }),
+
     properties: adminWithPermission(PERMISSIONS.MANAGE_PROPERTIES)
       .input(z.object({ limit: z.number().optional(), offset: z.number().optional(), status: z.string().optional(), search: z.string().optional() }))
       .query(async ({ input }) => {

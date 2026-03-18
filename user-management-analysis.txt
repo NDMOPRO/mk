@@ -1,0 +1,17 @@
+User Management Analysis for MK Platform
+==========================================
+
+Current State:
+- Users register via local auth (username/password) through the auth system
+- Admin can change user roles via admin.updateUserRole (user, admin, landlord, tenant)
+- AdminPermissions page manages ROLES (groups of permissions) and can assign roles to existing admin users
+- There is NO admin endpoint to CREATE new users directly from the admin panel
+- Users must register themselves first, then admin can promote them
+
+What needs to happen to add operations@monthlykey.com and finance@monthlykey.com:
+1. Need to add an "admin create user" endpoint in admin.router.ts
+2. Need to add UI in AdminPermissions to create new admin users
+3. OR use the seed-admin.ts approach to add them via code
+
+Approach: Add an admin.createUser mutation that allows root admin to create new users with specific roles.
+Also need to create custom roles for "Operations Manager" and "CFO".

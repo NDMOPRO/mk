@@ -1,0 +1,20 @@
+Current Permissions Page State:
+
+Existing Roles (all system roles):
+1. مدير عام (Super Admin) - صلاحيات كاملة - 23 permissions
+2. مدير عقارات (Property Manager) - إدارة العقارات والحجوزات - 12 permissions
+3. محاسب (Accountant) - عرض وإدارة السجلات المالية - 5 permissions
+4. موظف دعم (Support Agent) - معالجة طلبات الخدمات والصيانة - 7 permissions
+5. مشاهد (Viewer) - صلاحية عرض فقط - 5 permissions
+
+Current Admin Users:
+1. خالد عبدالله (hobarti@protonmail.com) - 14 permissions (root admin)
+
+Need to add:
+1. Operations Manager role + user (operations@monthlykey.com - Mushtaq Ibn Mohammed)
+2. CFO role + user (finance@monthlykey.com - Sameh Abulfadl)
+
+Current UI has:
+- "دور جديد" button to create new roles
+- Role assignment dropdown for existing admin users
+- NO "create user" button yet (needs to be added)

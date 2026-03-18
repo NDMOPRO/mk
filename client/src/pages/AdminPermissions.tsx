@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Link } from "wouter";
-import { ArrowRight, ArrowLeft, Shield, Plus, Pencil, Trash2, Users, UserPlus, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowRight, ArrowLeft, Shield, Plus, Pencil, Trash2, Users, UserPlus, Check, X, ChevronDown, ChevronUp, KeyRound } from "lucide-react";
 
 // All available permissions
 const ALL_PERMISSIONS = [
@@ -151,6 +151,10 @@ export default function AdminPermissions() {
     title: "", titleAr: "",
   });
 
+  // Reset password state
+  const [resetPasswordOpen, setResetPasswordOpen] = useState<number | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+
   const rolesQuery = trpc.roles.list.useQuery();
   const adminsQuery = trpc.permissions.list.useQuery();
 
@@ -203,6 +207,15 @@ export default function AdminPermissions() {
     onSuccess: () => {
       adminsQuery.refetch();
       toast.success(isAr ? "تم حذف المستخدم" : "User deleted");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const resetPasswordMutation = trpc.admin.resetUserPassword.useMutation({
+    onSuccess: () => {
+      setResetPasswordOpen(null);
+      setNewPassword("");
+      toast.success(isAr ? "تم تغيير كلمة المرور بنجاح" : "Password changed successfully");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -497,6 +510,48 @@ export default function AdminPermissions() {
                             ))}
                           </select>
                         )}
+                        {/* Reset Password */}
+                        <Dialog open={resetPasswordOpen === admin.id} onOpenChange={(open) => {
+                          if (open) { setResetPasswordOpen(admin.id); setNewPassword(""); }
+                          else { setResetPasswordOpen(null); setNewPassword(""); }
+                        }}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" title={isAr ? "تغيير كلمة المرور" : "Reset Password"}>
+                              <KeyRound className="w-3 h-3" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-sm">
+                            <DialogHeader>
+                              <DialogTitle>{isAr ? "تغيير كلمة المرور" : "Reset Password"}</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-3">
+                              <p className="text-sm text-muted-foreground">
+                                {isAr
+                                  ? `تغيير كلمة المرور للمستخدم: ${admin.nameAr || admin.name || admin.displayName}`
+                                  : `Reset password for: ${admin.name || admin.displayName || admin.nameAr}`}
+                              </p>
+                              <div>
+                                <Label>{isAr ? "كلمة المرور الجديدة" : "New Password"}</Label>
+                                <Input
+                                  type="password"
+                                  value={newPassword}
+                                  onChange={e => setNewPassword(e.target.value)}
+                                  placeholder={isAr ? "٦ أحرف على الأقل" : "Min 6 characters"}
+                                  dir="ltr"
+                                />
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <DialogClose asChild><Button variant="outline">{isAr ? "إلغاء" : "Cancel"}</Button></DialogClose>
+                              <Button
+                                onClick={() => resetPasswordMutation.mutate({ userId: admin.id, newPassword })}
+                                disabled={newPassword.length < 6 || resetPasswordMutation.isPending}
+                              >
+                                {resetPasswordMutation.isPending ? (isAr ? "جاري التغيير..." : "Resetting...") : (isAr ? "تغيير كلمة المرور" : "Reset Password")}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
                         {!admin.isRootAdmin && (
                           <Button
                             variant="destructive"
