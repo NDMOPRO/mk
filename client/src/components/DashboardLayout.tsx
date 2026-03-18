@@ -179,7 +179,7 @@ export default function DashboardLayout({
           {children}
         </DashboardLayoutContent>
       </SidebarProvider>
-    </div>
+    </>
   );
 }
 
