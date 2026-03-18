@@ -105,7 +105,7 @@ export async function getTaqnyatWhatsAppConfig(): Promise<TaqnyatWhatsAppConfig 
     const [row] = await db.select().from(integrationConfigs)
       .where(eq(integrationConfigs.integrationKey, "taqnyat_whatsapp"));
 
-    if (!row || !row.isEnabled) return null;
+    if (!row) return null;
     const config = row.configJson ? JSON.parse(row.configJson) : {};
     if (!config.bearerToken) return null;
 
@@ -113,7 +113,7 @@ export async function getTaqnyatWhatsAppConfig(): Promise<TaqnyatWhatsAppConfig 
       bearerToken: config.bearerToken,
       webhookMode: config.webhookMode || "other",
       defaultCountryCode: config.defaultCountryCode || "+966",
-      isEnabled: row.isEnabled,
+      isEnabled: true, // Feature flag is the master control; row-level toggle is secondary
       whatsappSupportEmail: config.whatsappSupportEmail || "",
     };
   } catch (err) {
