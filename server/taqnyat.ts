@@ -576,10 +576,15 @@ export async function handleTaqnyatWhatsAppWebhook(req: Request, res: Response) 
       try {
         const { logAudit } = await import("./audit-log");
 
+        // Taqnyat sends nested payloads: { event, data: { from, message: { type, text }, pushName, ... } }
+        // Also handle flat payloads for backward compatibility
+        const data = payload.data || payload;
+        const msg = data.message || {};
+
         // Determine message type from payload
-        const messageType = payload.type || payload.messageType || "unknown";
-        const senderPhone = payload.from || payload.sender || payload.mobile || "unknown";
-        const messageBody = payload.body || payload.text || payload.message || "";
+        const messageType = msg.type || data.type || payload.type || payload.messageType || "unknown";
+        const senderPhone = data.from || data.sender || data.mobile || payload.from || payload.sender || payload.mobile || "unknown";
+        const messageBody = msg.text || msg.body || data.body || data.text || payload.body || payload.text || "";
 
         await logAudit({
           userId: 0,
@@ -615,13 +620,13 @@ export async function handleTaqnyatWhatsAppWebhook(req: Request, res: Response) 
             }
 
             // Extract sender name from payload (Taqnyat may include profile name)
-            const senderName = payload.senderName || payload.pushName || payload.profileName || payload.name || undefined;
+            const senderName = data.senderName || data.pushName || data.profileName || data.name || payload.senderName || payload.pushName || payload.profileName || payload.name || undefined;
 
             // Find or create conversation for this phone number
             const { id: conversationId, isNew } = await getOrCreateWaConversation(normalizedPhone, senderName);
 
             // Determine media URL if present
-            const mediaUrl = payload.mediaUrl || payload.media?.url || payload.image?.url || payload.document?.url || payload.audio?.url || payload.video?.url || undefined;
+            const mediaUrl = data.mediaUrl || data.media?.url || data.image?.url || data.document?.url || data.audio?.url || data.video?.url || msg.url || undefined;
 
             // Map Taqnyat message type to our enum
             let mappedType: string = "text";
@@ -638,7 +643,7 @@ export async function handleTaqnyatWhatsAppWebhook(req: Request, res: Response) 
               content: messageBody || (mappedType !== "text" ? `[${mappedType}]` : ""),
               messageType: mappedType,
               mediaUrl,
-              taqnyatMessageId: payload.messageId || payload.id || undefined,
+              taqnyatMessageId: data.messageId || data.id || payload.messageId || payload.id || undefined,
               metadata: payload,
             });
 
