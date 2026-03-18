@@ -369,13 +369,19 @@ export async function sendTaqnyatWhatsAppText(
   const formattedRecipient = formatPhoneForTaqnyat(recipient);
 
   try {
-    const resp = await fetch(`${TAQNYAT_WHATSAPP_BASE_URL}/conversation/text`, {
+    // Taqnyat v2 Conversation Text endpoint: POST /messages/
+    // Payload: { to, type: "text", text: { body } }
+    const resp = await fetch(`${TAQNYAT_WHATSAPP_BASE_URL}/messages/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${config.bearerToken}`,
       },
-      body: JSON.stringify({ recipient: formattedRecipient, body: message }),
+      body: JSON.stringify({
+        to: formattedRecipient,
+        type: "text",
+        text: { body: message },
+      }),
       signal: AbortSignal.timeout(15000),
     });
 
@@ -389,12 +395,14 @@ export async function sendTaqnyatWhatsAppText(
     }
 
     if (resp.ok || data.statusCode === 200 || data.statusCode === 201) {
+      // Extract message_id from Taqnyat v2 response: { statuses: [{ message_id, recipient }] }
+      const msgId = data.statuses?.[0]?.message_id || data.messageId;
       console.log(`[Taqnyat WhatsApp] Text sent to ${formattedRecipient.substring(0, 3)}****`);
-      return { success: true, messageId: data.messageId, statusCode: data.statusCode };
+      return { success: true, messageId: msgId, statusCode: data.statusCode || resp.status };
     }
 
-    console.error(`[Taqnyat WhatsApp] Text send failed: ${data.message}`);
-    return { success: false, error: data.message || `HTTP ${resp.status}`, statusCode: data.statusCode };
+    console.error(`[Taqnyat WhatsApp] Text send failed:`, JSON.stringify(data).substring(0, 300));
+    return { success: false, error: data.message || data.error || `HTTP ${resp.status}`, statusCode: data.statusCode };
   } catch (err: any) {
     console.error("[Taqnyat WhatsApp] Text request failed:", err.message);
     return { success: false, error: err.message };
