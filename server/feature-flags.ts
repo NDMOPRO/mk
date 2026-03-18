@@ -30,7 +30,7 @@ export const FLAG_DEFAULTS: Record<string, string> = {
   "verification.smsRoutingEnabled": "false",
   // Taqnyat integration switches
   "TAQNYAT_SMS_ENABLED": "false",
-  "TAQNYAT_WHATSAPP_ENABLED": "false",
+  "TAQNYAT_WHATSAPP_ENABLED": "true",
   // KYC gates
   "kyc.enableGating": "false",
   "kyc.enableSubmission": "false",
