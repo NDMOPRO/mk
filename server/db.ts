@@ -579,6 +579,19 @@ export async function getDb() {
       } catch (e: any) {
         console.warn("[Database] audit_log enum extension note:", e?.message?.substring(0, 120));
       }
+      // Auto-migrate: ensure platformSettings table exists (for feature flags)
+      try {
+        await _pool.execute(`CREATE TABLE IF NOT EXISTS platformSettings (
+          id int AUTO_INCREMENT PRIMARY KEY,
+          settingKey varchar(100) NOT NULL UNIQUE,
+          settingValue text,
+          createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )`);
+        console.log("[Database] platformSettings table ready");
+      } catch (e: any) {
+        if (e?.errno !== 1050) console.warn("[Database] platformSettings migration note:", e?.message?.substring(0, 120));
+      }
       // Auto-migrate: WhatsApp inbound conversation routing tables
       try {
         await _pool.execute(`CREATE TABLE IF NOT EXISTS wa_conversations (
