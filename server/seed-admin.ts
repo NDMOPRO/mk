@@ -18,47 +18,128 @@ export async function seedAdminUser() {
     const existing = await db.getUserByUserId("Hobart");
     if (existing) {
       console.log("[Seed] Admin user 'Hobart' already exists, skipping.");
+    } else {
+      // Use ADMIN_INITIAL_PASSWORD env var or generate a random one-time password
+      const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || crypto.randomBytes(16).toString('base64url');
+      if (!process.env.ADMIN_INITIAL_PASSWORD) {
+        console.log(`[Seed] Generated random admin password (change immediately): ${adminPassword}`);
+        console.log(`[Seed] Set ADMIN_INITIAL_PASSWORD env var to control this.`);
+      }
+      const salt = await bcrypt.genSalt(12);
+      const passwordHash = await bcrypt.hash(adminPassword, salt);
+
+      const id = await db.createLocalUser({
+        userId: "Hobart",
+        passwordHash,
+        displayName: "Admin",
+        name: "Khalid Abdullah",
+        nameAr: "خالد عبدالله",
+        email: "hobarti@protonmail.com",
+        phone: "+966504466528",
+        role: "admin",
+      });
+
+      if (id) {
+        console.log("[Seed] Admin user 'Hobart' created successfully (id:", id, ")");
+        // Grant full root admin permissions
+        const allPermissions = [
+          "manage_users", "manage_properties", "manage_bookings", "manage_payments",
+          "manage_services", "manage_maintenance", "manage_cms", "manage_cities",
+          "manage_knowledge", "manage_roles", "manage_settings", "view_analytics",
+          "send_notifications", "manage_ai"
+        ];
+        await db.setAdminPermissions(id, allPermissions, true);
+        console.log("[Seed] Root admin permissions granted to 'Hobart'");
+      } else {
+        console.error("[Seed] Failed to create admin user");
+      }
+    }
+
+    // Seed Operations Manager
+    await seedAdminTeamMember({
+      userId: "mushtaq",
+      name: "Mushtaq Ibn Mohammed",
+      nameAr: "مشتاق بن محمد",
+      email: "operations@monthlykey.com",
+      role: "admin",
+      permissions: [
+        "manage_properties", "manage_bookings", "manage_payments",
+        "manage_services", "manage_maintenance", "manage_cities",
+        "view_analytics", "manage_settings"
+      ],
+    });
+
+    // Seed CFO
+    await seedAdminTeamMember({
+      userId: "sameh",
+      name: "Sameh Abulfadl",
+      nameAr: "سامح أبو الفضل",
+      email: "finance@monthlykey.com",
+      role: "admin",
+      permissions: [
+        "manage_payments", "manage_bookings",
+        "view_analytics", "manage_settings"
+      ],
+    });
+
+  } catch (error) {
+    console.error("[Seed] Error seeding admin user:", error);
+  }
+}
+
+/**
+ * Seed an admin team member if not already present.
+ */
+async function seedAdminTeamMember(data: {
+  userId: string;
+  name: string;
+  nameAr: string;
+  email: string;
+  role: "admin";
+  permissions: string[];
+}) {
+  try {
+    const existing = await db.getUserByUserId(data.userId);
+    if (existing) {
+      console.log(`[Seed] Admin user '${data.userId}' already exists, skipping.`);
+      // Ensure permissions exist
+      const perms = await db.getAdminPermissions(existing.id);
+      if (!perms) {
+        await db.setAdminPermissions(existing.id, data.permissions, false);
+        console.log(`[Seed] Permissions granted to '${data.userId}' (id: ${existing.id})`);
+      }
       return;
     }
 
-    // Use ADMIN_INITIAL_PASSWORD env var or generate a random one-time password
-    const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || crypto.randomBytes(16).toString('base64url');
-    if (!process.env.ADMIN_INITIAL_PASSWORD) {
-      console.log(`[Seed] Generated random admin password (change immediately): ${adminPassword}`);
-      console.log(`[Seed] Set ADMIN_INITIAL_PASSWORD env var to control this.`);
+    // Also check by email
+    const existingByEmail = await db.getUserByEmail(data.email);
+    if (existingByEmail) {
+      console.log(`[Seed] User with email '${data.email}' already exists, skipping.`);
+      return;
     }
+
+    const password = process.env[`${data.userId.toUpperCase()}_INITIAL_PASSWORD`] || crypto.randomBytes(12).toString('base64url');
+    console.log(`[Seed] Generated password for '${data.userId}': ${password}`);
+
     const salt = await bcrypt.genSalt(12);
-    const passwordHash = await bcrypt.hash(adminPassword, salt);
+    const passwordHash = await bcrypt.hash(password, salt);
 
     const id = await db.createLocalUser({
-      userId: "Hobart",
+      userId: data.userId,
       passwordHash,
-      displayName: "Admin",
-      name: "Khalid Abdullah",
-      nameAr: "خالد عبدالله",
-      email: "hobarti@protonmail.com",
-      phone: "+966504466528",
-      role: "admin",
+      displayName: data.name,
+      name: data.name,
+      nameAr: data.nameAr,
+      email: data.email,
+      role: data.role,
     });
 
     if (id) {
-      console.log("[Seed] Admin user 'Hobart' created successfully (id:", id, ")");
-      // Grant full root admin permissions
-      const allPermissions = [
-        "manage_users", "manage_properties", "manage_bookings", "manage_payments",
-        "manage_services", "manage_maintenance", "manage_cms", "manage_cities",
-        "manage_knowledge", "manage_roles", "manage_settings", "view_analytics",
-        "send_notifications", "manage_ai"
-      ];
-      await db.setAdminPermissions(id, allPermissions, true);
-      console.log("[Seed] Root admin permissions granted to 'Hobart'");
-    } else {
-      console.error("[Seed] Failed to create admin user");
+      await db.setAdminPermissions(id, data.permissions, false);
+      console.log(`[Seed] Admin user '${data.userId}' created (id: ${id}) with ${data.permissions.length} permissions`);
     }
-
-    // ensureAdminPermissions already called above
   } catch (error) {
-    console.error("[Seed] Error seeding admin user:", error);
+    console.error(`[Seed] Error seeding admin '${data.userId}':`, error);
   }
 }
 

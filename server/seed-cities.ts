@@ -180,12 +180,6 @@ export async function seedCitiesAndDistricts() {
 
 async function seedDefaultRoles(db: ReturnType<typeof drizzle>) {
   try {
-    const [roleCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(roles);
-    if (roleCount.count > 0) {
-      console.log("[Seed] Roles already seeded, skipping.");
-      return;
-    }
-
     const defaultRoles = [
       {
         name: "Super Admin",
@@ -262,12 +256,53 @@ async function seedDefaultRoles(db: ReturnType<typeof drizzle>) {
         ]),
         isSystem: true,
       },
+      {
+        name: "Operations Manager",
+        nameAr: "مدير العمليات",
+        description: "Oversee daily operations, properties, bookings, and maintenance",
+        descriptionAr: "الإشراف على العمليات اليومية والعقارات والحجوزات والصيانة",
+        permissions: JSON.stringify([
+          "properties.view", "properties.create", "properties.edit",
+          "bookings.view", "bookings.create", "bookings.approve", "bookings.cancel",
+          "users.view",
+          "payments.view", "payments.process",
+          "services.view", "services.manage",
+          "maintenance.view", "maintenance.manage",
+          "settings.view",
+          "analytics.view",
+        ]),
+        isSystem: false,
+      },
+      {
+        name: "CFO",
+        nameAr: "المدير المالي",
+        description: "Full access to financial records, payments, and analytics",
+        descriptionAr: "صلاحيات كاملة للسجلات المالية والمدفوعات والتحليلات",
+        permissions: JSON.stringify([
+          "properties.view",
+          "bookings.view",
+          "payments.view", "payments.process",
+          "analytics.view",
+          "settings.view",
+        ]),
+        isSystem: false,
+      },
     ];
 
+    // Seed each role individually (skip if already exists by name)
+    let seeded = 0;
     for (const role of defaultRoles) {
-      await db.insert(roles).values(role as any);
+      const [existing] = await db.select({ count: sql<number>`COUNT(*)` }).from(roles).where(eq(roles.name, role.name));
+      if (existing.count === 0) {
+        await db.insert(roles).values(role as any);
+        seeded++;
+      }
     }
-    console.log(`[Seed] ${defaultRoles.length} default roles seeded.`);
+    if (seeded > 0) {
+      console.log(`[Seed] ${seeded} new roles seeded.`);
+    } else {
+      console.log("[Seed] All roles already exist, skipping.");
+    }
   } catch (error) {
     console.error("[Seed] Error seeding roles:", error);
   }

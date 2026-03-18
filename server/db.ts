@@ -575,7 +575,7 @@ export async function getDb() {
       // Auto-migrate: extend audit_log enums (migration 0025)
       try {
         await _pool.execute(`ALTER TABLE audit_log MODIFY COLUMN action ENUM('CREATE','UPDATE','ARCHIVE','RESTORE','DELETE','LINK_BEDS24','UNLINK_BEDS24','PUBLISH','UNPUBLISH','CONVERT','TEST','ENABLE','DISABLE','SEND','APPROVE','REJECT','REVIEW') NOT NULL`);
-        await _pool.execute(`ALTER TABLE audit_log MODIFY COLUMN entityType ENUM('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','WHATSAPP_MESSAGE','WHATSAPP_TEMPLATE','KYC_REQUEST','INTEGRATION_CREDENTIAL','FEATURE_FLAG','USER_VERIFICATION') NOT NULL`);
+        await _pool.execute(`ALTER TABLE audit_log MODIFY COLUMN entityType ENUM('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','WHATSAPP_MESSAGE','WHATSAPP_TEMPLATE','KYC_REQUEST','INTEGRATION_CREDENTIAL','FEATURE_FLAG','USER_VERIFICATION','USER') NOT NULL`);
       } catch (e: any) {
         console.warn("[Database] audit_log enum extension note:", e?.message?.substring(0, 120));
       }
@@ -3124,4 +3124,13 @@ export async function getWaUnreadTotal(): Promise<number> {
     .from(waConversations)
     .where(inArray(waConversations.status, ["open", "assigned"]));
   return result[0]?.total ?? 0;
+}
+
+/**
+ * Delete a user by ID.
+ */
+export async function deleteUser(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(users).where(eq(users.id, userId));
 }
