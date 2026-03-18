@@ -52,8 +52,8 @@ export default function ContactUs() {
     submitMutation.mutate(form);
   };
 
-  const email = get("footer.emailAddress") || get("footer.email");
-  const phone = get("footer.phoneNumber") || get("footer.phone");
+  const email = get("footer.email") || get("footer.emailAddress");
+  const phone = get("footer.phone") || get("footer.phoneNumber");
   const address = get(isAr ? "footer.addressAr" : "footer.addressEn");
 
   const contactInfo = [

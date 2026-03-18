@@ -12,8 +12,8 @@ export default function Footer() {
 
   const siteName = s("site.nameAr") || "المفتاح الشهري";
   const aboutText = sl("footer.about", lang) || t("footer.aboutText");
-  const email = s("footer.emailAddress") || s("footer.email");
-  const phone = s("footer.phoneNumber") || s("footer.phone");
+  const email = s("footer.email") || s("footer.emailAddress");
+  const phone = s("footer.phone") || s("footer.phoneNumber");
   const address = sl("footer.address", lang);
   const twitter = s("footer.twitter");
   const instagram = s("footer.instagram");
