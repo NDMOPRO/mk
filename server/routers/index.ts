@@ -3,6 +3,7 @@ import { systemRouter } from "../_core/systemRouter";
 import { financeRouter } from "../finance-routers";
 import { submissionRouter } from "../submission-routers";
 import { integrationRouter } from "../integration-routers";
+import { base44Router } from "../base44-routers";
 import { adminRouterDefs } from "./admin.router";
 import { aiRouterDefs } from "./ai.router";
 import { authRouterDefs } from "./auth.router";
@@ -37,6 +38,7 @@ export const appRouter = router({
   submission: submissionRouter,
   finance: financeRouter,
   integration: integrationRouter,
+  base44: base44Router,
 });
 
 export type AppRouter = typeof appRouter;
