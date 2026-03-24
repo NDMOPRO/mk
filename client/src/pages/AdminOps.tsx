@@ -4,12 +4,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/lib/i18n";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import {
   ArrowRight,
   Building2,
   CalendarCheck,
   CreditCard,
+  ExternalLink,
+  Loader2,
   Plug,
+  RefreshCw,
   Shield,
   Wrench,
   Workflow,
@@ -50,6 +55,32 @@ export default function AdminOps() {
   const { lang } = useI18n();
   const isAr = lang === "ar";
 
+  const healthQuery = trpc.base44.getSyncHealth.useQuery(undefined, {
+    retry: false,
+  });
+  const workspaceQuery = trpc.base44.openWorkspace.useQuery(undefined, {
+    retry: false,
+  });
+  const manualSyncMutation = trpc.base44.runManualSync.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.message);
+      healthQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const integration = healthQuery.data?.integration;
+  const sourceCounts = healthQuery.data?.sourceCounts;
+  const workspace = workspaceQuery.data;
+
+  const openUrl = (url?: string | null) => {
+    if (!url) {
+      toast.error(isAr ? "الرابط غير مضبوط بعد داخل التكاملات" : "URL is not configured yet in Integrations");
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <DashboardLayout>
       <SEOHead title="Operations Hub | المفتاح الشهري - Monthly Key" />
@@ -67,13 +98,17 @@ export default function AdminOps() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => healthQuery.refetch()} disabled={healthQuery.isFetching}>
+              {healthQuery.isFetching ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <RefreshCw className="me-2 h-4 w-4" />}
+              {isAr ? "تحديث الحالة" : "Refresh Health"}
+            </Button>
             <Button variant="outline" onClick={() => (window.location.href = "/admin/integrations")}>
               <Plug className="me-2 h-4 w-4" />
               {isAr ? "إعدادات التكاملات" : "Integration Settings"}
             </Button>
-            <Button onClick={() => (window.location.href = "/admin/payments")}>
-              <CreditCard className="me-2 h-4 w-4" />
-              {isAr ? "المدفوعات والسجل المالي" : "Payments & Ledger"}
+            <Button onClick={() => openUrl(workspace?.editorUrl || workspace?.previewUrl)}>
+              <ExternalLink className="me-2 h-4 w-4" />
+              {isAr ? "فتح مساحة Base44" : "Open Base44 Workspace"}
             </Button>
           </div>
         </div>
@@ -81,38 +116,38 @@ export default function AdminOps() {
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>{isAr ? "الحالة المعمارية" : "Architecture Mode"}</CardDescription>
-              <CardTitle className="text-base">{isAr ? "Monthly Key هو المصدر الرئيسي" : "Monthly Key is source of truth"}</CardTitle>
+              <CardDescription>{isAr ? "حالة التكامل" : "Integration Status"}</CardDescription>
+              <CardTitle className="text-base">{integration?.status || (isAr ? "غير مُهيأ" : "Not configured")}</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              {isAr ? "الحجوزات والمدفوعات والصيانة الرسمية تبقى في النظام الحالي." : "Bookings, payments, and the official maintenance record stay in the current system."}
+              {integration?.enabled ? (isAr ? "التكامل مفعّل ويمكن طلب المزامنة اليدوية." : "Integration is enabled and ready for manual sync requests.") : (isAr ? "فعّل Base44 من صفحة التكاملات أولاً." : "Enable Base44 from Integrations first.")}
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>{isAr ? "التشغيل" : "Operations Layer"}</CardDescription>
-              <CardTitle className="text-base">{isAr ? "Base44 كمساحة عمل" : "Base44 as workspace"}</CardTitle>
+              <CardDescription>{isAr ? "الوحدات والمباني" : "Units & Buildings"}</CardDescription>
+              <CardTitle className="text-base">{sourceCounts ? `${sourceCounts.units} / ${sourceCounts.buildings}` : "—"}</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              {isAr ? "تجميع المتابعة اليومية، التحصيل، والمهام التشغيلية في واجهة واحدة." : "Daily follow-up, collections, and ops tasks are grouped into one workspace."}
+              {isAr ? "عدد الوحدات / عدد المباني داخل Monthly Key حالياً." : "Current unit count / building count inside Monthly Key."}
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>{isAr ? "نوع المزامنة" : "Sync Strategy"}</CardDescription>
-              <CardTitle className="text-base">{isAr ? "أحادي الاتجاه أولاً" : "One-way first"}</CardTitle>
+              <CardDescription>{isAr ? "الحجوزات والمدفوعات" : "Bookings & Ledger"}</CardDescription>
+              <CardTitle className="text-base">{sourceCounts ? `${sourceCounts.bookings} / ${sourceCounts.paymentLedgerEntries}` : "—"}</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              {isAr ? "ندفع البيانات إلى Base44 أولاً ثم نفتح كتابة محدودة للصيانة فقط." : "Data is pushed to Base44 first, then limited write-back is opened for maintenance only."}
+              {isAr ? "الحجوزات / قيود السجل المالي المتاحة للمزامنة." : "Bookings / ledger entries available for sync."}
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>{isAr ? "الأمان" : "Safety Rule"}</CardDescription>
-              <CardTitle className="text-base">{isAr ? "لا دفع ولا تأكيد حجز من Base44" : "No payments or booking confirmation from Base44"}</CardTitle>
+              <CardDescription>{isAr ? "الصيانة" : "Maintenance"}</CardDescription>
+              <CardTitle className="text-base">{sourceCounts ? sourceCounts.maintenanceRequests : "—"}</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              {isAr ? "يبقى الدفع والمنطق المالي داخل Monthly Key فقط." : "Payment and financial truth remain inside Monthly Key only."}
+              {isAr ? "طلبات الصيانة الحالية التي يمكن عرضها في مساحة العمليات." : "Current maintenance requests available for the ops workspace."}
             </CardContent>
           </Card>
         </div>
@@ -145,12 +180,32 @@ export default function AdminOps() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{isAr ? "روابط سريعة" : "Quick Links"}</CardTitle>
+              <CardTitle>{isAr ? "أوامر التشغيل" : "Operations Actions"}</CardTitle>
               <CardDescription>
-                {isAr ? "الصفحات الأساسية التي سيعتمد عليها مركز العمليات عند الربط." : "Core screens this operations hub will rely on during the rollout."}
+                {isAr ? "إجراءات أولية آمنة قبل تفعيل المزامنة الفعلية للكيانات." : "Safe first actions before live entity push is enabled."}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
+              <Button variant="outline" className="justify-between" onClick={() => openUrl(workspace?.editorUrl)}>
+                <span className="inline-flex items-center gap-2"><ExternalLink className="h-4 w-4" />{isAr ? "فتح المحرر" : "Open Editor"}</span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" className="justify-between" onClick={() => openUrl(workspace?.previewUrl)}>
+                <span className="inline-flex items-center gap-2"><ExternalLink className="h-4 w-4" />{isAr ? "فتح المعاينة" : "Open Preview"}</span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                className="justify-between"
+                onClick={() => manualSyncMutation.mutate({ entities: ["units", "bookings", "payments", "maintenance"] })}
+                disabled={manualSyncMutation.isPending}
+              >
+                <span className="inline-flex items-center gap-2">
+                  {manualSyncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {isAr ? "طلب مزامنة يدوية" : "Request Manual Sync"}
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
               <Button variant="outline" className="justify-between" onClick={() => (window.location.href = "/admin/buildings")}>
                 <span className="inline-flex items-center gap-2"><Building2 className="h-4 w-4" />{isAr ? "المباني والوحدات" : "Buildings & Units"}</span>
                 <ArrowRight className="h-4 w-4" />
@@ -174,8 +229,8 @@ export default function AdminOps() {
                 </div>
                 <p>
                   {isAr
-                    ? "إضافة مفاتيح Base44 داخل صفحة التكاملات ثم تفعيل جدول مزامنة خارجي وربط الواجهات الخلفية للبيانات الأساسية."
-                    : "Add Base44 credentials in Integrations, then enable an external sync map and wire the backend data flows for the core entities."}
+                    ? "إضافة جدول externalSyncMap وربط طلب المزامنة اليدوية بسجل مزامنة فعلي لكل وحدة/حجز/دفعة/طلب صيانة."
+                    : "Add the externalSyncMap table and connect manual sync requests to real per-entity sync records for units, bookings, payments, and maintenance."}
                 </p>
               </div>
             </CardContent>
