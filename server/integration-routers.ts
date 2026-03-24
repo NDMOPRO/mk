@@ -16,6 +16,7 @@ const db = drizzle(pool);
 // Default integrations to seed if not present
 const DEFAULT_INTEGRATIONS = [
   { integrationKey: 'beds24', displayName: 'Beds24 PMS', displayNameAr: 'نظام إدارة Beds24' },
+  { integrationKey: 'base44', displayName: 'Base44 Operations Workspace', displayNameAr: 'مساحة عمليات Base44' },
   { integrationKey: 'moyasar', displayName: 'Moyasar Payments', displayNameAr: 'مدفوعات مُيسّر' },
   { integrationKey: 'email', displayName: 'Email (SMTP)', displayNameAr: 'البريد الإلكتروني (SMTP)' },
   { integrationKey: 'maps', displayName: 'Google Maps', displayNameAr: 'خرائط جوجل' },
@@ -27,20 +28,17 @@ const DEFAULT_INTEGRATIONS = [
   { integrationKey: 'taqnyat_whatsapp', displayName: 'Taqnyat WhatsApp (تقنيات)', displayNameAr: 'تقنيات - واتساب' },
 ];
 
-// Mask a secret string: show first 4 and last 4 chars
 function maskSecret(val: string | undefined | null): string {
   if (!val) return '';
   if (val.length <= 8) return '****';
   return val.substring(0, 4) + '****' + val.substring(val.length - 4);
 }
 
-// Parse config JSON safely
 function parseConfig(configJson: string | null): Record<string, string> {
   if (!configJson) return {};
   try { return JSON.parse(configJson); } catch { return {}; }
 }
 
-// Mask all secret fields in config
 function maskConfig(config: Record<string, string>): Record<string, string> {
   const masked: Record<string, string> = {};
   for (const [key, val] of Object.entries(config)) {
@@ -53,7 +51,6 @@ function maskConfig(config: Record<string, string>): Record<string, string> {
   return masked;
 }
 
-// Get config fields definition for each integration
 function getConfigFields(key: string): { name: string; label: string; labelAr: string; isSecret: boolean }[] {
   switch (key) {
     case 'beds24':
@@ -61,6 +58,14 @@ function getConfigFields(key: string): { name: string; label: string; labelAr: s
         { name: 'apiUrl', label: 'API URL', labelAr: 'رابط API', isSecret: false },
         { name: 'refreshToken', label: 'Refresh Token', labelAr: 'رمز التحديث', isSecret: true },
         { name: 'webhookSecret', label: 'Webhook Secret', labelAr: 'سر الويب هوك', isSecret: true },
+      ];
+    case 'base44':
+      return [
+        { name: 'appId', label: 'Base44 App ID', labelAr: 'معرف تطبيق Base44', isSecret: false },
+        { name: 'editorUrl', label: 'Editor URL', labelAr: 'رابط المحرر', isSecret: false },
+        { name: 'previewUrl', label: 'Preview URL', labelAr: 'رابط المعاينة', isSecret: false },
+        { name: 'apiKey', label: 'API Key / Access Token', labelAr: 'مفتاح API / رمز الوصول', isSecret: true },
+        { name: 'workspaceName', label: 'Workspace Name', labelAr: 'اسم مساحة العمل', isSecret: false },
       ];
     case 'moyasar':
       return [
@@ -152,10 +157,8 @@ function getConfigFields(key: string): { name: string; label: string; labelAr: s
 }
 
 export const integrationRouter = router({
-  // List all integrations (with masked secrets)
   list: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
     .query(async () => {
-      // Ensure defaults exist
       for (const def of DEFAULT_INTEGRATIONS) {
         const existing = await db.select().from(integrationConfigs).where(eq(integrationConfigs.integrationKey, def.integrationKey));
         if (existing.length === 0) {
@@ -170,7 +173,6 @@ export const integrationRouter = router({
       }
       const all = await db.select().from(integrationConfigs);
       return all.map(item => {
-        // For email integration, reflect ENV-based SMTP config in status & maskedConfig
         if (item.integrationKey === 'email' && isSmtpConfigured()) {
           const envConfig: Record<string, string> = {
             smtpHost: ENV.smtpHost,
@@ -189,14 +191,13 @@ export const integrationRouter = router({
         }
         return {
           ...item,
-          configJson: null, // Never send raw config to client
+          configJson: null,
           maskedConfig: maskConfig(parseConfig(item.configJson)),
           configFields: getConfigFields(item.integrationKey),
         };
       });
     }),
 
-  // Get single integration detail (with masked secrets)
   getById: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
@@ -210,7 +211,6 @@ export const integrationRouter = router({
       };
     }),
 
-  // Update integration config
   update: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
     .input(z.object({
       id: z.number(),
@@ -225,26 +225,22 @@ export const integrationRouter = router({
       if (input.isEnabled !== undefined) updates.isEnabled = input.isEnabled;
 
       if (input.config) {
-        // Merge with existing config (don't overwrite masked values)
         const existingConfig = parseConfig(item.configJson);
         const newConfig = { ...existingConfig };
         for (const [key, val] of Object.entries(input.config)) {
-          // Skip if value looks like a masked value (contains ****)
           if (val && !val.includes('****')) {
             newConfig[key] = val;
           }
         }
         updates.configJson = JSON.stringify(newConfig);
-        // Determine status
         const fields = getConfigFields(item.integrationKey);
-        const requiredFields = fields.filter(f => f.isSecret || f.name.includes('Host') || f.name.includes('Url') || f.name.includes('Key'));
+        const requiredFields = fields.filter(f => f.isSecret || f.name.includes('Host') || f.name.includes('Url') || f.name.includes('Key') || f.name === 'appId');
         const hasAllRequired = requiredFields.every(f => newConfig[f.name] && newConfig[f.name].length > 0);
         updates.status = hasAllRequired ? 'configured' : 'not_configured';
       }
 
       await db.update(integrationConfigs).set(updates).where(eq(integrationConfigs.id, input.id));
 
-      // If storage config was updated, reload S3 client with new credentials
       if (item.integrationKey === 'storage' && input.config) {
         const finalConfig = parseConfig(updates.configJson || item.configJson);
         if (finalConfig.bucket && finalConfig.accessKeyId && finalConfig.secretAccessKey) {
@@ -258,7 +254,6 @@ export const integrationRouter = router({
         }
       }
 
-      // Audit log (never log secrets)
       await db.insert(auditLog).values({
         userId: ctx.user?.id ?? null,
         userName: ctx.user?.displayName ?? 'system',
@@ -272,7 +267,6 @@ export const integrationRouter = router({
       return { success: true };
     }),
 
-  // Test integration connection
   test: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
@@ -285,7 +279,6 @@ export const integrationRouter = router({
       try {
         switch (item.integrationKey) {
           case 'beds24': {
-            // Test Beds24 API connectivity
             const apiUrl = config.apiUrl || process.env.BEDS24_API_URL || 'https://beds24.com/api/v2';
             const token = config.refreshToken || process.env.BEDS24_REFRESH_TOKEN;
             if (!token) {
@@ -305,6 +298,21 @@ export const integrationRouter = router({
             } catch (e: any) {
               testResult = { success: false, message: `Connection failed: ${e.message}` };
             }
+            break;
+          }
+          case 'base44': {
+            const appId = config.appId;
+            const editorUrl = config.editorUrl;
+            const previewUrl = config.previewUrl;
+            const apiKey = config.apiKey;
+            if (!appId || !editorUrl) {
+              testResult = { success: false, message: 'Base44 App ID and Editor URL are required' };
+              break;
+            }
+            const looksValid = editorUrl.includes(appId) || (previewUrl ? previewUrl.includes(appId) : false);
+            testResult = looksValid
+              ? { success: true, message: 'Base44 configuration is present and matches the current app scaffold' }
+              : { success: !!apiKey, message: !!apiKey ? 'Base44 credentials saved. Review editor/preview URL if the wrong app opens.' : 'Base44 credentials are incomplete. Add API key / access token to continue with sync.' };
             break;
           }
           case 'moyasar': {
@@ -348,7 +356,6 @@ export const integrationRouter = router({
               const { testGeocoding } = await import('./maps-service');
               testResult = await testGeocoding();
             } catch (e: any) {
-              // Fallback: try direct import
               try {
                 const mapsService = await import('./maps-service');
                 testResult = await mapsService.testGeocoding();
@@ -367,13 +374,10 @@ export const integrationRouter = router({
               break;
             }
             try {
-              const resp = await fetch(
-                `https://graph.facebook.com/${apiVersion}/${phoneNumberId}`,
-                {
-                  headers: { 'Authorization': `Bearer ${accessToken}` },
-                  signal: AbortSignal.timeout(10000),
-                }
-              );
+              const resp = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneNumberId}`, {
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+                signal: AbortSignal.timeout(10000),
+              });
               if (resp.ok) {
                 const data = await resp.json();
                 const displayPhone = data.display_phone_number || phoneNumberId;
@@ -400,7 +404,6 @@ export const integrationRouter = router({
             }
             testResult = await testS3Connection({ endpoint, bucket, accessKeyId, secretAccessKey, region });
             if (testResult.success) {
-              // Also set env vars so storage.ts picks them up
               process.env.S3_ENDPOINT = endpoint;
               process.env.S3_BUCKET = bucket;
               process.env.S3_ACCESS_KEY_ID = accessKeyId;
@@ -454,12 +457,10 @@ export const integrationRouter = router({
               testResult = { success: false, message: 'Measurement ID is required' };
               break;
             }
-            // Validate measurement ID format (G-XXXXXXXXXX)
             if (!/^G-[A-Z0-9]+$/i.test(measurementId)) {
               testResult = { success: false, message: `Invalid Measurement ID format: ${measurementId}. Expected G-XXXXXXXXXX` };
               break;
             }
-            // Verify the GA4 gtag.js endpoint is reachable
             try {
               const gaResp = await fetch(`https://www.googletagmanager.com/gtag/js?id=${measurementId}`, { method: 'HEAD' });
               if (gaResp.ok) {
@@ -479,14 +480,12 @@ export const integrationRouter = router({
         testResult = { success: false, message: `Test error: ${e.message}` };
       }
 
-      // Update status and last tested
       await db.update(integrationConfigs).set({
         status: testResult.success ? 'healthy' : 'failing',
         lastTestedAt: new Date(),
         lastError: testResult.success ? null : testResult.message,
       }).where(eq(integrationConfigs.id, input.id));
 
-      // Audit log
       await db.insert(auditLog).values({
         userId: ctx.user?.id ?? null,
         userName: ctx.user?.displayName ?? 'system',
@@ -500,7 +499,6 @@ export const integrationRouter = router({
       return testResult;
     }),
 
-  // ─── Integration Credentials (encrypted) ───────────────────────────
   credentials: router({
     list: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
       .query(async () => {
@@ -515,7 +513,6 @@ export const integrationRouter = router({
         isEnabled: z.boolean(),
       }))
       .mutation(async ({ ctx, input }) => {
-        // Write lock check
         const writeEnabled = process.env.ENABLE_INTEGRATION_PANEL_WRITE === "true";
         if (!writeEnabled) {
           return { success: false, error: "Integration panel write is disabled. Set ENABLE_INTEGRATION_PANEL_WRITE=true to enable." };
@@ -531,7 +528,6 @@ export const integrationRouter = router({
       }),
   }),
 
-  // ─── KYC Admin Routes ──────────────────────────────────────────────
   kyc: router({
     list: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
       .input(z.object({
@@ -585,9 +581,7 @@ export const integrationRouter = router({
       }),
   }),
 
-  // ─── Shomoos (شموس) Admin Routes ────────────────────────────────────
   shomoos: router({
-    /** List Shomoos submissions with optional filters */
     submissions: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
       .input(z.object({
         bookingId: z.number().optional(),
@@ -603,45 +597,31 @@ export const integrationRouter = router({
         return getSubmissions(input as any || undefined);
       }),
 
-    /** Get submission stats for dashboard */
     stats: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
       .query(async () => {
         const { getSubmissionStats } = await import('./shomoos');
         return getSubmissionStats();
       }),
 
-    /** Manually submit check-in to Shomoos */
     checkIn: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
-      .input(z.object({
-        bookingId: z.number(),
-      }))
+      .input(z.object({ bookingId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const { submitCheckIn, buildGuestDataFromBooking } = await import('./shomoos');
         const { getUserById } = await import('./db');
         const dbModule = await import('./db');
-
-        // Get booking with tenant and property data
         const pool = dbModule.getPool();
         if (!pool) return { success: false, error: 'Database unavailable' };
-
-        const [bookingRows] = await pool.query<any[]>(
-          'SELECT b.*, p.title as propertyTitle, p.titleAr as propertyTitleAr, p.unitNumber, p.buildingName FROM bookings b LEFT JOIN properties p ON b.propertyId = p.id WHERE b.id = ? LIMIT 1',
-          [input.bookingId]
-        );
+        const [bookingRows] = await pool.query<any[]>('SELECT b.*, p.title as propertyTitle, p.titleAr as propertyTitleAr, p.unitNumber, p.buildingName FROM bookings b LEFT JOIN properties p ON b.propertyId = p.id WHERE b.id = ? LIMIT 1', [input.bookingId]);
         if (bookingRows.length === 0) return { success: false, error: 'Booking not found' };
         const booking = bookingRows[0];
-
         const tenant = await getUserById(booking.tenantId);
         if (!tenant) return { success: false, error: 'Tenant not found' };
-
         const guestData = buildGuestDataFromBooking({
           user: tenant,
           booking: { moveInDate: booking.moveInDate, moveOutDate: booking.moveOutDate },
           property: { title: booking.propertyTitle, unitNumber: booking.unitNumber, buildingName: booking.buildingName },
         });
-
         if (!guestData) return { success: false, error: 'Tenant identity data incomplete. Please ensure the tenant has completed identity verification.' };
-
         return submitCheckIn({
           guest: guestData,
           bookingId: input.bookingId,
@@ -652,25 +632,16 @@ export const integrationRouter = router({
         });
       }),
 
-    /** Manually submit check-out to Shomoos */
     checkOut: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
-      .input(z.object({
-        submissionId: z.number(),
-        checkOutDate: z.string(),
-      }))
+      .input(z.object({ submissionId: z.number(), checkOutDate: z.string() }))
       .mutation(async ({ ctx, input }) => {
         const { submitCheckOut } = await import('./shomoos');
         const pool = (await import('./db')).getPool();
         if (!pool) return { success: false, error: 'Database unavailable' };
-
-        const [rows] = await pool.query<any[]>(
-          'SELECT * FROM shomoos_submissions WHERE id = ? AND submissionType = "check_in" LIMIT 1',
-          [input.submissionId]
-        );
+        const [rows] = await pool.query<any[]>('SELECT * FROM shomoos_submissions WHERE id = ? AND submissionType = "check_in" LIMIT 1', [input.submissionId]);
         if (rows.length === 0) return { success: false, error: 'Check-in submission not found' };
         const sub = rows[0];
         if (!sub.shomoosRefId) return { success: false, error: 'No Shomoos reference ID. Check-in may not have been accepted.' };
-
         return submitCheckOut({
           shomoosRefId: sub.shomoosRefId,
           checkOutDate: input.checkOutDate,
@@ -682,19 +653,13 @@ export const integrationRouter = router({
         });
       }),
 
-    /** Retry a failed submission */
     retry: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
       .input(z.object({ submissionId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const { retrySubmission } = await import('./shomoos');
-        return retrySubmission(
-          input.submissionId,
-          ctx.user.id,
-          ctx.user.displayName || ctx.user.email || 'admin'
-        );
+        return retrySubmission(input.submissionId, ctx.user.id, ctx.user.displayName || ctx.user.email || 'admin');
       }),
 
-    /** Check if Shomoos is enabled */
     isEnabled: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
       .query(async () => {
         const { isShomoosEnabled } = await import('./shomoos');
@@ -702,7 +667,6 @@ export const integrationRouter = router({
       }),
   }),
 
-  // ─── Feature Flags Admin ───────────────────────────────────────────
   flags: router({
     list: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
       .query(async () => {
@@ -711,22 +675,14 @@ export const integrationRouter = router({
       }),
 
     update: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
-      .input(z.object({
-        key: z.string(),
-        value: z.string(),
-      }))
+      .input(z.object({ key: z.string(), value: z.string() }))
       .mutation(async ({ ctx, input }) => {
         const { getPool: getP } = await import("./db");
         const p = getP();
         if (!p) return { success: false, error: "Database unavailable" };
-        await p.execute(
-          `INSERT INTO platformSettings (settingKey, settingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE settingValue = VALUES(settingValue)`,
-          [input.key, input.value]
-        );
-        // Invalidate cache
+        await p.execute(`INSERT INTO platformSettings (settingKey, settingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE settingValue = VALUES(settingValue)`, [input.key, input.value]);
         const { invalidateFlagCache } = await import("./feature-flags");
         invalidateFlagCache();
-        // Audit
         const { logAudit: la } = await import("./audit-log");
         await la({
           userId: ctx.user.id,
