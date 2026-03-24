@@ -10,9 +10,12 @@ import {
   ArrowRight,
   Building2,
   CalendarCheck,
+  CheckCircle2,
   CreditCard,
   ExternalLink,
+  Eye,
   Loader2,
+  Play,
   Plug,
   RefreshCw,
   Shield,
@@ -55,23 +58,60 @@ export default function AdminOps() {
   const { lang } = useI18n();
   const isAr = lang === "ar";
 
-  const healthQuery = trpc.base44.getSyncHealth.useQuery(undefined, {
-    retry: false,
-  });
-  const workspaceQuery = trpc.base44.openWorkspace.useQuery(undefined, {
-    retry: false,
-  });
+  const healthQuery = trpc.base44.getSyncHealth.useQuery(undefined, { retry: false });
+  const workspaceQuery = trpc.base44.openWorkspace.useQuery(undefined, { retry: false });
+  const queueQuery = trpc.base44.listSyncQueue.useQuery({ limit: 8 }, { retry: false });
+
+  const refreshAll = async () => {
+    await Promise.all([healthQuery.refetch(), workspaceQuery.refetch(), queueQuery.refetch()]);
+  };
+
   const manualSyncMutation = trpc.base44.runManualSync.useMutation({
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       toast.success(result.message);
-      healthQuery.refetch();
+      await refreshAll();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const prepareMutation = trpc.base44.preparePendingSync.useMutation({
+    onSuccess: async (result) => {
+      toast.success(isAr ? `تم تجهيز ${result.prepared.length} سجل` : `Prepared ${result.prepared.length} row(s)`);
+      await refreshAll();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const executeMutation = trpc.base44.executePreparedSync.useMutation({
+    onSuccess: async (result) => {
+      const synced = result.results.filter((r) => r.status === "synced").length;
+      const failed = result.results.filter((r) => r.status === "failed").length;
+      toast.success(isAr ? `تمت مزامنة ${synced} وفشل ${failed}` : `Synced ${synced}, failed ${failed}`);
+      await refreshAll();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const previewMutation = trpc.base44.preparePendingSync.useMutation({
+    onSuccess: (result) => {
+      const first = result.previews[0];
+      if (!first) {
+        toast.message(isAr ? "لا توجد سجلات معلقة" : "No pending rows");
+        return;
+      }
+      console.log("Base44 payload preview", first);
+      toast.success(isAr ? "تمت طباعة أول حمولة في console" : "First payload logged to console");
     },
     onError: (error) => toast.error(error.message),
   });
 
   const integration = healthQuery.data?.integration;
   const sourceCounts = healthQuery.data?.sourceCounts;
+  const syncQueue = healthQuery.data?.syncQueue;
   const workspace = workspaceQuery.data;
+  const queueRows = queueQuery.data || [];
+
+  const isBusy = manualSyncMutation.isPending || prepareMutation.isPending || executeMutation.isPending || previewMutation.isPending;
 
   const openUrl = (url?: string | null) => {
     if (!url) {
@@ -98,8 +138,8 @@ export default function AdminOps() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => healthQuery.refetch()} disabled={healthQuery.isFetching}>
-              {healthQuery.isFetching ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <RefreshCw className="me-2 h-4 w-4" />}
+            <Button variant="outline" onClick={refreshAll} disabled={healthQuery.isFetching || queueQuery.isFetching}>
+              {(healthQuery.isFetching || queueQuery.isFetching) ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <RefreshCw className="me-2 h-4 w-4" />}
               {isAr ? "تحديث الحالة" : "Refresh Health"}
             </Button>
             <Button variant="outline" onClick={() => (window.location.href = "/admin/integrations")}>
@@ -152,6 +192,37 @@ export default function AdminOps() {
           </Card>
         </div>
 
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>{isAr ? "معلق" : "Pending"}</CardDescription>
+              <CardTitle className="text-base">{syncQueue?.pending ?? 0}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-muted-foreground">{isAr ? "بانتظار التحضير أو التنفيذ." : "Waiting to be prepared or executed."}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>{isAr ? "تمت مزامنته" : "Synced"}</CardDescription>
+              <CardTitle className="text-base">{syncQueue?.synced ?? 0}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-muted-foreground">{isAr ? "نجحت في الوصول إلى Base44." : "Reached Base44 successfully."}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>{isAr ? "فشل" : "Failed"}</CardDescription>
+              <CardTitle className="text-base">{syncQueue?.failed ?? 0}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-muted-foreground">{isAr ? "تحتاج مراجعة أو إعادة محاولة." : "Needs review or retry."}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>{isAr ? "الدالة" : "Function"}</CardDescription>
+              <CardTitle className="text-base">{integration?.syncFunctionUrl ? (isAr ? "مضبوطة" : "Configured") : (isAr ? "مفقودة" : "Missing")}</CardTitle>
+            </CardHeader>
+            <CardContent className="truncate text-xs text-muted-foreground">{integration?.syncFunctionUrl || (isAr ? "أضف Sync Function URL داخل التكاملات." : "Add Sync Function URL in Integrations.")}</CardContent>
+          </Card>
+        </div>
+
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
           <Card>
             <CardHeader>
@@ -182,7 +253,7 @@ export default function AdminOps() {
             <CardHeader>
               <CardTitle>{isAr ? "أوامر التشغيل" : "Operations Actions"}</CardTitle>
               <CardDescription>
-                {isAr ? "إجراءات أولية آمنة قبل تفعيل المزامنة الفعلية للكيانات." : "Safe first actions before live entity push is enabled."}
+                {isAr ? "الآن يمكن تنفيذ الدورة من نفس الصفحة." : "You can now run the cycle from this page."}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -194,48 +265,76 @@ export default function AdminOps() {
                 <span className="inline-flex items-center gap-2"><ExternalLink className="h-4 w-4" />{isAr ? "فتح المعاينة" : "Open Preview"}</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button
-                variant="outline"
-                className="justify-between"
-                onClick={() => manualSyncMutation.mutate({ entities: ["units", "bookings", "payments", "maintenance"] })}
-                disabled={manualSyncMutation.isPending}
-              >
-                <span className="inline-flex items-center gap-2">
-                  {manualSyncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  {isAr ? "طلب مزامنة يدوية" : "Request Manual Sync"}
-                </span>
+              <Button variant="outline" className="justify-between" onClick={() => manualSyncMutation.mutate({ entities: ["units", "bookings", "payments", "maintenance"] })} disabled={isBusy}>
+                <span className="inline-flex items-center gap-2">{manualSyncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}{isAr ? "1) إنشاء صفوف المزامنة" : "1) Queue Sync Rows"}</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button variant="outline" className="justify-between" onClick={() => (window.location.href = "/admin/buildings")}>
-                <span className="inline-flex items-center gap-2"><Building2 className="h-4 w-4" />{isAr ? "المباني والوحدات" : "Buildings & Units"}</span>
+              <Button variant="outline" className="justify-between" onClick={() => prepareMutation.mutate({ limit: 10 })} disabled={isBusy}>
+                <span className="inline-flex items-center gap-2">{prepareMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}{isAr ? "2) تجهيز الحمولة" : "2) Prepare Payloads"}</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button variant="outline" className="justify-between" onClick={() => (window.location.href = "/admin/bookings")}>
-                <span className="inline-flex items-center gap-2"><CalendarCheck className="h-4 w-4" />{isAr ? "الحجوزات" : "Bookings"}</span>
+              <Button variant="outline" className="justify-between" onClick={() => executeMutation.mutate({ limit: 10 })} disabled={isBusy || !integration?.syncFunctionUrl}>
+                <span className="inline-flex items-center gap-2">{executeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}{isAr ? "3) تنفيذ الإرسال" : "3) Execute Send"}</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button variant="outline" className="justify-between" onClick={() => (window.location.href = "/admin/payments")}>
-                <span className="inline-flex items-center gap-2"><CreditCard className="h-4 w-4" />{isAr ? "المدفوعات" : "Payments"}</span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" className="justify-between" onClick={() => (window.location.href = "/admin/emergency-maintenance")}>
-                <span className="inline-flex items-center gap-2"><Wrench className="h-4 w-4" />{isAr ? "الصيانة" : "Maintenance"}</span>
+              <Button variant="outline" className="justify-between" onClick={() => previewMutation.mutate({ limit: 1 })} disabled={isBusy}>
+                <span className="inline-flex items-center gap-2">{previewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}{isAr ? "معاينة أول حمولة" : "Preview First Payload"}</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
               <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
                 <div className="mb-2 inline-flex items-center gap-2 font-medium text-foreground">
                   <Shield className="h-4 w-4 text-[#3ECFC0]" />
-                  {isAr ? "الخطوة التالية" : "Next build step"}
+                  {isAr ? "ما تبقى" : "What remains"}
                 </div>
                 <p>
                   {isAr
-                    ? "إضافة جدول externalSyncMap وربط طلب المزامنة اليدوية بسجل مزامنة فعلي لكل وحدة/حجز/دفعة/طلب صيانة."
-                    : "Add the externalSyncMap table and connect manual sync requests to real per-entity sync records for units, bookings, payments, and maintenance."}
+                    ? "بعد تأكيد عمل الدالة في Base44، الخطوة التالية هي إعادة المحاولة التلقائية والكتابة العكسية للصيانة."
+                    : "Once the Base44 function is confirmed working, the next step is automatic retry and maintenance write-back."}
                 </p>
               </div>
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{isAr ? "آخر صفوف المزامنة" : "Recent Sync Queue Rows"}</CardTitle>
+            <CardDescription>{isAr ? "عرض سريع لآخر السجلات المعلقة أو المنفذة." : "Quick visibility into the latest queued or executed rows."}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {queueQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{isAr ? "جاري تحميل الصفوف..." : "Loading queue rows..."}</div>
+            ) : queueRows.length === 0 ? (
+              <div className="text-sm text-muted-foreground">{isAr ? "لا توجد صفوف مزامنة بعد." : "No sync rows yet."}</div>
+            ) : (
+              <div className="space-y-3">
+                {queueRows.map((row: any) => (
+                  <div key={row.id} className="rounded-xl border p-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">#{row.id}</span>
+                          <Badge variant="outline">{row.entityType}</Badge>
+                          <Badge variant={row.syncStatus === "failed" ? "destructive" : row.syncStatus === "synced" ? "secondary" : "outline"}>{row.syncStatus}</Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {isAr ? "المعرف المحلي" : "Local ID"}: {row.localId}
+                          {" • "}
+                          {isAr ? "الاتجاه" : "Direction"}: {row.syncDirection}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {row.syncStatus === "synced" ? <CheckCircle2 className="h-4 w-4" /> : null}
+                        {row.syncStatus === "failed" ? <Wrench className="h-4 w-4" /> : null}
+                        <span>{row.externalId || (isAr ? "بدون معرف خارجي" : "No external ID")}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );
