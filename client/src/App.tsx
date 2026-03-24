@@ -65,6 +65,7 @@ const AdminProperties = lazy(() => import("./pages/AdminProperties"));
 const AdminPropertyEdit = lazy(() => import("./pages/AdminPropertyEdit"));
 const AdminSubmissions = lazy(() => import("./pages/AdminSubmissions"));
 const AdminIntegrations = lazy(() => import("./pages/AdminIntegrations"));
+const AdminOps = lazy(() => import("./pages/AdminOps"));
 const AdminShomoos = lazy(() => import("./pages/AdminShomoos"));
 const AdminKYC = lazy(() => import("./pages/AdminKYC"));
 const AdminFeatureFlags = lazy(() => import("./pages/AdminFeatureFlags"));
@@ -123,6 +124,7 @@ function Router() {
         <Route path="/admin/properties" component={AdminProperties} />
         <Route path="/admin/submissions" component={AdminSubmissions} />
         <Route path="/admin/integrations" component={AdminIntegrations} />
+        <Route path="/admin/ops" component={AdminOps} />
         <Route path="/admin/shomoos" component={AdminShomoos} />
         <Route path="/admin/kyc" component={AdminKYC} />
         <Route path="/admin/feature-flags" component={AdminFeatureFlags} />
