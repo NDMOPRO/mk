@@ -5,6 +5,7 @@ import { z } from "zod";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { ENV } from "./_core/env";
+import { createHash } from "crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   auditLog,
@@ -21,6 +22,7 @@ const pool = mysql.createPool(ENV.databaseUrl);
 const db = drizzle(pool);
 
 type SyncEntity = "units" | "bookings" | "payments" | "maintenance";
+type SyncEntityType = "unit" | "booking" | "payment" | "maintenance";
 
 function parseConfig(configJson: string | null): Record<string, string> {
   if (!configJson) return {};
@@ -31,7 +33,7 @@ function parseConfig(configJson: string | null): Record<string, string> {
   }
 }
 
-function mapEntityType(entity: SyncEntity): "unit" | "booking" | "payment" | "maintenance" {
+function mapEntityType(entity: SyncEntity): SyncEntityType {
   switch (entity) {
     case "units":
       return "unit";
@@ -54,6 +56,119 @@ async function getBase44Integration() {
     throw new TRPCError({ code: "NOT_FOUND", message: "Base44 integration is not configured yet." });
   }
   return row;
+}
+
+function hashPayload(payload: unknown) {
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+async function buildPayload(entityType: SyncEntityType, localId: number) {
+  switch (entityType) {
+    case "unit": {
+      const [row] = await db.select().from(units).where(eq(units.id, localId)).limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `Unit ${localId} not found` });
+      return {
+        entityType,
+        localId,
+        record: {
+          id: row.id,
+          unitId: row.unitId,
+          buildingId: row.buildingId,
+          unitNumber: row.unitNumber,
+          floor: row.floor,
+          bedrooms: row.bedrooms,
+          bathrooms: row.bathrooms,
+          sizeSqm: row.sizeSqm,
+          unitStatus: row.unitStatus,
+          monthlyBaseRentSAR: row.monthlyBaseRentSAR,
+          propertyId: row.propertyId,
+          notes: row.notes,
+          updatedAt: row.updatedAt,
+        },
+      };
+    }
+    case "booking": {
+      const [row] = await db.select().from(bookings).where(eq(bookings.id, localId)).limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `Booking ${localId} not found` });
+      return {
+        entityType,
+        localId,
+        record: {
+          id: row.id,
+          propertyId: row.propertyId,
+          tenantId: row.tenantId,
+          landlordId: row.landlordId,
+          status: row.status,
+          moveInDate: row.moveInDate,
+          moveOutDate: row.moveOutDate,
+          durationMonths: row.durationMonths,
+          monthlyRent: row.monthlyRent,
+          totalAmount: row.totalAmount,
+          fees: row.fees,
+          vatAmount: row.vatAmount,
+          buildingId: row.buildingId,
+          unitId: row.unitId,
+          source: row.source,
+          beds24BookingId: row.beds24BookingId,
+          updatedAt: row.updatedAt,
+        },
+      };
+    }
+    case "payment": {
+      const [row] = await db.select().from(paymentLedger).where(eq(paymentLedger.id, localId)).limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `Payment ledger row ${localId} not found` });
+      return {
+        entityType,
+        localId,
+        record: {
+          id: row.id,
+          invoiceNumber: row.invoiceNumber,
+          bookingId: row.bookingId,
+          guestName: row.guestName,
+          guestEmail: row.guestEmail,
+          guestPhone: row.guestPhone,
+          buildingId: row.buildingId,
+          unitId: row.unitId,
+          unitNumber: row.unitNumber,
+          propertyDisplayName: row.propertyDisplayName,
+          type: row.type,
+          direction: row.direction,
+          amount: row.amount,
+          currency: row.currency,
+          status: row.status,
+          paymentMethod: row.paymentMethod,
+          provider: row.provider,
+          dueAt: row.dueAt,
+          paidAt: row.paidAt,
+          updatedAt: row.updatedAt,
+        },
+      };
+    }
+    case "maintenance": {
+      const [row] = await db.select().from(maintenanceRequests).where(eq(maintenanceRequests.id, localId)).limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `Maintenance request ${localId} not found` });
+      return {
+        entityType,
+        localId,
+        record: {
+          id: row.id,
+          propertyId: row.propertyId,
+          tenantId: row.tenantId,
+          landlordId: row.landlordId,
+          bookingId: row.bookingId,
+          title: row.title,
+          description: row.description,
+          category: row.category,
+          priority: row.priority,
+          status: row.status,
+          photos: row.photos,
+          estimatedCost: row.estimatedCost,
+          resolvedAt: row.resolvedAt,
+          updatedAt: row.updatedAt,
+        },
+      };
+    }
+  }
 }
 
 async function queueSyncRecords(entity: SyncEntity, requestedBy: { id: number; name: string }, targetAppId: string) {
@@ -197,6 +312,74 @@ export const base44Router = router({
       recentAudit,
     };
   }),
+
+  listSyncQueue: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+    .input(z.object({ status: z.enum(["pending", "synced", "failed", "conflict"]).optional(), limit: z.number().min(1).max(100).default(25) }).optional())
+    .query(async ({ input }) => {
+      const limit = input?.limit ?? 25;
+      const rows = await db
+        .select()
+        .from(externalSyncMap)
+        .where(
+          input?.status
+            ? and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, input.status))
+            : eq(externalSyncMap.provider, "base44"),
+        )
+        .orderBy(desc(externalSyncMap.updatedAt))
+        .limit(limit);
+      return rows;
+    }),
+
+  preparePendingSync: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+    .input(z.object({ limit: z.number().min(1).max(50).default(10) }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const limit = input?.limit ?? 10;
+      const pendingRows = await db
+        .select()
+        .from(externalSyncMap)
+        .where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "pending")))
+        .orderBy(desc(externalSyncMap.updatedAt))
+        .limit(limit);
+
+      const prepared: Array<{ syncId: number; entityType: SyncEntityType; localId: number; payloadHash: string }> = [];
+      const previews: Array<{ syncId: number; entityType: SyncEntityType; localId: number; payload: unknown }> = [];
+
+      for (const row of pendingRows) {
+        const payload = await buildPayload(row.entityType, row.localId);
+        const payloadHash = hashPayload(payload);
+        const nextMetadata = {
+          ...(row.metadata || {}),
+          preparedAt: new Date().toISOString(),
+          preparedById: ctx.user.id,
+          preparedByName: ctx.user.displayName || ctx.user.email || "admin",
+          previewReady: true,
+        };
+
+        await db
+          .update(externalSyncMap)
+          .set({
+            payloadHash,
+            metadata: nextMetadata as any,
+            updatedAt: new Date(),
+          })
+          .where(eq(externalSyncMap.id, row.id));
+
+        prepared.push({ syncId: row.id, entityType: row.entityType, localId: row.localId, payloadHash });
+        previews.push({ syncId: row.id, entityType: row.entityType, localId: row.localId, payload });
+      }
+
+      await db.insert(auditLog).values({
+        userId: ctx.user.id,
+        userName: ctx.user.displayName || ctx.user.email || "admin",
+        action: "UPDATE",
+        entityType: "INTEGRATION",
+        entityId: 0,
+        entityLabel: "Base44 Queue Preparation",
+        metadata: { preparedCount: prepared.length, previewOnly: true } as any,
+      });
+
+      return { success: true, prepared, previews };
+    }),
 
   runManualSync: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
     .input(
