@@ -46,6 +46,19 @@ function mapEntityType(entity: SyncEntity): SyncEntityType {
   }
 }
 
+function resolveSyncEndpoint(config: Record<string, string>): string | null {
+  if (config.syncFunctionUrl) return config.syncFunctionUrl;
+  const baseUrl = config.previewUrl || config.editorUrl;
+  const functionName = config.syncFunctionName;
+  if (!baseUrl || !functionName) return null;
+  try {
+    const url = new URL(baseUrl);
+    return `${url.origin}/functions/${functionName}`;
+  } catch {
+    return null;
+  }
+}
+
 async function getBase44Integration() {
   const [row] = await db
     .select()
@@ -256,34 +269,12 @@ export const base44Router = router({
     const [ledgerCountRow] = await db.select({ count: sql<number>`count(*)` }).from(paymentLedger);
     const [maintenanceCountRow] = await db.select({ count: sql<number>`count(*)` }).from(maintenanceRequests);
 
-    const [pendingCountRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(externalSyncMap)
-      .where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "pending")));
+    const [pendingCountRow] = await db.select({ count: sql<number>`count(*)` }).from(externalSyncMap).where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "pending")));
+    const [failedCountRow] = await db.select({ count: sql<number>`count(*)` }).from(externalSyncMap).where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "failed")));
+    const [syncedCountRow] = await db.select({ count: sql<number>`count(*)` }).from(externalSyncMap).where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "synced")));
 
-    const [failedCountRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(externalSyncMap)
-      .where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "failed")));
-
-    const [syncedCountRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(externalSyncMap)
-      .where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "synced")));
-
-    const recentSyncRows = await db
-      .select()
-      .from(externalSyncMap)
-      .where(eq(externalSyncMap.provider, "base44"))
-      .orderBy(desc(externalSyncMap.updatedAt))
-      .limit(20);
-
-    const recentAudit = await db
-      .select()
-      .from(auditLog)
-      .where(and(eq(auditLog.entityType, "INTEGRATION"), eq(auditLog.entityLabel, integration.displayName)))
-      .orderBy(desc(auditLog.createdAt))
-      .limit(10);
+    const recentSyncRows = await db.select().from(externalSyncMap).where(eq(externalSyncMap.provider, "base44")).orderBy(desc(externalSyncMap.updatedAt)).limit(20);
+    const recentAudit = await db.select().from(auditLog).where(and(eq(auditLog.entityType, "INTEGRATION"), eq(auditLog.entityLabel, integration.displayName))).orderBy(desc(auditLog.createdAt)).limit(10);
 
     return {
       integration: {
@@ -295,6 +286,7 @@ export const base44Router = router({
         appId: config.appId || null,
         editorUrl: config.editorUrl || null,
         previewUrl: config.previewUrl || null,
+        syncFunctionUrl: config.syncFunctionUrl || resolveSyncEndpoint(config),
       },
       sourceCounts: {
         buildings: Number(buildingCountRow?.count || 0),
@@ -317,128 +309,92 @@ export const base44Router = router({
     .input(z.object({ status: z.enum(["pending", "synced", "failed", "conflict"]).optional(), limit: z.number().min(1).max(100).default(25) }).optional())
     .query(async ({ input }) => {
       const limit = input?.limit ?? 25;
-      const rows = await db
-        .select()
-        .from(externalSyncMap)
-        .where(
-          input?.status
-            ? and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, input.status))
-            : eq(externalSyncMap.provider, "base44"),
-        )
-        .orderBy(desc(externalSyncMap.updatedAt))
-        .limit(limit);
-      return rows;
+      return db.select().from(externalSyncMap).where(input?.status ? and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, input.status)) : eq(externalSyncMap.provider, "base44")).orderBy(desc(externalSyncMap.updatedAt)).limit(limit);
     }),
 
   preparePendingSync: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
     .input(z.object({ limit: z.number().min(1).max(50).default(10) }).optional())
     .mutation(async ({ ctx, input }) => {
       const limit = input?.limit ?? 10;
-      const pendingRows = await db
-        .select()
-        .from(externalSyncMap)
-        .where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "pending")))
-        .orderBy(desc(externalSyncMap.updatedAt))
-        .limit(limit);
-
+      const pendingRows = await db.select().from(externalSyncMap).where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "pending"))).orderBy(desc(externalSyncMap.updatedAt)).limit(limit);
       const prepared: Array<{ syncId: number; entityType: SyncEntityType; localId: number; payloadHash: string }> = [];
       const previews: Array<{ syncId: number; entityType: SyncEntityType; localId: number; payload: unknown }> = [];
 
       for (const row of pendingRows) {
         const payload = await buildPayload(row.entityType, row.localId);
         const payloadHash = hashPayload(payload);
-        const nextMetadata = {
-          ...(row.metadata || {}),
-          preparedAt: new Date().toISOString(),
-          preparedById: ctx.user.id,
-          preparedByName: ctx.user.displayName || ctx.user.email || "admin",
-          previewReady: true,
-        };
-
-        await db
-          .update(externalSyncMap)
-          .set({
-            payloadHash,
-            metadata: nextMetadata as any,
-            updatedAt: new Date(),
-          })
-          .where(eq(externalSyncMap.id, row.id));
-
+        const nextMetadata = { ...(row.metadata || {}), preparedAt: new Date().toISOString(), preparedById: ctx.user.id, preparedByName: ctx.user.displayName || ctx.user.email || "admin", previewReady: true };
+        await db.update(externalSyncMap).set({ payloadHash, metadata: nextMetadata as any, updatedAt: new Date() }).where(eq(externalSyncMap.id, row.id));
         prepared.push({ syncId: row.id, entityType: row.entityType, localId: row.localId, payloadHash });
         previews.push({ syncId: row.id, entityType: row.entityType, localId: row.localId, payload });
       }
 
-      await db.insert(auditLog).values({
-        userId: ctx.user.id,
-        userName: ctx.user.displayName || ctx.user.email || "admin",
-        action: "UPDATE",
-        entityType: "INTEGRATION",
-        entityId: 0,
-        entityLabel: "Base44 Queue Preparation",
-        metadata: { preparedCount: prepared.length, previewOnly: true } as any,
-      });
-
+      await db.insert(auditLog).values({ userId: ctx.user.id, userName: ctx.user.displayName || ctx.user.email || "admin", action: "UPDATE", entityType: "INTEGRATION", entityId: 0, entityLabel: "Base44 Queue Preparation", metadata: { preparedCount: prepared.length, previewOnly: true } as any });
       return { success: true, prepared, previews };
     }),
 
-  runManualSync: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
-    .input(
-      z.object({
-        entities: z.array(z.enum(["units", "bookings", "payments", "maintenance"]))
-          .min(1)
-          .max(4),
-      }),
-    )
+  executePreparedSync: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+    .input(z.object({ limit: z.number().min(1).max(25).default(10) }).optional())
     .mutation(async ({ ctx, input }) => {
       const integration = await getBase44Integration();
       const config = parseConfig(integration.configJson);
-      if (!integration.isEnabled) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Base44 integration is disabled." });
-      }
-      if (!config.appId || !config.editorUrl) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Base44 app configuration is incomplete." });
+      const endpoint = resolveSyncEndpoint(config);
+      if (!integration.isEnabled) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Base44 integration is disabled." });
+      if (!endpoint) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Base44 sync function URL is not configured." });
+
+      const limit = input?.limit ?? 10;
+      const pendingRows = await db.select().from(externalSyncMap).where(and(eq(externalSyncMap.provider, "base44"), eq(externalSyncMap.syncStatus, "pending"))).orderBy(desc(externalSyncMap.updatedAt)).limit(limit);
+      const results: Array<{ syncId: number; status: string; externalId?: string | null; error?: string | null }> = [];
+
+      for (const row of pendingRows) {
+        try {
+          const payload = await buildPayload(row.entityType, row.localId);
+          const payloadHash = hashPayload(payload);
+          const headers: Record<string, string> = { "Content-Type": "application/json", "X-MonthlyKey-Sync-Id": String(row.id), "X-MonthlyKey-Entity-Type": row.entityType };
+          if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
+          const resp = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ syncId: row.id, provider: "base44", entityType: row.entityType, localId: row.localId, payload, payloadHash }) });
+          const text = await resp.text();
+          let data: any = null;
+          try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+
+          if (!resp.ok) {
+            const errorMsg = data?.error || data?.message || `HTTP ${resp.status}`;
+            await db.update(externalSyncMap).set({ syncStatus: "failed", lastError: String(errorMsg), payloadHash, updatedAt: new Date() }).where(eq(externalSyncMap.id, row.id));
+            results.push({ syncId: row.id, status: "failed", error: String(errorMsg) });
+            continue;
+          }
+
+          const externalId = data?.externalId || data?.id || data?.data?.id || null;
+          await db.update(externalSyncMap).set({ syncStatus: "synced", lastError: null, payloadHash, externalId, lastSyncedAt: new Date(), updatedAt: new Date(), metadata: { ...(row.metadata || {}), executedAt: new Date().toISOString(), executedById: ctx.user.id, executedByName: ctx.user.displayName || ctx.user.email || "admin", endpoint } as any }).where(eq(externalSyncMap.id, row.id));
+          results.push({ syncId: row.id, status: "synced", externalId });
+        } catch (error: any) {
+          const message = error?.message || "Unknown sync error";
+          await db.update(externalSyncMap).set({ syncStatus: "failed", lastError: message, updatedAt: new Date() }).where(eq(externalSyncMap.id, row.id));
+          results.push({ syncId: row.id, status: "failed", error: message });
+        }
       }
 
-      const requestedBy = {
-        id: ctx.user.id,
-        name: ctx.user.displayName || ctx.user.email || "admin",
-      };
+      await db.insert(auditLog).values({ userId: ctx.user.id, userName: ctx.user.displayName || ctx.user.email || "admin", action: "UPDATE", entityType: "INTEGRATION", entityId: integration.id, entityLabel: integration.displayName, metadata: { mode: "execute_prepared_sync", endpoint, resultCount: results.length, results } as any });
+      return { success: true, endpoint, results };
+    }),
 
+  runManualSync: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS)
+    .input(z.object({ entities: z.array(z.enum(["units", "bookings", "payments", "maintenance"])) .min(1).max(4) }))
+    .mutation(async ({ ctx, input }) => {
+      const integration = await getBase44Integration();
+      const config = parseConfig(integration.configJson);
+      if (!integration.isEnabled) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Base44 integration is disabled." });
+      if (!config.appId || !config.editorUrl) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Base44 app configuration is incomplete." });
+      const requestedBy = { id: ctx.user.id, name: ctx.user.displayName || ctx.user.email || "admin" };
       const queueResults = [];
-      for (const entity of input.entities) {
-        queueResults.push(await queueSyncRecords(entity, requestedBy, config.appId));
-      }
-
-      await db.insert(auditLog).values({
-        userId: ctx.user.id,
-        userName: requestedBy.name,
-        action: "UPDATE",
-        entityType: "INTEGRATION",
-        entityId: integration.id,
-        entityLabel: integration.displayName,
-        metadata: {
-          mode: "manual_sync_requested",
-          entities: input.entities,
-          target: config.appId,
-          queueResults,
-        } as any,
-      });
-
-      return {
-        success: true,
-        message: "Manual Base44 sync queued successfully.",
-        queuedEntities: input.entities,
-        queueResults,
-      };
+      for (const entity of input.entities) queueResults.push(await queueSyncRecords(entity, requestedBy, config.appId));
+      await db.insert(auditLog).values({ userId: ctx.user.id, userName: requestedBy.name, action: "UPDATE", entityType: "INTEGRATION", entityId: integration.id, entityLabel: integration.displayName, metadata: { mode: "manual_sync_requested", entities: input.entities, target: config.appId, queueResults } as any });
+      return { success: true, message: "Manual Base44 sync queued successfully.", queuedEntities: input.entities, queueResults };
     }),
 
   openWorkspace: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS).query(async () => {
     const integration = await getBase44Integration();
     const config = parseConfig(integration.configJson);
-    return {
-      editorUrl: config.editorUrl || null,
-      previewUrl: config.previewUrl || null,
-      appId: config.appId || null,
-    };
+    return { editorUrl: config.editorUrl || null, previewUrl: config.previewUrl || null, appId: config.appId || null, syncFunctionUrl: config.syncFunctionUrl || resolveSyncEndpoint(config) };
   }),
 });
