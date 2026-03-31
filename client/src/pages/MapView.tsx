@@ -69,6 +69,7 @@ export default function MapViewPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showList, setShowList] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<MapProperty | null>(null);
+  const [currentProvider, setCurrentProvider] = useState<"google" | "leaflet" | null>(null);
 
   // Map refs
   const mapInstanceRef = useRef<MapInstance | null>(null);
@@ -293,11 +294,16 @@ export default function MapViewPage() {
         mapInst.fitBounds(boundsObj);
       }
     }
-  }, [properties, isAr, createPopupContent]);
+  }, [properties, isAr, createPopupContent, currentProvider]);
 
   // Handle map ready
   const handleMapReady = useCallback((map: MapInstance) => {
     mapInstanceRef.current = map;
+  }, []);
+
+  // Handle provider change (from toggle or auto-fallback)
+  const handleProviderChange = useCallback((provider: "google" | "leaflet") => {
+    setCurrentProvider(provider);
   }, []);
 
   // Reset filters
@@ -509,6 +515,7 @@ export default function MapViewPage() {
             initialCenter={{ lat: 24.7136, lng: 46.6753 }}
             initialZoom={6}
             onMapReady={handleMapReady}
+            onProviderChange={handleProviderChange}
           />
         </div>
       </div>
