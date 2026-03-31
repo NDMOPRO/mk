@@ -70,7 +70,7 @@ function loadGoogleMaps(): Promise<void> {
     googleMapsLoading = true;
 
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places,marker&language=ar&region=SA`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&language=ar&region=SA`;
     script.async = true;
     script.defer = true;
     script.onload = () => {
@@ -123,7 +123,7 @@ export function getLeafletModule() {
 // Create Unified Map Instance - Google Maps
 // ============================================================
 function createGoogleMapInstance(map: google.maps.Map): MapInstance {
-  const markers: google.maps.marker.AdvancedMarkerElement[] = [];
+  const markers: google.maps.Marker[] = [];
 
   return {
     provider: "google",
@@ -143,34 +143,31 @@ function createGoogleMapInstance(map: google.maps.Map): MapInstance {
     addMarker(lat, lng, options = {}) {
       const { color = "#3ECFC0", label = "", title = "" } = options;
 
-      const pinEl = document.createElement("div");
-      pinEl.style.cssText = `
-        background: ${color};
-        color: #fff;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 700;
-        font-family: Tajawal, sans-serif;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-        cursor: pointer;
-        white-space: nowrap;
-        border: 2px solid #fff;
-        text-align: center;
-      `;
-      pinEl.textContent = label || title;
-
-      const marker = new google.maps.marker.AdvancedMarkerElement({
+      const marker = new google.maps.Marker({
         map,
         position: { lat, lng },
-        content: pinEl,
         title,
+        label: label ? {
+          text: label,
+          color: "#fff",
+          fontWeight: "700",
+          fontSize: "12px",
+          fontFamily: "Tajawal, sans-serif",
+        } : undefined,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: color,
+          fillOpacity: 1,
+          strokeColor: "#fff",
+          strokeWeight: 2,
+          scale: label ? 18 : 10,
+        },
       });
       markers.push(marker);
       return marker;
     },
     removeAllMarkers() {
-      markers.forEach((m) => (m.map = null));
+      markers.forEach((m) => m.setMap(null));
       markers.length = 0;
     },
     onMarkerClick(marker, callback) {
@@ -282,7 +279,6 @@ export function MapView({
             const map = new google.maps.Map(containerRef.current, {
               center: { lat: initialCenter.lat, lng: initialCenter.lng },
               zoom: initialZoom,
-              mapId: "monthly-key-map",
               language: "ar",
               gestureHandling: "greedy",
               mapTypeControl: false,
