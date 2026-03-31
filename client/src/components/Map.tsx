@@ -6,7 +6,7 @@
  * 2. Leaflet/OpenStreetMap - free fallback when no API key or Google Maps fails
  *
  * Features:
- * - Auto-detects Google Maps errors and falls back to Leaflet
+ * - Auto-detects Google Maps billing/quota errors and falls back to Leaflet
  * - Manual toggle button to switch between providers
  * - Bilingual support (Arabic/English)
  */
@@ -55,12 +55,12 @@ interface MapViewProps {
 // ============================================================
 let googleMapsLoaded = false;
 let googleMapsLoading = false;
-let googleMapsFailed = false;
+let googleMapsScriptFailed = false;
 const googleMapsCallbacks: ((success: boolean) => void)[] = [];
 
 function loadGoogleMaps(): Promise<boolean> {
   return new Promise((resolve) => {
-    if (googleMapsFailed) {
+    if (googleMapsScriptFailed) {
       resolve(false);
       return;
     }
@@ -83,7 +83,7 @@ function loadGoogleMaps(): Promise<boolean> {
     };
     script.onerror = () => {
       console.warn("Failed to load Google Maps API script.");
-      googleMapsFailed = true;
+      googleMapsScriptFailed = true;
       googleMapsLoading = false;
       googleMapsCallbacks.forEach((cb) => cb(false));
       googleMapsCallbacks.length = 0;
@@ -121,78 +121,6 @@ async function loadLeaflet() {
 
 export function getLeafletModule() {
   return leafletModule;
-}
-
-// ============================================================
-// Google Maps Error Detection
-// ============================================================
-function setupGoogleMapsErrorDetection(
-  mapContainer: HTMLElement,
-  onError: () => void
-) {
-  // Google Maps shows an error overlay div when billing/quota issues occur
-  // We detect this by watching for the error overlay to appear
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of Array.from(mutation.addedNodes)) {
-        if (node instanceof HTMLElement) {
-          // Google Maps error overlay has specific characteristics
-          const text = node.textContent || "";
-          if (
-            text.includes("This page can't load Google Maps correctly") ||
-            text.includes("لم تحمِّل هذه الصفحة خرائط Google بشكل صحيح") ||
-            text.includes("didn't load Google Maps correctly") ||
-            text.includes("حدث خطأ")
-          ) {
-            console.warn("Google Maps error detected, switching to OpenStreetMap...");
-            observer.disconnect();
-            onError();
-            return;
-          }
-        }
-      }
-    }
-  });
-
-  observer.observe(mapContainer, {
-    childList: true,
-    subtree: true,
-  });
-
-  // Also check periodically for the first 30 seconds
-  let checkCount = 0;
-  const interval = setInterval(() => {
-    checkCount++;
-    if (checkCount > 30) {
-      clearInterval(interval);
-      return;
-    }
-    // Check for the Google Maps error dismiss button or error text
-    const errorElements = mapContainer.querySelectorAll(".dismissButton, .gm-err-container, [class*='err']");
-    if (errorElements.length > 0) {
-      console.warn("Google Maps error element detected, switching to OpenStreetMap...");
-      clearInterval(interval);
-      observer.disconnect();
-      onError();
-    }
-    // Also check for the specific error text in any child
-    const allText = mapContainer.innerText || "";
-    if (
-      allText.includes("didn't load Google Maps") ||
-      allText.includes("لم تحمِّل هذه الصفحة خرائط") ||
-      allText.includes("عفوًا، حدث خطأ")
-    ) {
-      console.warn("Google Maps error text detected, switching to OpenStreetMap...");
-      clearInterval(interval);
-      observer.disconnect();
-      onError();
-    }
-  }, 1000);
-
-  return () => {
-    observer.disconnect();
-    clearInterval(interval);
-  };
 }
 
 // ============================================================
@@ -335,163 +263,198 @@ export function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<MapInstance | null>(null);
-  const cleanupErrorDetectionRef = useRef<(() => void) | null>(null);
+  const errorDetectionCleanupRef = useRef<(() => void) | null>(null);
   const [loading, setLoading] = useState(true);
   const [providerUsed, setProviderUsed] = useState<"google" | "leaflet" | null>(null);
-  const [forceProvider, setForceProvider] = useState<"google" | "leaflet" | null>(null);
+  const [desiredProvider, setDesiredProvider] = useState<"google" | "leaflet">(
+    HAS_GOOGLE_KEY ? "google" : "leaflet"
+  );
   const [googleFailed, setGoogleFailed] = useState(false);
+  // Increment to force re-init
+  const [initCounter, setInitCounter] = useState(0);
 
   const isAr = document.documentElement.lang === "ar" || document.documentElement.dir === "rtl";
 
-  // Cleanup current map
-  const cleanupMap = useCallback(() => {
-    if (cleanupErrorDetectionRef.current) {
-      cleanupErrorDetectionRef.current();
-      cleanupErrorDetectionRef.current = null;
+  // Single initialization effect - handles ALL map creation
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
+
+    // Cleanup previous
+    if (errorDetectionCleanupRef.current) {
+      errorDetectionCleanupRef.current();
+      errorDetectionCleanupRef.current = null;
     }
     if (mapInstanceRef.current?.provider === "leaflet" && mapInstanceRef.current.leaflet) {
-      mapInstanceRef.current.leaflet.remove();
-    }
-    if (mapInstanceRef.current?.provider === "google" && mapInstanceRef.current.google) {
-      // Google Maps doesn't have a clean destroy, clear the container
+      try { mapInstanceRef.current.leaflet.remove(); } catch (e) { /* ignore */ }
     }
     mapInstanceRef.current = null;
-  }, []);
 
-  // Initialize Leaflet map
-  const initLeaflet = useCallback(async () => {
-    if (!containerRef.current) return;
     // Clear container
     containerRef.current.innerHTML = "";
-
     const mapDiv = document.createElement("div");
     mapDiv.style.width = "100%";
     mapDiv.style.height = "100%";
     containerRef.current.appendChild(mapDiv);
 
-    try {
-      const L = await loadLeaflet();
-      if (!containerRef.current) return;
+    const effectiveProvider = (desiredProvider === "google" && HAS_GOOGLE_KEY && !googleFailed)
+      ? "google"
+      : "leaflet";
 
-      const map = L.map(mapDiv, {
-        center: [initialCenter.lat, initialCenter.lng],
-        zoom: initialZoom,
-        zoomControl: true,
-        attributionControl: true,
-      });
+    async function initLeafletMap() {
+      try {
+        const L = await loadLeaflet();
+        if (cancelled || !containerRef.current) return;
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map);
+        const map = L.map(mapDiv, {
+          center: [initialCenter.lat, initialCenter.lng],
+          zoom: initialZoom,
+          zoomControl: true,
+          attributionControl: true,
+        });
 
-      // Handle resize
-      const resizeObserver = new ResizeObserver(() => {
-        map.invalidateSize();
-      });
-      resizeObserver.observe(containerRef.current);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19,
+        }).addTo(map);
 
-      const instance = createLeafletMapInstance(map, L);
-      mapInstanceRef.current = instance;
-      setProviderUsed("leaflet");
-      setLoading(false);
-      onMapReady?.(instance);
-      onProviderChange?.("leaflet");
-    } catch (e) {
-      console.error("Failed to initialize Leaflet:", e);
-      setLoading(false);
-    }
-  }, [initialCenter, initialZoom, onMapReady, onProviderChange]);
-
-  // Initialize Google Maps
-  const initGoogle = useCallback(async () => {
-    if (!containerRef.current) return;
-    // Clear container
-    containerRef.current.innerHTML = "";
-
-    const mapDiv = document.createElement("div");
-    mapDiv.style.width = "100%";
-    mapDiv.style.height = "100%";
-    containerRef.current.appendChild(mapDiv);
-
-    try {
-      const success = await loadGoogleMaps();
-      if (!success || !window.google?.maps || !containerRef.current) {
-        // Google Maps failed to load, fall back
-        setGoogleFailed(true);
-        await initLeaflet();
-        return;
-      }
-
-      const map = new google.maps.Map(mapDiv, {
-        center: { lat: initialCenter.lat, lng: initialCenter.lng },
-        zoom: initialZoom,
-        language: "ar",
-        gestureHandling: "greedy",
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
-        zoomControl: true,
-      });
-
-      const instance = createGoogleMapInstance(map);
-      mapInstanceRef.current = instance;
-      setProviderUsed("google");
-      setLoading(false);
-      onMapReady?.(instance);
-      onProviderChange?.("google");
-
-      // Setup error detection for billing/quota issues
-      cleanupErrorDetectionRef.current = setupGoogleMapsErrorDetection(
-        containerRef.current,
-        () => {
-          console.warn("Google Maps error detected, auto-switching to OpenStreetMap...");
-          setGoogleFailed(true);
-          cleanupMap();
-          initLeaflet();
+        // Handle resize
+        resizeObserver = new ResizeObserver(() => {
+          map.invalidateSize();
+        });
+        if (containerRef.current) {
+          resizeObserver.observe(containerRef.current);
         }
-      );
-    } catch (e) {
-      console.warn("Google Maps failed, falling back to Leaflet:", e);
-      setGoogleFailed(true);
-      await initLeaflet();
-    }
-  }, [initialCenter, initialZoom, onMapReady, onProviderChange, initLeaflet, cleanupMap]);
 
-  // Main initialization effect
-  useEffect(() => {
-    let cancelled = false;
+        // Force invalidate after a tick
+        setTimeout(() => {
+          if (!cancelled) map.invalidateSize();
+        }, 100);
 
-    async function init() {
-      if (!containerRef.current) return;
+        const instance = createLeafletMapInstance(map, L);
+        mapInstanceRef.current = instance;
 
-      const targetProvider = forceProvider || (HAS_GOOGLE_KEY && !googleFailed ? "google" : "leaflet");
-
-      cleanupMap();
-      setLoading(true);
-
-      if (targetProvider === "google" && HAS_GOOGLE_KEY && !googleFailed) {
-        await initGoogle();
-      } else {
-        await initLeaflet();
+        if (!cancelled) {
+          setProviderUsed("leaflet");
+          setLoading(false);
+          onMapReady?.(instance);
+          onProviderChange?.("leaflet");
+        }
+      } catch (e) {
+        console.error("Failed to initialize Leaflet:", e);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    init();
+    async function initGoogleMap() {
+      try {
+        const success = await loadGoogleMaps();
+        if (cancelled || !containerRef.current) return;
+
+        if (!success || !window.google?.maps) {
+          console.warn("Google Maps failed to load, switching to OpenStreetMap");
+          setGoogleFailed(true);
+          return; // Effect will re-run due to googleFailed change
+        }
+
+        const map = new google.maps.Map(mapDiv, {
+          center: { lat: initialCenter.lat, lng: initialCenter.lng },
+          zoom: initialZoom,
+          language: "ar",
+          gestureHandling: "greedy",
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: true,
+          zoomControl: true,
+        });
+
+        const instance = createGoogleMapInstance(map);
+        mapInstanceRef.current = instance;
+
+        if (!cancelled) {
+          setProviderUsed("google");
+          setLoading(false);
+          onMapReady?.(instance);
+          onProviderChange?.("google");
+        }
+
+        // Setup error detection for billing/quota issues
+        if (containerRef.current) {
+          const parentContainer = containerRef.current;
+          let errorDetected = false;
+
+          const checkForError = () => {
+            if (errorDetected || cancelled) return;
+            const text = parentContainer.innerText || "";
+            if (
+              text.includes("didn't load Google Maps") ||
+              text.includes("لم تحمِّل هذه الصفحة خرائط") ||
+              text.includes("عفوًا، حدث خطأ") ||
+              text.includes("This page can't load Google Maps")
+            ) {
+              errorDetected = true;
+              console.warn("Google Maps billing/quota error detected. Switching to OpenStreetMap...");
+              // Just set state - the effect will re-run and create Leaflet map
+              setGoogleFailed(true);
+              setDesiredProvider("leaflet");
+            }
+          };
+
+          // Check periodically for the first 30 seconds
+          const interval = setInterval(checkForError, 1000);
+
+          // Also use MutationObserver
+          const observer = new MutationObserver(() => {
+            checkForError();
+          });
+          observer.observe(parentContainer, { childList: true, subtree: true });
+
+          errorDetectionCleanupRef.current = () => {
+            clearInterval(interval);
+            observer.disconnect();
+          };
+        }
+      } catch (e) {
+        console.warn("Google Maps initialization failed:", e);
+        if (!cancelled) {
+          setGoogleFailed(true);
+          // Effect will re-run
+        }
+      }
+    }
+
+    setLoading(true);
+
+    if (effectiveProvider === "google") {
+      initGoogleMap();
+    } else {
+      initLeafletMap();
+    }
 
     return () => {
       cancelled = true;
-      cleanupMap();
+      if (errorDetectionCleanupRef.current) {
+        errorDetectionCleanupRef.current();
+        errorDetectionCleanupRef.current = null;
+      }
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      if (mapInstanceRef.current?.provider === "leaflet" && mapInstanceRef.current.leaflet) {
+        try { mapInstanceRef.current.leaflet.remove(); } catch (e) { /* ignore */ }
+      }
+      mapInstanceRef.current = null;
     };
-  }, [forceProvider, googleFailed]);
+  }, [desiredProvider, googleFailed, initCounter]);
 
   // Toggle handler
   const handleToggle = useCallback(() => {
-    const currentProvider = providerUsed;
-    if (currentProvider === "google") {
-      setForceProvider("leaflet");
-    } else if (currentProvider === "leaflet" && HAS_GOOGLE_KEY && !googleFailed) {
-      setForceProvider("google");
+    if (providerUsed === "google") {
+      setDesiredProvider("leaflet");
+    } else if (providerUsed === "leaflet" && HAS_GOOGLE_KEY && !googleFailed) {
+      setDesiredProvider("google");
     }
   }, [providerUsed, googleFailed]);
 
@@ -508,7 +471,7 @@ export function MapView({
 
       {/* Loading overlay */}
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-muted/50 rounded-lg">
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/50 rounded-lg z-[500]">
           <div className="flex flex-col items-center gap-2">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
             <span className="text-sm text-muted-foreground">
@@ -519,19 +482,16 @@ export function MapView({
       )}
 
       {/* Provider toggle button */}
-      {!loading && (
+      {!loading && providerUsed && (
         <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-2">
-          {/* Current provider badge */}
+          {/* Current provider badge + toggle */}
           <div className="bg-background/90 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2 flex items-center gap-2">
             <div className={cn(
               "w-2 h-2 rounded-full",
               providerUsed === "google" ? "bg-green-500" : "bg-blue-500"
             )} />
             <span className="text-xs font-medium text-foreground">
-              {providerUsed === "google"
-                ? "Google Maps"
-                : "OpenStreetMap"
-              }
+              {providerUsed === "google" ? "Google Maps" : "OpenStreetMap"}
             </span>
 
             {/* Toggle button */}
@@ -542,8 +502,8 @@ export function MapView({
                 title={isAr ? "تبديل مزود الخريطة" : "Switch map provider"}
               >
                 {providerUsed === "google"
-                  ? (isAr ? "← OpenStreetMap" : "← OpenStreetMap")
-                  : (isAr ? "← Google Maps" : "← Google Maps")
+                  ? (isAr ? "تبديل → OSM" : "Switch → OSM")
+                  : (isAr ? "تبديل → Google" : "Switch → Google")
                 }
               </button>
             )}
