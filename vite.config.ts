@@ -70,6 +70,7 @@ export default defineConfig({
       "127.0.0.1",
       ".up.railway.app",
       ".monthlykey.com",
+      "tg.monthlykey.com",
     ],
     fs: {
       strict: true,

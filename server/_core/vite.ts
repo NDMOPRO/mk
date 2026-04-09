@@ -100,6 +100,42 @@ export function serveStatic(app: Express) {
     process.env.NODE_ENV === "development"
       ? path.resolve(import.meta.dirname, "../..", "dist", "public")
       : path.resolve(import.meta.dirname, "public");
+
+  // ─── Telegram Mini App (tg.monthlykey.com) ─────────────────────────
+  const tgClientPath =
+    process.env.NODE_ENV === "development"
+      ? path.resolve(import.meta.dirname, "../..", "tg-client")
+      : path.resolve(import.meta.dirname, "..", "tg-client");
+  let tgHtmlTemplate = '';
+  const tgIndexPath = path.resolve(tgClientPath, "index.html");
+  try {
+    if (fs.existsSync(tgIndexPath)) {
+      tgHtmlTemplate = fs.readFileSync(tgIndexPath, 'utf-8');
+      console.log('[TG] Telegram Mini App HTML template loaded');
+    } else {
+      console.log('[TG] No tg-client/index.html found, TG Mini App disabled');
+    }
+  } catch (err) {
+    console.error('[TG] Failed to load TG Mini App template:', err);
+  }
+
+  // Helper to check if request is for TG Mini App subdomain
+  function isTgHost(req: express.Request): boolean {
+    const host = (req.hostname || req.headers.host || '').toLowerCase();
+    return host.startsWith('tg.') || host === 'tg.monthlykey.com';
+  }
+
+  // Serve TG static assets under /tg/ path prefix
+  if (fs.existsSync(tgClientPath)) {
+    app.use('/tg', express.static(tgClientPath, {
+      maxAge: '1y',
+      immutable: true,
+      etag: true,
+      lastModified: true,
+      index: false,
+    }));
+    console.log(`[TG] Serving TG assets from: ${tgClientPath}`);
+  }
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -167,7 +203,16 @@ export function serveStatic(app: Express) {
   });
 
   // SPA fallback: serve index.html for all non-file requests
-  app.use("*", async (_req, res) => {
+  app.use("*", async (req, res) => {
+    // TG Mini App: serve TG index.html for tg.monthlykey.com requests
+    if (isTgHost(req) && tgHtmlTemplate) {
+      res.status(200).set({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+      }).send(tgHtmlTemplate);
+      return;
+    }
+
     if (htmlTemplate) {
       // Inject GA4 measurement ID from DB at runtime
       const gaId = await getGA4MeasurementId();

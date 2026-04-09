@@ -35,6 +35,9 @@ COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/package.json ./
 COPY --from=build /app/drizzle.config.ts ./
 
+# Telegram Mini App static files
+COPY --from=build /app/tg-client ./tg-client
+
 # Create uploads directory for local file storage
 RUN mkdir -p /app/uploads && chmod 777 /app/uploads
 ENV UPLOAD_DIR=/app/uploads
