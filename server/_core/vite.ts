@@ -152,6 +152,22 @@ export function serveStatic(app: Express) {
     console.error('[Prerender] Failed to load HTML template:', err);
   }
 
+  // TG Mini App SPA fallback - MUST be BEFORE prerender middleware
+  // so all routes on tg.monthlykey.com (/, /search, /property/:id) return tg-client/index.html
+  if (tgHtmlTemplate) {
+    app.use((req, res, next) => {
+      if (!isTgHost(req)) return next();
+      // Pass through API requests and static asset requests
+      if (req.path.startsWith('/api/') || req.path.startsWith('/tg/')) return next();
+      if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|webp|avif|json|map)$/)) return next();
+      // Serve tg-client/index.html for all SPA routes
+      res.status(200).set({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+      }).send(tgHtmlTemplate);
+    });
+  }
+
   // Prerender middleware for bots - MUST be before express.static
   // so bot requests to / /search /property/:id are intercepted first
   if (htmlTemplate) {
