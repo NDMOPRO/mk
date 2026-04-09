@@ -13,10 +13,15 @@ const api = require("../services/api");
  */
 function registerUser(ctx) {
   const user = ctx.from;
-  const langCode = user.language_code || "ar";
-  const lang = detectLanguage(langCode);
+  const chatId = ctx.chat.id;
 
-  db.upsertUser(ctx.chat.id, {
+  // Check if user already exists in DB — if so, respect their saved language
+  const existingUser = db.getUser(chatId);
+  const lang = existingUser
+    ? existingUser.language || "ar"
+    : detectLanguage(user.language_code || "ar");
+
+  db.upsertUser(chatId, {
     username: user.username,
     firstName: user.first_name,
     lastName: user.last_name,
@@ -107,6 +112,14 @@ async function handleStart(ctx) {
     }
   }
 
+  // Send the reply keyboard (persistent bottom buttons) first
+  const replyKeyboard = getMainKeyboard(lang);
+  await ctx.reply(t(lang, "welcome"), {
+    parse_mode: "Markdown",
+    ...replyKeyboard,
+  });
+
+  // Then send inline action buttons
   const inlineButtons = Markup.inlineKeyboard([
     [
       Markup.button.callback(t(lang, "btnSearch"), "action_search"),
@@ -122,7 +135,10 @@ async function handleStart(ctx) {
     ],
   ]);
 
-  await ctx.reply(t(lang, "welcome"), {
+  const quickActionsMsg = lang === "ar"
+    ? "\u200F\u2b07\ufe0f *إجراءات سريعة:*"
+    : "\u2b07\ufe0f *Quick Actions:*";
+  await ctx.reply(quickActionsMsg, {
     parse_mode: "Markdown",
     ...inlineButtons,
   });

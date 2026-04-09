@@ -127,6 +127,9 @@ function initTables() {
 
 function upsertUser(chatId, userData) {
   const d = getDb();
+  // IMPORTANT: Do NOT overwrite language if user already exists.
+  // Language should only be set on first insert (from Telegram language_code),
+  // and after that only changed explicitly via setUserLanguage (language picker).
   const stmt = d.prepare(`
     INSERT INTO users (chat_id, username, first_name, last_name, language, updated_at)
     VALUES (?, ?, ?, ?, ?, datetime('now'))
@@ -134,7 +137,6 @@ function upsertUser(chatId, userData) {
       username = excluded.username,
       first_name = excluded.first_name,
       last_name = excluded.last_name,
-      language = excluded.language,
       is_active = 1,
       updated_at = datetime('now')
   `);

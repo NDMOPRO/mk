@@ -735,7 +735,8 @@ function detectLanguage(langCode) {
   if (lc.startsWith("ur")) return "ur";
   if (lc.startsWith("hi")) return "hi";
   if (lc.startsWith("en")) return "en";
-  return "en";
+  // Default to Arabic for a Saudi Arabia platform
+  return "ar";
 }
 
 module.exports = { t, strings, supportedLanguages, detectLanguage };
