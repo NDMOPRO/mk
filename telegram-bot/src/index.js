@@ -1,6 +1,9 @@
 /**
  * Monthly Key Telegram Bot — Main Entry Point
  * Built for Monthly Key (المفتاح الشهري)
+ *
+ * Phase 1: Search, AI Chat, Notifications, Mini App
+ * Phase 2: Booking System, Payment Integration, Property Alerts
  */
 const { Telegraf, session } = require("telegraf");
 const config = require("./config");
@@ -19,6 +22,22 @@ const { registerCallbacks } = require("./handlers/callbacks");
 const { registerInlineHandler } = require("./handlers/inline");
 const { t } = require("./i18n");
 
+// Phase 2 imports
+const { 
+  handleBook, 
+  handleMyBookings, 
+  registerBookingCallbacks, 
+  handleBookingTextInput 
+} = require("./handlers/booking");
+const { registerPaymentHandlers } = require("./handlers/payment");
+const { 
+  handleAlerts, 
+  handleSubscribe, 
+  handleUnsubscribe, 
+  registerAlertCallbacks, 
+  handleAlertTextInput 
+} = require("./handlers/alerts");
+
 // Initialize Bot
 const bot = new Telegraf(config.botToken);
 
@@ -36,7 +55,16 @@ bot.command("search", handleSearch);
 bot.command("language", handleLanguage);
 bot.command("notifications", handleNotifications);
 
-// ─── Text Message Handler (AI Chatbot) ───────────────────────
+// Phase 2: Booking commands
+bot.command("book", handleBook);
+bot.command("mybookings", handleMyBookings);
+
+// Phase 2: Alert commands
+bot.command("alerts", handleAlerts);
+bot.command("subscribe", handleSubscribe);
+bot.command("unsubscribe", handleUnsubscribe);
+
+// ─── Text Message Handler (AI Chatbot + Booking/Alert input) ─
 
 bot.on("text", async (ctx) => {
   // Ignore commands
@@ -45,6 +73,18 @@ bot.on("text", async (ctx) => {
   const chatId = ctx.chat.id;
   const userMessage = ctx.message.text;
   const lang = db.getUserLanguage(chatId) || registerUser(ctx);
+
+  // Phase 2: Check if this is a booking flow input (date entry)
+  if (ctx.session?.booking) {
+    const handled = handleBookingTextInput(ctx);
+    if (handled) return;
+  }
+
+  // Phase 2: Check if this is an alert subscription input (price range)
+  if (ctx.session?.alertSubscription) {
+    const handled = handleAlertTextInput(ctx);
+    if (handled) return;
+  }
 
   // Show typing status
   await ctx.sendChatAction("typing");
@@ -74,14 +114,24 @@ bot.on("text", async (ctx) => {
 registerCallbacks(bot);
 registerInlineHandler(bot);
 
+// Phase 2: Register booking, payment, and alert callbacks
+registerBookingCallbacks(bot);
+registerPaymentHandlers(bot);
+registerAlertCallbacks(bot);
+
 // ─── Set Bot Menu & Commands ─────────────────────────────────
 
 async function setupBot() {
   try {
-    // Set Bot Commands
+    // Set Bot Commands (including Phase 2 commands)
     await bot.telegram.setMyCommands([
       { command: "start", description: "Start the bot | بدء المحادثة" },
       { command: "search", description: "Search properties | البحث عن عقارات" },
+      { command: "book", description: "Book a property | حجز عقار" },
+      { command: "mybookings", description: "My bookings | حجوزاتي" },
+      { command: "alerts", description: "Property alerts | تنبيهات العقارات" },
+      { command: "subscribe", description: "Subscribe to alerts | الاشتراك في التنبيهات" },
+      { command: "unsubscribe", description: "Unsubscribe from alerts | إلغاء الاشتراك" },
       { command: "notifications", description: "Notification settings | إعدادات الإشعارات" },
       { command: "language", description: "Change language | تغيير اللغة" },
       { command: "help", description: "Show help | المساعدة" },
@@ -111,12 +161,13 @@ setupBot();
 bot.launch()
   .then(() => {
     console.log("-------------------------------------------");
-    console.log("🚀 Monthly Key Telegram Bot is RUNNING");
-    console.log(`🤖 Bot Username: @${bot.botInfo?.username || 'Bot'}`);
+    console.log("Monthly Key Telegram Bot is RUNNING");
+    console.log(`Bot Username: @${bot.botInfo?.username || 'Bot'}`);
+    console.log("Phase 2 Features: Booking, Payments, Alerts");
     console.log("-------------------------------------------");
   })
   .catch((err) => {
-    console.error("❌ Failed to launch bot:", err);
+    console.error("Failed to launch bot:", err);
   });
 
 // Enable graceful stop

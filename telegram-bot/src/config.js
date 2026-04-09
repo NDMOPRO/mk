@@ -19,6 +19,10 @@ const config = {
   webappUrl: process.env.WEBAPP_URL || "https://tg.monthlykey.com",
   websiteUrl: process.env.WEBSITE_URL || "https://monthlykey.com",
 
+  // Payment
+  // Provider token from @BotFather for Telegram Payments
+  paymentProviderToken: process.env.PAYMENT_PROVIDER_TOKEN || "",
+
   // Service Areas
   serviceAreas: [
     {
