@@ -88,10 +88,11 @@ bot.command("manage_listings", handleManageListings);
 bot.on("text", async (ctx) => {
   // Ignore commands
   if (ctx.message.text.startsWith("/")) return;
-
   const chatId = ctx.chat.id;
   const userMessage = ctx.message.text;
-  const lang = db.getUserLanguage(chatId) || registerUser(ctx);
+  // Always ensure user exists in DB before any DB writes (prevents FK constraint errors)
+  registerUser(ctx);
+  const lang = db.getUserLanguage(chatId) || "ar";
 
   // Phase 2: Check if this is a booking flow input (date entry)
   if (ctx.session?.booking) {

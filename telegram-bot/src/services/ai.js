@@ -116,8 +116,12 @@ function detectLanguage(text) {
 /**
  * Get AI response for a user message
  */
-async function getAiResponse(chatId, userMessage) {
+async function getAiResponse(chatId, userMessage, ctx = null) {
   try {
+    // Safety: ensure user row exists before any DB writes (prevents FK constraint errors)
+    if (!db.getUser(chatId)) {
+      db.upsertUser(chatId, { language: "ar" });
+    }
     // Get user's preferred language
     let lang = db.getUserLanguage(chatId);
     
