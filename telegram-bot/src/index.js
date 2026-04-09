@@ -90,7 +90,7 @@ async function setupBot() {
     // Set Menu Button to open Mini App
     // The Mini App is served from tg.monthlykey.com by the same Railway backend
     await bot.telegram.setChatMenuButton({
-      menu_button: {
+      menuButton: {
         type: "web_app",
         text: "Monthly Key 🔑",
         web_app: { url: config.webappUrl }
