@@ -1,9 +1,10 @@
 /**
  * Command Handlers for Monthly Key Telegram Bot
+ * Phase 1-3: Updated with multi-language support
  */
 const { Markup } = require("telegraf");
 const config = require("../config");
-const { t } = require("../i18n");
+const { t, supportedLanguages, detectLanguage } = require("../i18n");
 const db = require("../services/database");
 const api = require("../services/api");
 
@@ -13,8 +14,7 @@ const api = require("../services/api");
 function registerUser(ctx) {
   const user = ctx.from;
   const langCode = user.language_code || "ar";
-  // Default to Arabic for Arabic-speaking regions, English otherwise
-  const lang = langCode.startsWith("ar") ? "ar" : "en";
+  const lang = detectLanguage(langCode);
 
   db.upsertUser(ctx.chat.id, {
     username: user.username,
@@ -42,6 +42,64 @@ function getMainKeyboard(lang) {
  */
 async function handleStart(ctx) {
   const lang = registerUser(ctx);
+
+  // Check for deep link parameters
+  const startPayload = ctx.message?.text?.split(" ")[1];
+  if (startPayload) {
+    // Handle deep links from inline sharing
+    if (startPayload.startsWith("property_")) {
+      const propertyId = startPayload.replace("property_", "");
+      // Show property details
+      try {
+        const property = await api.getPropertyById(propertyId);
+        if (property) {
+          const formatted = api.formatProperty(property, lang);
+          if (formatted) {
+            const buttons = Markup.inlineKeyboard([
+              [
+                Markup.button.url(
+                  t(lang, "viewOnWebsite"),
+                  `${config.websiteUrl}/property/${property.id}`
+                ),
+              ],
+              [
+                Markup.button.callback(
+                  lang === "ar" ? "📋 حجز هذا العقار" : "📋 Book This Property",
+                  `booking_property_${property.id}`
+                ),
+              ],
+            ]);
+
+            if (formatted.photo) {
+              try {
+                await ctx.replyWithPhoto(formatted.photo, {
+                  caption: formatted.text,
+                  parse_mode: "Markdown",
+                  ...buttons,
+                });
+                return;
+              } catch (e) {}
+            }
+
+            await ctx.reply(formatted.text, {
+              parse_mode: "Markdown",
+              ...buttons,
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("[Start DeepLink] Error:", e.message);
+      }
+    }
+
+    // Handle book deep link
+    if (startPayload.startsWith("book_")) {
+      const propertyId = startPayload.replace("book_", "");
+      ctx.message.text = `/book ${propertyId}`;
+      // The booking handler will pick this up
+    }
+  }
 
   const inlineButtons = Markup.inlineKeyboard([
     [
@@ -119,13 +177,14 @@ async function handleSearch(ctx) {
 }
 
 /**
- * /language command handler
+ * /language command handler — Phase 3: Now supports 5 languages
  */
 async function handleLanguage(ctx) {
-  const buttons = Markup.inlineKeyboard([
-    [Markup.button.callback("🇸🇦 العربية", "lang_ar")],
-    [Markup.button.callback("🇬🇧 English", "lang_en")],
+  const langButtons = supportedLanguages.map((lang) => [
+    Markup.button.callback(`${lang.flag} ${lang.name}`, `lang_${lang.code}`),
   ]);
+
+  const buttons = Markup.inlineKeyboard(langButtons);
 
   await ctx.reply(t("en", "chooseLanguage"), {
     ...buttons,
@@ -236,6 +295,12 @@ async function performSearch(ctx, query, lang) {
             `${config.websiteUrl}/property/${property.id}`
           ),
         ],
+        [
+          Markup.button.callback(
+            lang === "ar" ? "📋 حجز هذا العقار" : "📋 Book This Property",
+            `booking_property_${property.id}`
+          ),
+        ],
       ]);
 
       if (formatted.photo) {
@@ -310,11 +375,11 @@ function matchCity(query) {
     }
   }
 
-  // Fuzzy match for common variations
+  // Fuzzy match for common variations (including French, Urdu, Hindi)
   const aliases = {
-    riyadh: ["riyad", "riad", "ryad", "الرياض"],
-    jeddah: ["jeddah", "jedda", "jidda", "jida", "جدة", "جده"],
-    madinah: ["madinah", "medina", "madina", "المدينة", "المدينه"],
+    riyadh: ["riyad", "riad", "ryad", "الرياض", "riyad", "ریاض", "रियाद"],
+    jeddah: ["jeddah", "jedda", "jidda", "jida", "جدة", "جده", "djeddah", "جدہ", "जेद्दा"],
+    madinah: ["madinah", "medina", "madina", "المدينة", "المدينه", "medine", "مدینہ", "मदीना"],
   };
 
   for (const [cityId, names] of Object.entries(aliases)) {

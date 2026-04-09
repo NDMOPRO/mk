@@ -4,39 +4,51 @@
  *
  * Phase 1: Search, AI Chat, Notifications, Mini App
  * Phase 2: Booking System, Payment Integration, Property Alerts
+ * Phase 3: Admin Dashboard, Channel Auto-Posting, Multi-language, Enhanced Inline
  */
 const { Telegraf, session } = require("telegraf");
 const config = require("./config");
 const db = require("./services/database");
 const ai = require("./services/ai");
-const { 
-  handleStart, 
-  handleHelp, 
-  handleSearch, 
-  handleLanguage, 
+const {
+  handleStart,
+  handleHelp,
+  handleSearch,
+  handleLanguage,
   handleNotifications,
   registerUser,
-  getMainKeyboard
+  getMainKeyboard,
 } = require("./handlers/commands");
 const { registerCallbacks } = require("./handlers/callbacks");
 const { registerInlineHandler } = require("./handlers/inline");
 const { t } = require("./i18n");
 
 // Phase 2 imports
-const { 
-  handleBook, 
-  handleMyBookings, 
-  registerBookingCallbacks, 
-  handleBookingTextInput 
+const {
+  handleBook,
+  handleMyBookings,
+  registerBookingCallbacks,
+  handleBookingTextInput,
 } = require("./handlers/booking");
 const { registerPaymentHandlers } = require("./handlers/payment");
-const { 
-  handleAlerts, 
-  handleSubscribe, 
-  handleUnsubscribe, 
-  registerAlertCallbacks, 
-  handleAlertTextInput 
+const {
+  handleAlerts,
+  handleSubscribe,
+  handleUnsubscribe,
+  registerAlertCallbacks,
+  handleAlertTextInput,
 } = require("./handlers/alerts");
+
+// Phase 3 imports
+const {
+  handleAdmin,
+  handleStats,
+  handleBroadcast,
+  handleManageBookings,
+  handleManageListings,
+  registerAdminCallbacks,
+} = require("./handlers/admin");
+const { initChannelPosting, stopChannelPosting } = require("./services/channel");
 
 // Initialize Bot
 const bot = new Telegraf(config.botToken);
@@ -64,6 +76,13 @@ bot.command("alerts", handleAlerts);
 bot.command("subscribe", handleSubscribe);
 bot.command("unsubscribe", handleUnsubscribe);
 
+// Phase 3: Admin commands
+bot.command("admin", handleAdmin);
+bot.command("stats", handleStats);
+bot.command("broadcast", handleBroadcast);
+bot.command("manage_bookings", handleManageBookings);
+bot.command("manage_listings", handleManageListings);
+
 // ─── Text Message Handler (AI Chatbot + Booking/Alert input) ─
 
 bot.on("text", async (ctx) => {
@@ -90,18 +109,11 @@ bot.on("text", async (ctx) => {
   await ctx.sendChatAction("typing");
 
   try {
-    // Check if it's a direct search request (e.g. "search for apartments in Riyadh")
-    const searchKeywords = ["search", "find", "بحث", "دور", "عقار", "شقة", "فيلا"];
-    const isSearchRequest = searchKeywords.some(k => userMessage.toLowerCase().includes(k));
-    
-    // If it looks like a search, but not too long, maybe offer search
-    // Otherwise, let AI handle it as a general query
-    
     const aiResponse = await ai.getAiResponse(chatId, userMessage);
-    
+
     await ctx.reply(aiResponse, {
       parse_mode: "Markdown",
-      ...getMainKeyboard(lang)
+      ...getMainKeyboard(lang),
     });
   } catch (error) {
     console.error("[Bot] Error in text handler:", error);
@@ -119,11 +131,14 @@ registerBookingCallbacks(bot);
 registerPaymentHandlers(bot);
 registerAlertCallbacks(bot);
 
+// Phase 3: Register admin callbacks
+registerAdminCallbacks(bot);
+
 // ─── Set Bot Menu & Commands ─────────────────────────────────
 
 async function setupBot() {
   try {
-    // Set Bot Commands (including Phase 2 commands)
+    // Set Bot Commands (Phase 1-3, public commands only)
     await bot.telegram.setMyCommands([
       { command: "start", description: "Start the bot | بدء المحادثة" },
       { command: "search", description: "Search properties | البحث عن عقارات" },
@@ -138,17 +153,26 @@ async function setupBot() {
     ]);
 
     // Set Menu Button to open Mini App
-    // The Mini App is served from tg.monthlykey.com by the same Railway backend
     await bot.telegram.setChatMenuButton({
       menuButton: {
         type: "web_app",
         text: "Monthly Key 🔑",
-        web_app: { url: config.webappUrl }
-      }
+        web_app: { url: config.webappUrl },
+      },
     });
 
     console.log("[Bot] Commands and Menu Button configured");
     console.log(`[Bot] Mini App URL: ${config.webappUrl}`);
+
+    // Phase 3: Log admin config
+    if (config.adminIds.length > 0) {
+      console.log(`[Bot] Admin IDs: ${config.adminIds.join(", ")}`);
+    } else {
+      console.log("[Bot] No admin IDs configured. Admin commands disabled.");
+    }
+
+    // Phase 3: Initialize channel auto-posting
+    initChannelPosting(bot);
   } catch (error) {
     console.error("[Bot] Error setting up commands/menu:", error.message);
   }
@@ -158,12 +182,16 @@ async function setupBot() {
 
 setupBot();
 
-bot.launch()
+bot
+  .launch()
   .then(() => {
     console.log("-------------------------------------------");
     console.log("Monthly Key Telegram Bot is RUNNING");
-    console.log(`Bot Username: @${bot.botInfo?.username || 'Bot'}`);
-    console.log("Phase 2 Features: Booking, Payments, Alerts");
+    console.log(`Bot Username: @${bot.botInfo?.username || "Bot"}`);
+    console.log("Phase 1: Search, AI Chat, Notifications");
+    console.log("Phase 2: Booking, Payments, Alerts");
+    console.log("Phase 3: Admin, Channel, Multi-lang, Inline");
+    console.log("Languages: AR, EN, FR, UR, HI");
     console.log("-------------------------------------------");
   })
   .catch((err) => {
@@ -171,5 +199,11 @@ bot.launch()
   });
 
 // Enable graceful stop
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+process.once("SIGINT", () => {
+  stopChannelPosting();
+  bot.stop("SIGINT");
+});
+process.once("SIGTERM", () => {
+  stopChannelPosting();
+  bot.stop("SIGTERM");
+});

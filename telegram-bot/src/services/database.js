@@ -97,6 +97,14 @@ function initTables() {
     )
   `);
 
+  // ─── Phase 3: Channel posted properties tracking ────────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS channel_posted_properties (
+      property_id TEXT PRIMARY KEY,
+      posted_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   // ─── Phase 2: Property Alerts / Subscriptions table ──────────
   d.exec(`
     CREATE TABLE IF NOT EXISTS alert_subscriptions (
@@ -398,6 +406,24 @@ function getMatchingAlerts(property) {
   });
 }
 
+// ─── Channel Posted Properties (Phase 3) ─────────────────────
+
+function getPostedPropertyIds() {
+  const d = getDb();
+  return d.prepare("SELECT property_id FROM channel_posted_properties").all().map(r => r.property_id);
+}
+
+function markPropertyAsPosted(propertyId) {
+  const d = getDb();
+  d.prepare("INSERT OR IGNORE INTO channel_posted_properties (property_id) VALUES (?)").run(String(propertyId));
+}
+
+function isPropertyPosted(propertyId) {
+  const d = getDb();
+  const row = d.prepare("SELECT 1 FROM channel_posted_properties WHERE property_id = ?").get(String(propertyId));
+  return !!row;
+}
+
 module.exports = {
   getDb,
   upsertUser,
@@ -429,4 +455,8 @@ module.exports = {
   deactivateAlert,
   deactivateAllUserAlerts,
   getMatchingAlerts,
+  // Phase 3: Channel posting
+  getPostedPropertyIds,
+  markPropertyAsPosted,
+  isPropertyPosted,
 };

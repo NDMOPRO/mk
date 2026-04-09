@@ -1,5 +1,6 @@
 /**
  * Configuration for Monthly Key Telegram Bot
+ * Phase 1-3
  */
 require("dotenv").config();
 
@@ -22,6 +23,19 @@ const config = {
   // Payment
   // Provider token from @BotFather for Telegram Payments
   paymentProviderToken: process.env.PAYMENT_PROVIDER_TOKEN || "",
+
+  // Phase 3: Admin
+  // Comma-separated list of Telegram user IDs that have admin access
+  adminIds: (process.env.ADMIN_IDS || "")
+    .split(",")
+    .map((id) => parseInt(id.trim(), 10))
+    .filter((id) => !isNaN(id)),
+
+  // Phase 3: Channel Auto-Posting
+  // Channel ID or @username to post new listings to
+  channelId: process.env.CHANNEL_ID || "",
+  // How often to check for new listings (in milliseconds), default 5 minutes
+  channelCheckInterval: parseInt(process.env.CHANNEL_CHECK_INTERVAL, 10) || 300000,
 
   // Service Areas
   serviceAreas: [

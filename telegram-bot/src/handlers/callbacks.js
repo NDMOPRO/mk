@@ -1,10 +1,10 @@
 /**
  * Callback Query Handlers for Monthly Key Telegram Bot
- * Handles inline button presses
+ * Phase 1-3: Updated with multi-language support (5 languages)
  */
 const { Markup } = require("telegraf");
 const config = require("../config");
-const { t } = require("../i18n");
+const { t, supportedLanguages } = require("../i18n");
 const db = require("../services/database");
 const api = require("../services/api");
 const { performSearch, handleNotifications } = require("./commands");
@@ -72,6 +72,12 @@ function registerCallbacks(bot) {
               `${config.websiteUrl}/property/${property.id}`
             ),
           ],
+          [
+            Markup.button.callback(
+              lang === "ar" ? "📋 حجز هذا العقار" : "📋 Book This Property",
+              `booking_property_${property.id}`
+            ),
+          ],
         ]);
 
         if (formatted.photo) {
@@ -119,7 +125,6 @@ function registerCallbacks(bot) {
 
   bot.action("action_notifications", async (ctx) => {
     await ctx.answerCbQuery();
-    // Reuse the notifications handler
     const lang = db.getUserLanguage(ctx.chat.id) || "ar";
     const user = db.getUser(ctx.chat.id);
 
@@ -172,20 +177,18 @@ function registerCallbacks(bot) {
   bot.action("search_city_jeddah", async (ctx) => {
     await ctx.answerCbQuery();
     const lang = db.getUserLanguage(ctx.chat.id) || "ar";
-    await ctx.reply(
-      lang === "ar"
-        ? "🏙️ جدة قادمة قريباً! حالياً نخدم الرياض فقط."
-        : "🏙️ Jeddah is coming soon! Currently we serve Riyadh only."
+    await ctx.reply(t(lang, "comingSoon") === "Coming Soon"
+      ? "🏙️ Jeddah is coming soon! Currently we serve Riyadh only."
+      : `🏙️ ${t(lang, "comingSoon")}! جدة — Jeddah`
     );
   });
 
   bot.action("search_city_madinah", async (ctx) => {
     await ctx.answerCbQuery();
     const lang = db.getUserLanguage(ctx.chat.id) || "ar";
-    await ctx.reply(
-      lang === "ar"
-        ? "🏙️ المدينة المنورة قادمة قريباً! حالياً نخدم الرياض فقط."
-        : "🏙️ Madinah is coming soon! Currently we serve Riyadh only."
+    await ctx.reply(t(lang, "comingSoon") === "Coming Soon"
+      ? "🏙️ Madinah is coming soon! Currently we serve Riyadh only."
+      : `🏙️ ${t(lang, "comingSoon")}! المدينة المنورة — Madinah`
     );
   });
 
@@ -200,52 +203,33 @@ function registerCallbacks(bot) {
     );
   });
 
-  // ─── Language Callbacks ────────────────────────────────────
+  // ─── Language Callbacks (Phase 3: 5 languages) ────────────
 
-  bot.action("lang_ar", async (ctx) => {
-    await ctx.answerCbQuery();
-    db.setUserLanguage(ctx.chat.id, "ar");
-    await ctx.reply(t("ar", "languageChanged"));
+  // Generic language handler for all supported languages
+  for (const langDef of supportedLanguages) {
+    bot.action(`lang_${langDef.code}`, async (ctx) => {
+      await ctx.answerCbQuery();
+      db.setUserLanguage(ctx.chat.id, langDef.code);
+      await ctx.reply(t(langDef.code, "languageChanged"));
 
-    // Show welcome again with new language
-    const buttons = Markup.inlineKeyboard([
-      [
-        Markup.button.callback(t("ar", "btnSearch"), "action_search"),
-        Markup.button.callback(t("ar", "btnFeatured"), "action_featured"),
-      ],
-      [
-        Markup.button.webApp(t("ar", "btnOpenApp"), config.webappUrl),
-        Markup.button.url(t("ar", "btnWebsite"), config.websiteUrl),
-      ],
-    ]);
+      // Show welcome again with new language
+      const buttons = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(t(langDef.code, "btnSearch"), "action_search"),
+          Markup.button.callback(t(langDef.code, "btnFeatured"), "action_featured"),
+        ],
+        [
+          Markup.button.webApp(t(langDef.code, "btnOpenApp"), config.webappUrl),
+          Markup.button.url(t(langDef.code, "btnWebsite"), config.websiteUrl),
+        ],
+      ]);
 
-    await ctx.reply(t("ar", "welcome"), {
-      parse_mode: "Markdown",
-      ...buttons,
+      await ctx.reply(t(langDef.code, "welcome"), {
+        parse_mode: "Markdown",
+        ...buttons,
+      });
     });
-  });
-
-  bot.action("lang_en", async (ctx) => {
-    await ctx.answerCbQuery();
-    db.setUserLanguage(ctx.chat.id, "en");
-    await ctx.reply(t("en", "languageChanged"));
-
-    const buttons = Markup.inlineKeyboard([
-      [
-        Markup.button.callback(t("en", "btnSearch"), "action_search"),
-        Markup.button.callback(t("en", "btnFeatured"), "action_featured"),
-      ],
-      [
-        Markup.button.webApp(t("en", "btnOpenApp"), config.webappUrl),
-        Markup.button.url(t("en", "btnWebsite"), config.websiteUrl),
-      ],
-    ]);
-
-    await ctx.reply(t("en", "welcome"), {
-      parse_mode: "Markdown",
-      ...buttons,
-    });
-  });
+  }
 
   // ─── Notification Toggle Callbacks ─────────────────────────
 
