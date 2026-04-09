@@ -1,54 +1,59 @@
 /**
  * Internationalization (i18n) for Monthly Key Telegram Bot
- * Supports: Arabic, English, French, Urdu, Hindi
+ * Supports: Arabic (RTL), English, French, Urdu (RTL), Hindi
+ *
+ * RTL note: Arabic and Urdu strings that contain mixed content (numbers,
+ * symbols, punctuation) are prefixed with the Unicode Right-to-Left Mark
+ * (RLM, \u200F) to ensure correct RTL rendering in Telegram.
  */
 
+// Unicode direction marks
+const RLM = "\u200F"; // Right-to-Left Mark
+const LRM = "\u200E"; // Left-to-Right Mark
+
 const strings = {
+  // ─── Arabic (العربية) ─────────────────────────────────────
   ar: {
-    welcome: `🔑 *مرحباً بك في المفتاح الشهري!*
+    welcome: `${RLM}🔑 *مرحباً بك في المفتاح الشهري!*
 
-منصة الإيجار الشهري الموثوقة في المملكة العربية السعودية.
+${RLM}منصة الإيجار الشهري الموثوقة في المملكة العربية السعودية.
 
-ابحث عن شقتك المثالية في الرياض وغيرها من المدن السعودية. عقارات مفروشة وغير مفروشة بأسعار شفافة.
+${RLM}ابحث عن شقتك المثالية في الرياض وغيرها من المدن السعودية. عقارات مفروشة وغير مفروشة بأسعار شفافة.
 
-🏠 استخدم الأزرار أدناه للبدء:`,
+${RLM}🏠 استخدم الأزرار أدناه للبدء:`,
 
-    help: `📖 *دليل استخدام البوت*
+    help: `${RLM}📖 *دليل استخدام البوت*
 
-*الأوامر المتاحة:*
-/start — بدء المحادثة
-/search — البحث عن عقارات
-/book — حجز عقار
-/mybookings — حجوزاتي
-/alerts — إدارة تنبيهات العقارات
-/subscribe — الاشتراك في تنبيهات
-/unsubscribe — إلغاء الاشتراك من التنبيهات
-/language — تغيير اللغة
-/notifications — إعدادات الإشعارات
-/help — عرض هذا الدليل
+${RLM}*الأوامر المتاحة:*
+${RLM}/start — بدء المحادثة
+${RLM}/search — البحث عن عقارات
+${RLM}/language — تغيير اللغة
+${RLM}/notifications — إعدادات الإشعارات
+${RLM}/help — عرض هذا الدليل
 
-*البحث المباشر:*
-اكتب @monthlykey\\_bot في أي محادثة متبوعاً باسم المدينة أو كلمة بحث لمشاركة العقارات مباشرة.
+${RLM}*البحث المباشر:*
+${RLM}اكتب @monthlykey\\_bot في أي محادثة متبوعاً باسم المدينة أو كلمة بحث لمشاركة العقارات مباشرة.
 
-*الدردشة الذكية:*
-أرسل أي سؤال وسأساعدك! يمكنني الإجابة عن:
-• العقارات المتاحة والأسعار
-• المدن والأحياء المخدومة
-• كيفية عمل المنصة
-• الحجز والدفع
-• أي استفسار آخر
+${RLM}*الدردشة الذكية:*
+${RLM}أرسل أي سؤال وسأساعدك! يمكنني الإجابة عن:
+${RLM}• العقارات المتاحة والأسعار
+${RLM}• المدن والأحياء المخدومة
+${RLM}• كيفية عمل المنصة
+${RLM}• الحجز والدفع
+${RLM}• أي استفسار آخر
 
-🌐 زر موقعنا: monthlykey.com`,
+${RLM}🌐 زر موقعنا: monthlykey.com`,
 
-    searchPrompt: "🔍 *البحث عن عقارات*\n\nاختر المدينة أو اكتب كلمة البحث:",
-    searchResults: "🏠 *نتائج البحث:*",
-    noResults: "لم يتم العثور على عقارات مطابقة. جرب تعديل معايير البحث.",
-    searching: "🔍 جاري البحث...",
-    error: "عذراً، حدث خطأ. يرجى المحاولة مرة أخرى.",
-    languageChanged: "✅ تم تغيير اللغة إلى العربية",
-    chooseLanguage: "🌐 اختر اللغة / Choose Language:",
+    searchPrompt: `${RLM}🔍 *البحث عن عقارات*\n\n${RLM}اختر المدينة أو اكتب كلمة البحث:`,
+    searchResults: `${RLM}🏠 *نتائج البحث:*`,
+    noResults: `${RLM}لم يتم العثور على عقارات مطابقة. جرب تعديل معايير البحث.`,
+    searching: `${RLM}🔍 جاري البحث...`,
+    error: `${RLM}عذراً، حدث خطأ. يرجى المحاولة مرة أخرى.`,
+    languageChanged: `${RLM}✅ تم تغيير اللغة إلى العربية`,
+    chooseLanguage: `${RLM}🌐 اختر اللغة / Choose Language:`,
 
-    // Buttons
+    // Reply keyboard buttons — these are plain text, no RLM needed
+    // (Telegram renders button labels in their own bubble, no mixed-direction issue)
     btnSearch: "🔍 البحث عن عقار",
     btnFeatured: "⭐ العقارات المميزة",
     btnOpenApp: "📱 فتح التطبيق",
@@ -63,16 +68,16 @@ const strings = {
     btnBack: "◀️ رجوع",
 
     // Notifications
-    notifSettings: `🔔 *إعدادات الإشعارات*\n\nاختر نوع الإشعارات التي تريد تلقيها:`,
+    notifSettings: `${RLM}🔔 *إعدادات الإشعارات*\n\n${RLM}اختر نوع الإشعارات التي تريد تلقيها:`,
     notifNewProperties: "🏠 عقارات جديدة",
     notifPriceDrops: "📉 تخفيضات الأسعار",
     notifBookings: "📋 تحديثات الحجز",
     notifEnabled: "✅ مفعّل",
     notifDisabled: "❌ معطّل",
-    notifUpdated: "✅ تم تحديث إعدادات الإشعارات",
+    notifUpdated: `${RLM}✅ تم تحديث إعدادات الإشعارات`,
 
     // Property
-    perMonth: "ر.س / شهرياً",
+    perMonth: `${LRM}ر.س${LRM} / شهرياً`,
     bedrooms: "غرف نوم",
     bathrooms: "حمامات",
     sqm: "م²",
@@ -84,16 +89,16 @@ const strings = {
     comingSoon: "قريباً",
     activeNow: "متاح الآن",
 
-    // ─── Phase 2: Booking ──────────────────────────────────────
-    bookingStart: "📋 *حجز عقار*\n\nاختر المدينة للبحث عن عقار للحجز:",
-    bookingSelectProperty: "🏠 *اختر العقار للحجز:*",
-    bookingPropertySelected: "✅ تم اختيار العقار",
-    bookingEnterCheckIn: "📅 *تاريخ الدخول*\n\nأدخل تاريخ الدخول بالصيغة: YYYY-MM-DD\n(مثال: 2026-05-01)",
-    bookingEnterCheckOut: "📅 *تاريخ الخروج*\n\nأدخل تاريخ الخروج بالصيغة: YYYY-MM-DD\n(مثال: 2026-06-01)",
-    bookingInvalidDate: "❌ تاريخ غير صالح. يرجى إدخال التاريخ بالصيغة: YYYY-MM-DD",
-    bookingCheckOutBeforeCheckIn: "❌ تاريخ الخروج يجب أن يكون بعد تاريخ الدخول.",
-    bookingPastDate: "❌ لا يمكن اختيار تاريخ في الماضي.",
-    bookingConfirmTitle: "📋 *تأكيد الحجز*",
+    // Booking
+    bookingStart: `${RLM}📋 *حجز عقار*\n\n${RLM}اختر المدينة للبحث عن عقار للحجز:`,
+    bookingSelectProperty: `${RLM}🏠 *اختر العقار للحجز:*`,
+    bookingPropertySelected: `${RLM}✅ تم اختيار العقار`,
+    bookingEnterCheckIn: `${RLM}📅 *تاريخ الدخول*\n\n${RLM}أدخل تاريخ الدخول بالصيغة: ${LRM}YYYY-MM-DD${LRM}\n${RLM}(مثال: ${LRM}2026-05-01${LRM})`,
+    bookingEnterCheckOut: `${RLM}📅 *تاريخ الخروج*\n\n${RLM}أدخل تاريخ الخروج بالصيغة: ${LRM}YYYY-MM-DD${LRM}\n${RLM}(مثال: ${LRM}2026-06-01${LRM})`,
+    bookingInvalidDate: `${RLM}❌ تاريخ غير صالح. يرجى إدخال التاريخ بالصيغة: ${LRM}YYYY-MM-DD`,
+    bookingCheckOutBeforeCheckIn: `${RLM}❌ تاريخ الخروج يجب أن يكون بعد تاريخ الدخول.`,
+    bookingPastDate: `${RLM}❌ لا يمكن اختيار تاريخ في الماضي.`,
+    bookingConfirmTitle: `${RLM}📋 *تأكيد الحجز*`,
     bookingProperty: "🏠 العقار",
     bookingCity: "📍 المدينة",
     bookingCheckIn: "📅 تاريخ الدخول",
@@ -109,13 +114,13 @@ const strings = {
     bookingCancelBtn: "❌ إلغاء",
     bookingPayBtn: "💳 الدفع الآن",
     bookingPayLaterBtn: "⏰ الدفع لاحقاً",
-    bookingConfirmed: "✅ *تم تقديم طلب الحجز بنجاح!*\n\nرقم الحجز: #",
-    bookingCancelled: "❌ تم إلغاء الحجز.",
-    bookingPaymentPrompt: "💳 *الدفع*\n\nاختر طريقة الدفع:",
-    bookingPaid: "✅ *تم الدفع بنجاح!*\n\nشكراً لك. تم تأكيد حجزك.",
-    bookingNotFound: "لم يتم العثور على الحجز.",
-    myBookingsTitle: "📋 *حجوزاتي*",
-    myBookingsEmpty: "ليس لديك حجوزات حالياً.\n\nاستخدم /book لحجز عقار.",
+    bookingConfirmed: `${RLM}✅ *تم تقديم طلب الحجز بنجاح!*\n\n${RLM}رقم الحجز: #`,
+    bookingCancelled: `${RLM}❌ تم إلغاء الحجز.`,
+    bookingPaymentPrompt: `${RLM}💳 *الدفع*\n\n${RLM}اختر طريقة الدفع:`,
+    bookingPaid: `${RLM}✅ *تم الدفع بنجاح!*\n\n${RLM}شكراً لك. تم تأكيد حجزك.`,
+    bookingNotFound: `${RLM}لم يتم العثور على الحجز.`,
+    myBookingsTitle: `${RLM}📋 *حجوزاتي*`,
+    myBookingsEmpty: `${RLM}ليس لديك حجوزات حالياً.\n\n${RLM}استخدم /book لحجز عقار.`,
     bookingStatusPending: "⏳ قيد المراجعة",
     bookingStatusConfirmed: "✅ مؤكد",
     bookingStatusCancelled: "❌ ملغي",
@@ -123,20 +128,20 @@ const strings = {
     bookingStatusCompleted: "✔️ مكتمل",
     bookingPaymentPaid: "✅ مدفوع",
     bookingPaymentUnpaid: "⏳ غير مدفوع",
-    bookingNoProperties: "لم يتم العثور على عقارات. جرب البحث في مدينة أخرى.",
+    bookingNoProperties: `${RLM}لم يتم العثور على عقارات. جرب البحث في مدينة أخرى.`,
     sar: "ر.س",
 
-    // ─── Phase 2: Payment ──────────────────────────────────────
+    // Payment
     paymentTitle: "حجز المفتاح الشهري",
     paymentDescription: "دفع حجز عقار عبر المفتاح الشهري",
-    paymentSuccess: "✅ *تم الدفع بنجاح!*\n\nشكراً لك! تم تأكيد حجزك رقم #",
-    paymentFailed: "❌ فشل الدفع. يرجى المحاولة مرة أخرى.",
-    paymentInvoiceSent: "💳 تم إرسال فاتورة الدفع. اضغط على زر الدفع أدناه.",
+    paymentSuccess: `${RLM}✅ *تم الدفع بنجاح!*\n\n${RLM}شكراً لك! تم تأكيد حجزك رقم #`,
+    paymentFailed: `${RLM}❌ فشل الدفع. يرجى المحاولة مرة أخرى.`,
+    paymentInvoiceSent: `${RLM}💳 تم إرسال فاتورة الدفع. اضغط على زر الدفع أدناه.`,
 
-    // ─── Phase 2: Alerts ───────────────────────────────────────
-    alertsTitle: "🔔 *تنبيهات العقارات*",
-    alertsEmpty: "ليس لديك تنبيهات نشطة.\n\nاستخدم /subscribe للاشتراك في تنبيهات.",
-    alertsListHeader: "🔔 *تنبيهاتك النشطة:*\n",
+    // Alerts
+    alertsTitle: `${RLM}🔔 *تنبيهات العقارات*`,
+    alertsEmpty: `${RLM}ليس لديك تنبيهات نشطة.\n\n${RLM}استخدم /subscribe للاشتراك في تنبيهات.`,
+    alertsListHeader: `${RLM}🔔 *تنبيهاتك النشطة:*\n`,
     alertCity: "📍 المدينة",
     alertPriceRange: "💰 نطاق السعر",
     alertPropertyType: "🏷️ نوع العقار",
@@ -144,20 +149,21 @@ const strings = {
     alertAny: "الكل",
     alertDeleteBtn: "🗑️ حذف",
     alertDeleteAllBtn: "🗑️ حذف الكل",
-    alertDeleted: "✅ تم حذف التنبيه.",
-    alertAllDeleted: "✅ تم حذف جميع التنبيهات.",
-    subscribeStart: "🔔 *اشتراك في تنبيهات العقارات*\n\nاختر المدينة:",
+    alertDeleted: `${RLM}✅ تم حذف التنبيه.`,
+    alertAllDeleted: `${RLM}✅ تم حذف جميع التنبيهات.`,
+    subscribeStart: `${RLM}🔔 *اشتراك في تنبيهات العقارات*\n\n${RLM}اختر المدينة:`,
     subscribeAllCities: "🌍 جميع المدن",
-    subscribePricePrompt: "💰 *نطاق السعر*\n\nأدخل الحد الأدنى والأقصى للسعر الشهري (بالريال):\n\nالصيغة: min-max\n(مثال: 3000-8000)\n\nأو اكتب 'skip' للتخطي",
-    subscribeTypePrompt: "🏷️ *نوع العقار*\n\nاختر نوع العقار:",
+    subscribePricePrompt: `${RLM}💰 *نطاق السعر*\n\n${RLM}أدخل الحد الأدنى والأقصى للسعر الشهري (بالريال):\n\n${RLM}الصيغة: ${LRM}min-max${LRM}\n${RLM}(مثال: ${LRM}3000-8000${LRM})\n\n${RLM}أو اكتب 'skip' للتخطي`,
+    subscribeTypePrompt: `${RLM}🏷️ *نوع العقار*\n\n${RLM}اختر نوع العقار:`,
     subscribeAllTypes: "🏠 جميع الأنواع",
-    subscribeSuccess: "✅ *تم الاشتراك بنجاح!*\n\nسيتم إشعارك عند توفر عقارات مطابقة.",
-    subscribeInvalidPrice: "❌ صيغة غير صالحة. أدخل بالصيغة: min-max (مثال: 3000-8000)",
-    unsubscribePrompt: "🔕 *إلغاء الاشتراك*\n\nاختر التنبيه لإلغائه أو احذف الكل:",
-    unsubscribeSuccess: "✅ تم إلغاء الاشتراك بنجاح.",
-    alertNotification: "🔔 *تنبيه عقار جديد!*\n\nعقار جديد يطابق تنبيهاتك:",
+    subscribeSuccess: `${RLM}✅ *تم الاشتراك بنجاح!*\n\n${RLM}سيتم إشعارك عند توفر عقارات مطابقة.`,
+    subscribeInvalidPrice: `${RLM}❌ صيغة غير صالحة. أدخل بالصيغة: ${LRM}min-max${LRM} (مثال: ${LRM}3000-8000${LRM})`,
+    unsubscribePrompt: `${RLM}🔕 *إلغاء الاشتراك*\n\n${RLM}اختر التنبيه لإلغائه أو احذف الكل:`,
+    unsubscribeSuccess: `${RLM}✅ تم إلغاء الاشتراك بنجاح.`,
+    alertNotification: `${RLM}🔔 *تنبيه عقار جديد!*\n\n${RLM}عقار جديد يطابق تنبيهاتك:`,
   },
 
+  // ─── English ───────────────────────────────────────────────
   en: {
     welcome: `🔑 *Welcome to Monthly Key!*
 
@@ -172,11 +178,6 @@ Find your perfect apartment in Riyadh and other Saudi cities. Furnished and unfu
 *Available Commands:*
 /start — Start the conversation
 /search — Search for properties
-/book — Book a property
-/mybookings — My bookings
-/alerts — Manage property alerts
-/subscribe — Subscribe to alerts
-/unsubscribe — Unsubscribe from alerts
 /language — Change language
 /notifications — Notification settings
 /help — Show this guide
@@ -202,7 +203,6 @@ Send any question and I'll help! I can answer about:
     languageChanged: "✅ Language changed to English",
     chooseLanguage: "🌐 اختر اللغة / Choose Language:",
 
-    // Buttons
     btnSearch: "🔍 Search Properties",
     btnFeatured: "⭐ Featured Properties",
     btnOpenApp: "📱 Open App",
@@ -216,8 +216,7 @@ Send any question and I'll help! I can answer about:
     btnAllCities: "🗺️ All Cities",
     btnBack: "◀️ Back",
 
-    // Notifications
-    notifSettings: `🔔 *Notification Settings*\n\nChoose which notifications you'd like to receive:`,
+    notifSettings: "🔔 *Notification Settings*\n\nChoose which notifications you'd like to receive:",
     notifNewProperties: "🏠 New Properties",
     notifPriceDrops: "📉 Price Drops",
     notifBookings: "📋 Booking Updates",
@@ -225,7 +224,6 @@ Send any question and I'll help! I can answer about:
     notifDisabled: "❌ Disabled",
     notifUpdated: "✅ Notification settings updated",
 
-    // Property
     perMonth: "SAR / month",
     bedrooms: "Bedrooms",
     bathrooms: "Bathrooms",
@@ -234,11 +232,9 @@ Send any question and I'll help! I can answer about:
     viewOnWebsite: "🌐 View on Website",
     shareProperty: "📤 Share",
 
-    // Cities
     comingSoon: "Coming Soon",
     activeNow: "Available Now",
 
-    // ─── Phase 2: Booking ──────────────────────────────────────
     bookingStart: "📋 *Book a Property*\n\nChoose a city to search for properties:",
     bookingSelectProperty: "🏠 *Select a property to book:*",
     bookingPropertySelected: "✅ Property selected",
@@ -280,14 +276,12 @@ Send any question and I'll help! I can answer about:
     bookingNoProperties: "No properties found. Try searching in another city.",
     sar: "SAR",
 
-    // ─── Phase 2: Payment ──────────────────────────────────────
     paymentTitle: "Monthly Key Booking",
     paymentDescription: "Property booking payment via Monthly Key",
     paymentSuccess: "✅ *Payment successful!*\n\nThank you! Your booking #",
     paymentFailed: "❌ Payment failed. Please try again.",
     paymentInvoiceSent: "💳 Payment invoice sent. Tap the Pay button below.",
 
-    // ─── Phase 2: Alerts ───────────────────────────────────────
     alertsTitle: "🔔 *Property Alerts*",
     alertsEmpty: "You have no active alerts.\n\nUse /subscribe to set up alerts.",
     alertsListHeader: "🔔 *Your Active Alerts:*\n",
@@ -312,44 +306,36 @@ Send any question and I'll help! I can answer about:
     alertNotification: "🔔 *New Property Alert!*\n\nA new property matches your alerts:",
   },
 
-  // ─── French (Francais) ─────────────────────────────────────
+  // ─── French (Français) ────────────────────────────────────
   fr: {
     welcome: `🔑 *Bienvenue sur Monthly Key !*
 
 La plateforme de location mensuelle de confiance en Arabie Saoudite.
 
-Trouvez votre appartement ideal a Riyad et dans d'autres villes saoudiennes. Proprietes meublees et non meublees a des prix transparents.
+Trouvez votre appartement idéal à Riyad et dans d'autres villes saoudiennes. Propriétés meublées et non meublées à des prix transparents.
 
 🏠 Utilisez les boutons ci-dessous pour commencer :`,
 
     help: `📖 *Guide du Bot*
 
 *Commandes disponibles :*
-/start — Demarrer la conversation
-/search — Rechercher des proprietes
-/book — Reserver une propriete
-/mybookings — Mes reservations
-/alerts — Gerer les alertes
-/subscribe — S'abonner aux alertes
-/unsubscribe — Se desabonner des alertes
+/start — Démarrer la conversation
+/search — Rechercher des propriétés
 /language — Changer la langue
-/notifications — Parametres de notification
+/notifications — Paramètres de notification
 /help — Afficher ce guide
 
 *Recherche en ligne :*
-Tapez @monthlykey\\_bot dans n'importe quel chat suivi d'un nom de ville ou d'un mot-cle pour partager des proprietes directement.
-
-*Chat intelligent :*
-Envoyez n'importe quelle question et je vous aiderai !
+Tapez @monthlykey\\_bot dans n'importe quel chat suivi d'un nom de ville ou d'un mot-clé pour partager des propriétés directement.
 
 🌐 Visitez notre site : monthlykey.com`,
 
-    searchPrompt: "🔍 *Rechercher des proprietes*\n\nChoisissez une ville ou tapez votre recherche :",
-    searchResults: "🏠 *Resultats de recherche :*",
-    noResults: "Aucune propriete trouvee. Essayez de modifier vos criteres.",
+    searchPrompt: "🔍 *Rechercher des propriétés*\n\nChoisissez une ville ou tapez votre recherche :",
+    searchResults: "🏠 *Résultats de recherche :*",
+    noResults: "Aucune propriété trouvée. Essayez de modifier vos critères.",
     searching: "🔍 Recherche en cours...",
-    error: "Desole, une erreur s'est produite. Veuillez reessayer.",
-    languageChanged: "✅ Langue changee en francais",
+    error: "Désolé, une erreur s'est produite. Veuillez réessayer.",
+    languageChanged: "✅ Langue changée en français",
     chooseLanguage: "🌐 Choisissez la langue :",
 
     btnSearch: "🔍 Rechercher",
@@ -360,161 +346,153 @@ Envoyez n'importe quelle question et je vous aiderai !
     btnLanguage: "🌐 Langue",
     btnNotifications: "🔔 Notifications",
     btnRiyadh: "🏙️ Riyad",
-    btnJeddah: "🏙️ Djeddah (Bientot)",
-    btnMadinah: "🏙️ Medine (Bientot)",
+    btnJeddah: "🏙️ Djeddah (Bientôt)",
+    btnMadinah: "🏙️ Médine (Bientôt)",
     btnAllCities: "🗺️ Toutes les villes",
     btnBack: "◀️ Retour",
 
-    notifSettings: `🔔 *Parametres de notification*\n\nChoisissez les notifications que vous souhaitez recevoir :`,
-    notifNewProperties: "🏠 Nouvelles proprietes",
+    notifSettings: "🔔 *Paramètres de notification*\n\nChoisissez les notifications que vous souhaitez recevoir :",
+    notifNewProperties: "🏠 Nouvelles propriétés",
     notifPriceDrops: "📉 Baisses de prix",
-    notifBookings: "📋 Mises a jour de reservation",
-    notifEnabled: "✅ Active",
-    notifDisabled: "❌ Desactive",
-    notifUpdated: "✅ Parametres de notification mis a jour",
+    notifBookings: "📋 Mises à jour de réservation",
+    notifEnabled: "✅ Activé",
+    notifDisabled: "❌ Désactivé",
+    notifUpdated: "✅ Paramètres de notification mis à jour",
 
     perMonth: "SAR / mois",
     bedrooms: "Chambres",
     bathrooms: "Salles de bain",
     sqm: "m²",
-    viewDetails: "Voir les details",
+    viewDetails: "Voir les détails",
     viewOnWebsite: "🌐 Voir sur le site",
     shareProperty: "📤 Partager",
 
-    comingSoon: "Bientot disponible",
+    comingSoon: "Bientôt disponible",
     activeNow: "Disponible maintenant",
 
-    bookingStart: "📋 *Reserver une propriete*\n\nChoisissez une ville :",
-    bookingSelectProperty: "🏠 *Selectionnez une propriete :*",
-    bookingPropertySelected: "✅ Propriete selectionnee",
-    bookingEnterCheckIn: "📅 *Date d'arrivee*\n\nEntrez la date au format : YYYY-MM-DD\n(Exemple : 2026-05-01)",
-    bookingEnterCheckOut: "📅 *Date de depart*\n\nEntrez la date au format : YYYY-MM-DD\n(Exemple : 2026-06-01)",
+    bookingStart: "📋 *Réserver une propriété*\n\nChoisissez une ville :",
+    bookingSelectProperty: "🏠 *Sélectionnez une propriété :*",
+    bookingPropertySelected: "✅ Propriété sélectionnée",
+    bookingEnterCheckIn: "📅 *Date d'arrivée*\n\nEntrez la date au format : YYYY-MM-DD\n(Exemple : 2026-05-01)",
+    bookingEnterCheckOut: "📅 *Date de départ*\n\nEntrez la date au format : YYYY-MM-DD\n(Exemple : 2026-06-01)",
     bookingInvalidDate: "❌ Date invalide. Format requis : YYYY-MM-DD",
-    bookingCheckOutBeforeCheckIn: "❌ La date de depart doit etre apres la date d'arrivee.",
-    bookingPastDate: "❌ Impossible de selectionner une date passee.",
-    bookingConfirmTitle: "📋 *Confirmation de reservation*",
-    bookingProperty: "🏠 Propriete",
+    bookingCheckOutBeforeCheckIn: "❌ La date de départ doit être après la date d'arrivée.",
+    bookingPastDate: "❌ Impossible de sélectionner une date passée.",
+    bookingConfirmTitle: "📋 *Confirmation de réservation*",
+    bookingProperty: "🏠 Propriété",
     bookingCity: "📍 Ville",
-    bookingCheckIn: "📅 Arrivee",
-    bookingCheckOut: "📅 Depart",
-    bookingDuration: "⏱️ Duree",
+    bookingCheckIn: "📅 Arrivée",
+    bookingCheckOut: "📅 Départ",
+    bookingDuration: "⏱️ Durée",
     bookingMonths: "mois",
     bookingMonthlyRent: "💰 Loyer mensuel",
-    bookingDeposit: "🔒 Depot de garantie",
+    bookingDeposit: "🔒 Dépôt de garantie",
     bookingServiceFee: "📄 Frais de service",
     bookingVAT: "📊 TVA (15%)",
     bookingGrandTotal: "💵 Total",
-    bookingConfirmBtn: "✅ Confirmer",
+    bookingConfirmBtn: "✅ Confirmer la réservation",
     bookingCancelBtn: "❌ Annuler",
     bookingPayBtn: "💳 Payer maintenant",
     bookingPayLaterBtn: "⏰ Payer plus tard",
-    bookingConfirmed: "✅ *Reservation soumise !*\n\nNumero de reservation : #",
-    bookingCancelled: "❌ Reservation annulee.",
+    bookingConfirmed: "✅ *Demande de réservation soumise !*\n\nID de réservation : #",
+    bookingCancelled: "❌ Réservation annulée.",
     bookingPaymentPrompt: "💳 *Paiement*\n\nChoisissez le mode de paiement :",
-    bookingPaid: "✅ *Paiement reussi !*\n\nMerci. Votre reservation est confirmee.",
-    bookingNotFound: "Reservation introuvable.",
-    myBookingsTitle: "📋 *Mes reservations*",
-    myBookingsEmpty: "Vous n'avez pas encore de reservations.\n\nUtilisez /book pour reserver.",
+    bookingPaid: "✅ *Paiement réussi !*\n\nMerci. Votre réservation est confirmée.",
+    bookingNotFound: "Réservation introuvable.",
+    myBookingsTitle: "📋 *Mes réservations*",
+    myBookingsEmpty: "Vous n'avez pas encore de réservations.\n\nUtilisez /book pour réserver.",
     bookingStatusPending: "⏳ En attente",
-    bookingStatusConfirmed: "✅ Confirmee",
-    bookingStatusCancelled: "❌ Annulee",
-    bookingStatusActive: "🟢 Active",
-    bookingStatusCompleted: "✔️ Terminee",
-    bookingPaymentPaid: "✅ Paye",
-    bookingPaymentUnpaid: "⏳ Non paye",
-    bookingNoProperties: "Aucune propriete trouvee. Essayez une autre ville.",
+    bookingStatusConfirmed: "✅ Confirmé",
+    bookingStatusCancelled: "❌ Annulé",
+    bookingStatusActive: "🟢 Actif",
+    bookingStatusCompleted: "✔️ Terminé",
+    bookingPaymentPaid: "✅ Payé",
+    bookingPaymentUnpaid: "⏳ Non payé",
+    bookingNoProperties: "Aucune propriété trouvée. Essayez une autre ville.",
     sar: "SAR",
 
-    paymentTitle: "Reservation Monthly Key",
-    paymentDescription: "Paiement de reservation via Monthly Key",
-    paymentSuccess: "✅ *Paiement reussi !*\n\nMerci ! Reservation #",
-    paymentFailed: "❌ Echec du paiement. Veuillez reessayer.",
-    paymentInvoiceSent: "💳 Facture envoyee. Appuyez sur le bouton Payer.",
+    paymentTitle: "Réservation Monthly Key",
+    paymentDescription: "Paiement de réservation via Monthly Key",
+    paymentSuccess: "✅ *Paiement réussi !*\n\nMerci ! Votre réservation #",
+    paymentFailed: "❌ Paiement échoué. Veuillez réessayer.",
+    paymentInvoiceSent: "💳 Facture envoyée. Appuyez sur le bouton Payer.",
 
-    alertsTitle: "🔔 *Alertes proprietes*",
-    alertsEmpty: "Vous n'avez pas d'alertes actives.\n\nUtilisez /subscribe pour creer une alerte.",
+    alertsTitle: "🔔 *Alertes propriétés*",
+    alertsEmpty: "Vous n'avez pas d'alertes actives.\n\nUtilisez /subscribe pour créer des alertes.",
     alertsListHeader: "🔔 *Vos alertes actives :*\n",
     alertCity: "📍 Ville",
     alertPriceRange: "💰 Fourchette de prix",
-    alertPropertyType: "🏷️ Type de propriete",
+    alertPropertyType: "🏷️ Type de propriété",
     alertBedrooms: "🛏️ Chambres",
     alertAny: "Tous",
     alertDeleteBtn: "🗑️ Supprimer",
     alertDeleteAllBtn: "🗑️ Tout supprimer",
-    alertDeleted: "✅ Alerte supprimee.",
-    alertAllDeleted: "✅ Toutes les alertes supprimees.",
+    alertDeleted: "✅ Alerte supprimée.",
+    alertAllDeleted: "✅ Toutes les alertes supprimées.",
     subscribeStart: "🔔 *S'abonner aux alertes*\n\nChoisissez une ville :",
     subscribeAllCities: "🌍 Toutes les villes",
-    subscribePricePrompt: "💰 *Fourchette de prix*\n\nEntrez le prix min et max (en SAR) :\n\nFormat : min-max\n(Exemple : 3000-8000)\n\nOu tapez 'skip' pour passer",
-    subscribeTypePrompt: "🏷️ *Type de propriete*\n\nChoisissez un type :",
+    subscribePricePrompt: "💰 *Fourchette de prix*\n\nEntrez le prix min et max mensuel (en SAR) :\n\nFormat : min-max\n(Exemple : 3000-8000)\n\nOu tapez 'skip' pour ignorer",
+    subscribeTypePrompt: "🏷️ *Type de propriété*\n\nChoisissez un type :",
     subscribeAllTypes: "🏠 Tous les types",
-    subscribeSuccess: "✅ *Abonnement reussi !*\n\nVous serez notifie des nouvelles proprietes correspondantes.",
+    subscribeSuccess: "✅ *Abonnement réussi !*\n\nVous serez notifié quand des propriétés correspondantes seront disponibles.",
     subscribeInvalidPrice: "❌ Format invalide. Entrez : min-max (Exemple : 3000-8000)",
-    unsubscribePrompt: "🔕 *Se desabonner*\n\nSelectionnez une alerte a supprimer :",
-    unsubscribeSuccess: "✅ Desabonnement reussi.",
-    alertNotification: "🔔 *Nouvelle alerte propriete !*\n\nUne nouvelle propriete correspond a vos criteres :",
+    unsubscribePrompt: "🔕 *Se désabonner*\n\nSélectionnez une alerte à supprimer :",
+    unsubscribeSuccess: "✅ Désabonnement réussi.",
+    alertNotification: "🔔 *Nouvelle alerte propriété !*\n\nUne nouvelle propriété correspond à vos critères :",
   },
 
-  // ─── Urdu (اردو) ──────────────────────────────────────────
+  // ─── Urdu (اردو) — RTL ────────────────────────────────────
   ur: {
-    welcome: `🔑 *Monthly Key میں خوش آمدید!*
+    welcome: `${RLM}🔑 *Monthly Key میں خوش آمدید!*
 
-سعودی عرب میں ماہانہ کرایے کا قابل اعتماد پلیٹ فارم۔
+${RLM}سعودی عرب میں قابل اعتماد ماہانہ کرائے کا پلیٹ فارم۔
 
-ریاض اور دیگر سعودی شہروں میں اپنا مثالی اپارٹمنٹ تلاش کریں۔ فرنشڈ اور غیر فرنشڈ پراپرٹیز شفاف قیمتوں کے ساتھ۔
+${RLM}ریاض اور دیگر سعودی شہروں میں اپنا بہترین اپارٹمنٹ تلاش کریں۔
 
-🏠 شروع کرنے کے لیے نیچے دیے گئے بٹن استعمال کریں:`,
+${RLM}🏠 شروع کرنے کے لیے نیچے دیے گئے بٹن استعمال کریں:`,
 
-    help: `📖 *بوٹ گائیڈ*
+    help: `${RLM}📖 *بوٹ گائیڈ*
 
-*دستیاب کمانڈز:*
-/start — بات چیت شروع کریں
-/search — پراپرٹیز تلاش کریں
-/book — پراپرٹی بک کریں
-/mybookings — میری بکنگز
-/alerts — الرٹس کا نظم کریں
-/subscribe — الرٹس کے لیے سبسکرائب کریں
-/unsubscribe — الرٹس سے ان سبسکرائب کریں
-/language — زبان تبدیل کریں
-/notifications — نوٹیفکیشن سیٹنگز
-/help — یہ گائیڈ دکھائیں
+${RLM}*دستیاب کمانڈز:*
+${RLM}/start — بات چیت شروع کریں
+${RLM}/search — پراپرٹیز تلاش کریں
+${RLM}/language — زبان تبدیل کریں
+${RLM}/notifications — اطلاع کی ترتیبات
+${RLM}/help — یہ گائیڈ دکھائیں
 
-*ان لائن سرچ:*
-کسی بھی چیٹ میں @monthlykey\\_bot ٹائپ کریں اور شہر کا نام یا کلیدی لفظ لکھیں۔
+${RLM}🌐 ہماری ویب سائٹ: monthlykey.com`,
 
-🌐 ہماری ویب سائٹ: monthlykey.com`,
+    searchPrompt: `${RLM}🔍 *پراپرٹیز تلاش کریں*\n\n${RLM}شہر منتخب کریں یا تلاش کا لفظ لکھیں:`,
+    searchResults: `${RLM}🏠 *تلاش کے نتائج:*`,
+    noResults: `${RLM}کوئی مطابقت پذیر پراپرٹی نہیں ملی۔ تلاش کے معیار تبدیل کریں۔`,
+    searching: `${RLM}🔍 تلاش جاری ہے...`,
+    error: `${RLM}معذرت، ایک خرابی پیش آئی۔ دوبارہ کوشش کریں۔`,
+    languageChanged: `${RLM}✅ زبان اردو میں تبدیل ہو گئی`,
+    chooseLanguage: `${RLM}🌐 زبان منتخب کریں / Choose Language:`,
 
-    searchPrompt: "🔍 *پراپرٹیز تلاش کریں*\n\nشہر منتخب کریں یا تلاش لکھیں:",
-    searchResults: "🏠 *تلاش کے نتائج:*",
-    noResults: "کوئی مماثل پراپرٹی نہیں ملی۔ تلاش کے معیار تبدیل کریں۔",
-    searching: "🔍 تلاش جاری ہے...",
-    error: "معذرت، ایک خرابی ہوئی۔ دوبارہ کوشش کریں۔",
-    languageChanged: "✅ زبان اردو میں تبدیل ہو گئی",
-    chooseLanguage: "🌐 زبان منتخب کریں:",
-
-    btnSearch: "🔍 تلاش کریں",
+    btnSearch: "🔍 پراپرٹی تلاش کریں",
     btnFeatured: "⭐ نمایاں پراپرٹیز",
     btnOpenApp: "📱 ایپ کھولیں",
     btnWebsite: "🌐 ویب سائٹ",
     btnHelp: "❓ مدد",
     btnLanguage: "🌐 زبان",
-    btnNotifications: "🔔 نوٹیفکیشنز",
+    btnNotifications: "🔔 اطلاعات",
     btnRiyadh: "🏙️ ریاض",
     btnJeddah: "🏙️ جدہ (جلد)",
     btnMadinah: "🏙️ مدینہ (جلد)",
     btnAllCities: "🗺️ تمام شہر",
     btnBack: "◀️ واپس",
 
-    notifSettings: `🔔 *نوٹیفکیشن سیٹنگز*\n\nمنتخب کریں کون سی نوٹیفکیشنز آپ وصول کرنا چاہتے ہیں:`,
+    notifSettings: `${RLM}🔔 *اطلاع کی ترتیبات*\n\n${RLM}وصول کرنے کے لیے اطلاعات منتخب کریں:`,
     notifNewProperties: "🏠 نئی پراپرٹیز",
-    notifPriceDrops: "📉 قیمت میں کمی",
+    notifPriceDrops: "📉 قیمتوں میں کمی",
     notifBookings: "📋 بکنگ اپڈیٹس",
     notifEnabled: "✅ فعال",
     notifDisabled: "❌ غیر فعال",
-    notifUpdated: "✅ نوٹیفکیشن سیٹنگز اپڈیٹ ہو گئیں",
+    notifUpdated: `${RLM}✅ اطلاع کی ترتیبات اپڈیٹ ہو گئیں`,
 
     perMonth: "SAR / ماہانہ",
-    bedrooms: "کمرے",
+    bedrooms: "بیڈروم",
     bathrooms: "باتھ روم",
     sqm: "مربع میٹر",
     viewDetails: "تفصیلات دیکھیں",
@@ -524,37 +502,37 @@ Envoyez n'importe quelle question et je vous aiderai !
     comingSoon: "جلد آ رہا ہے",
     activeNow: "ابھی دستیاب",
 
-    bookingStart: "📋 *پراپرٹی بک کریں*\n\nشہر منتخب کریں:",
-    bookingSelectProperty: "🏠 *بکنگ کے لیے پراپرٹی منتخب کریں:*",
-    bookingPropertySelected: "✅ پراپرٹی منتخب ہو گئی",
-    bookingEnterCheckIn: "📅 *چیک ان تاریخ*\n\nتاریخ درج کریں: YYYY-MM-DD\n(مثال: 2026-05-01)",
-    bookingEnterCheckOut: "📅 *چیک آؤٹ تاریخ*\n\nتاریخ درج کریں: YYYY-MM-DD\n(مثال: 2026-06-01)",
-    bookingInvalidDate: "❌ غلط تاریخ۔ فارمیٹ: YYYY-MM-DD",
-    bookingCheckOutBeforeCheckIn: "❌ چیک آؤٹ تاریخ چیک ان کے بعد ہونی چاہیے۔",
-    bookingPastDate: "❌ گزشتہ تاریخ منتخب نہیں کی جا سکتی۔",
-    bookingConfirmTitle: "📋 *بکنگ کی تصدیق*",
+    bookingStart: `${RLM}📋 *پراپرٹی بک کریں*\n\n${RLM}شہر منتخب کریں:`,
+    bookingSelectProperty: `${RLM}🏠 *بکنگ کے لیے پراپرٹی منتخب کریں:*`,
+    bookingPropertySelected: `${RLM}✅ پراپرٹی منتخب ہو گئی`,
+    bookingEnterCheckIn: `${RLM}📅 *چیک ان تاریخ*\n\n${RLM}تاریخ درج کریں: ${LRM}YYYY-MM-DD`,
+    bookingEnterCheckOut: `${RLM}📅 *چیک آؤٹ تاریخ*\n\n${RLM}تاریخ درج کریں: ${LRM}YYYY-MM-DD`,
+    bookingInvalidDate: `${RLM}❌ غلط تاریخ۔ فارمیٹ: ${LRM}YYYY-MM-DD`,
+    bookingCheckOutBeforeCheckIn: `${RLM}❌ چیک آؤٹ تاریخ چیک ان کے بعد ہونی چاہیے۔`,
+    bookingPastDate: `${RLM}❌ گزری ہوئی تاریخ منتخب نہیں کر سکتے۔`,
+    bookingConfirmTitle: `${RLM}📋 *بکنگ کی تصدیق*`,
     bookingProperty: "🏠 پراپرٹی",
     bookingCity: "📍 شہر",
     bookingCheckIn: "📅 چیک ان",
     bookingCheckOut: "📅 چیک آؤٹ",
     bookingDuration: "⏱️ مدت",
-    bookingMonths: "مہینے",
+    bookingMonths: "ماہ",
     bookingMonthlyRent: "💰 ماہانہ کرایہ",
     bookingDeposit: "🔒 سیکیورٹی ڈپازٹ",
     bookingServiceFee: "📄 سروس فیس",
     bookingVAT: "📊 VAT (15%)",
     bookingGrandTotal: "💵 کل رقم",
-    bookingConfirmBtn: "✅ تصدیق کریں",
+    bookingConfirmBtn: "✅ بکنگ کی تصدیق کریں",
     bookingCancelBtn: "❌ منسوخ کریں",
     bookingPayBtn: "💳 ابھی ادائیگی کریں",
-    bookingPayLaterBtn: "⏰ بعد میں ادائیگی",
-    bookingConfirmed: "✅ *بکنگ کی درخواست جمع ہو گئی!*\n\nبکنگ نمبر: #",
-    bookingCancelled: "❌ بکنگ منسوخ ہو گئی۔",
-    bookingPaymentPrompt: "💳 *ادائیگی*\n\nادائیگی کا طریقہ منتخب کریں:",
-    bookingPaid: "✅ *ادائیگی کامیاب!*\n\nشکریہ۔ آپ کی بکنگ کی تصدیق ہو گئی۔",
-    bookingNotFound: "بکنگ نہیں ملی۔",
-    myBookingsTitle: "📋 *میری بکنگز*",
-    myBookingsEmpty: "آپ کی کوئی بکنگ نہیں ہے۔\n\nبکنگ کے لیے /book استعمال کریں۔",
+    bookingPayLaterBtn: "⏰ بعد میں ادائیگی کریں",
+    bookingConfirmed: `${RLM}✅ *بکنگ کی درخواست جمع ہو گئی!*\n\n${RLM}بکنگ نمبر: #`,
+    bookingCancelled: `${RLM}❌ بکنگ منسوخ ہو گئی۔`,
+    bookingPaymentPrompt: `${RLM}💳 *ادائیگی*\n\n${RLM}ادائیگی کا طریقہ منتخب کریں:`,
+    bookingPaid: `${RLM}✅ *ادائیگی کامیاب!*\n\n${RLM}شکریہ۔ آپ کی بکنگ تصدیق ہو گئی۔`,
+    bookingNotFound: `${RLM}بکنگ نہیں ملی۔`,
+    myBookingsTitle: `${RLM}📋 *میری بکنگز*`,
+    myBookingsEmpty: `${RLM}آپ کی ابھی کوئی بکنگ نہیں ہے۔`,
     bookingStatusPending: "⏳ زیر غور",
     bookingStatusConfirmed: "✅ تصدیق شدہ",
     bookingStatusCancelled: "❌ منسوخ",
@@ -562,98 +540,90 @@ Envoyez n'importe quelle question et je vous aiderai !
     bookingStatusCompleted: "✔️ مکمل",
     bookingPaymentPaid: "✅ ادا شدہ",
     bookingPaymentUnpaid: "⏳ غیر ادا شدہ",
-    bookingNoProperties: "کوئی پراپرٹی نہیں ملی۔ دوسرے شہر میں تلاش کریں۔",
+    bookingNoProperties: `${RLM}کوئی پراپرٹی نہیں ملی۔ دوسرے شہر میں تلاش کریں۔`,
     sar: "SAR",
 
     paymentTitle: "Monthly Key بکنگ",
-    paymentDescription: "Monthly Key کے ذریعے بکنگ کی ادائیگی",
-    paymentSuccess: "✅ *ادائیگی کامیاب!*\n\nشکریہ! بکنگ #",
-    paymentFailed: "❌ ادائیگی ناکام۔ دوبارہ کوشش کریں۔",
-    paymentInvoiceSent: "💳 انوائس بھیج دی گئی۔ ادائیگی کا بٹن دبائیں۔",
+    paymentDescription: "Monthly Key کے ذریعے بکنگ ادائیگی",
+    paymentSuccess: `${RLM}✅ *ادائیگی کامیاب!*\n\n${RLM}شکریہ! آپ کی بکنگ #`,
+    paymentFailed: `${RLM}❌ ادائیگی ناکام۔ دوبارہ کوشش کریں۔`,
+    paymentInvoiceSent: `${RLM}💳 انوائس بھیج دی گئی۔ ادائیگی کا بٹن دبائیں۔`,
 
-    alertsTitle: "🔔 *پراپرٹی الرٹس*",
-    alertsEmpty: "آپ کے کوئی فعال الرٹس نہیں ہیں۔\n\nالرٹ بنانے کے لیے /subscribe استعمال کریں۔",
-    alertsListHeader: "🔔 *آپ کے فعال الرٹس:*\n",
+    alertsTitle: `${RLM}🔔 *پراپرٹی الرٹس*`,
+    alertsEmpty: `${RLM}آپ کے کوئی فعال الرٹس نہیں ہیں۔`,
+    alertsListHeader: `${RLM}🔔 *آپ کے فعال الرٹس:*\n`,
     alertCity: "📍 شہر",
     alertPriceRange: "💰 قیمت کی حد",
     alertPropertyType: "🏷️ پراپرٹی کی قسم",
-    alertBedrooms: "🛏️ کمرے",
-    alertAny: "سب",
+    alertBedrooms: "🛏️ بیڈروم",
+    alertAny: "تمام",
     alertDeleteBtn: "🗑️ حذف کریں",
     alertDeleteAllBtn: "🗑️ سب حذف کریں",
-    alertDeleted: "✅ الرٹ حذف ہو گیا۔",
-    alertAllDeleted: "✅ تمام الرٹس حذف ہو گئے۔",
-    subscribeStart: "🔔 *الرٹس کے لیے سبسکرائب کریں*\n\nشہر منتخب کریں:",
+    alertDeleted: `${RLM}✅ الرٹ حذف ہو گیا۔`,
+    alertAllDeleted: `${RLM}✅ تمام الرٹس حذف ہو گئے۔`,
+    subscribeStart: `${RLM}🔔 *الرٹس کے لیے سبسکرائب کریں*\n\n${RLM}شہر منتخب کریں:`,
     subscribeAllCities: "🌍 تمام شہر",
-    subscribePricePrompt: "💰 *قیمت کی حد*\n\nکم از کم اور زیادہ سے زیادہ ماہانہ قیمت درج کریں (SAR میں):\n\nفارمیٹ: min-max\n(مثال: 3000-8000)\n\nیا 'skip' ٹائپ کریں",
-    subscribeTypePrompt: "🏷️ *پراپرٹی کی قسم*\n\nقسم منتخب کریں:",
+    subscribePricePrompt: `${RLM}💰 *قیمت کی حد*\n\n${RLM}کم از کم اور زیادہ سے زیادہ ماہانہ قیمت درج کریں (SAR میں):`,
+    subscribeTypePrompt: `${RLM}🏷️ *پراپرٹی کی قسم*\n\n${RLM}قسم منتخب کریں:`,
     subscribeAllTypes: "🏠 تمام اقسام",
-    subscribeSuccess: "✅ *سبسکرپشن کامیاب!*\n\nمماثل پراپرٹیز ملنے پر آپ کو مطلع کیا جائے گا۔",
-    subscribeInvalidPrice: "❌ غلط فارمیٹ۔ درج کریں: min-max (مثال: 3000-8000)",
-    unsubscribePrompt: "🔕 *ان سبسکرائب*\n\nحذف کرنے کے لیے الرٹ منتخب کریں:",
-    unsubscribeSuccess: "✅ ان سبسکرائب کامیاب۔",
-    alertNotification: "🔔 *نئی پراپرٹی الرٹ!*\n\nایک نئی پراپرٹی آپ کے معیار سے مماثل ہے:",
+    subscribeSuccess: `${RLM}✅ *سبسکرپشن کامیاب!*\n\n${RLM}مطابقت پذیر پراپرٹیز دستیاب ہونے پر آپ کو مطلع کیا جائے گا۔`,
+    subscribeInvalidPrice: `${RLM}❌ غلط فارمیٹ۔`,
+    unsubscribePrompt: `${RLM}🔕 *ان سبسکرائب*\n\n${RLM}الرٹ منتخب کریں:`,
+    unsubscribeSuccess: `${RLM}✅ ان سبسکرائب کامیاب۔`,
+    alertNotification: `${RLM}🔔 *نئی پراپرٹی الرٹ!*\n\n${RLM}ایک نئی پراپرٹی آپ کے الرٹس سے مطابقت رکھتی ہے:`,
   },
 
-  // ─── Hindi (हिन्दी) ────────────────────────────────────────
+  // ─── Hindi (हिन्दी) ───────────────────────────────────────
   hi: {
     welcome: `🔑 *Monthly Key में आपका स्वागत है!*
 
-सऊदी अरब में विश्वसनीय मासिक किराये का प्लेटफॉर्म।
+सऊदी अरब में विश्वसनीय मासिक किराया प्लेटफ़ॉर्म।
 
-रियाद और अन्य सऊदी शहरों में अपना आदर्श अपार्टमेंट खोजें। फर्निश्ड और अनफर्निश्ड प्रॉपर्टीज पारदर्शी कीमतों के साथ।
+रियाद और अन्य सऊदी शहरों में अपना आदर्श अपार्टमेंट खोजें।
 
-🏠 शुरू करने के लिए नीचे दिए गए बटन का उपयोग करें:`,
+🏠 शुरू करने के लिए नीचे दिए बटन का उपयोग करें:`,
 
-    help: `📖 *बॉट गाइड*
+    help: `📖 *बोट गाइड*
 
 *उपलब्ध कमांड:*
 /start — बातचीत शुरू करें
 /search — प्रॉपर्टी खोजें
-/book — प्रॉपर्टी बुक करें
-/mybookings — मेरी बुकिंग
-/alerts — अलर्ट प्रबंधित करें
-/subscribe — अलर्ट के लिए सब्सक्राइब करें
-/unsubscribe — अलर्ट से अनसब्सक्राइब करें
 /language — भाषा बदलें
-/notifications — नोटिफिकेशन सेटिंग्स
+/notifications — सूचना सेटिंग
 /help — यह गाइड दिखाएं
-
-*इनलाइन सर्च:*
-किसी भी चैट में @monthlykey\\_bot टाइप करें और शहर का नाम या कीवर्ड लिखें।
 
 🌐 हमारी वेबसाइट: monthlykey.com`,
 
-    searchPrompt: "🔍 *प्रॉपर्टी खोजें*\n\nशहर चुनें या खोज लिखें:",
+    searchPrompt: "🔍 *प्रॉपर्टी खोजें*\n\nशहर चुनें या खोज शब्द टाइप करें:",
     searchResults: "🏠 *खोज परिणाम:*",
     noResults: "कोई मिलान प्रॉपर्टी नहीं मिली। खोज मानदंड बदलें।",
     searching: "🔍 खोज जारी है...",
-    error: "क्षमा करें, एक त्रुटि हुई। कृपया पुनः प्रयास करें।",
-    languageChanged: "✅ भाषा हिन्दी में बदल दी गई",
-    chooseLanguage: "🌐 भाषा चुनें:",
+    error: "क्षमा करें, एक त्रुटि हुई। पुनः प्रयास करें।",
+    languageChanged: "✅ भाषा हिंदी में बदल गई",
+    chooseLanguage: "🌐 भाषा चुनें / Choose Language:",
 
-    btnSearch: "🔍 खोजें",
+    btnSearch: "🔍 प्रॉपर्टी खोजें",
     btnFeatured: "⭐ विशेष प्रॉपर्टीज",
     btnOpenApp: "📱 ऐप खोलें",
     btnWebsite: "🌐 वेबसाइट",
-    btnHelp: "❓ मदद",
+    btnHelp: "❓ सहायता",
     btnLanguage: "🌐 भाषा",
-    btnNotifications: "🔔 नोटिफिकेशन",
+    btnNotifications: "🔔 सूचनाएं",
     btnRiyadh: "🏙️ रियाद",
     btnJeddah: "🏙️ जेद्दा (जल्द)",
     btnMadinah: "🏙️ मदीना (जल्द)",
     btnAllCities: "🗺️ सभी शहर",
     btnBack: "◀️ वापस",
 
-    notifSettings: `🔔 *नोटिफिकेशन सेटिंग्स*\n\nचुनें कि आप कौन सी नोटिफिकेशन प्राप्त करना चाहते हैं:`,
+    notifSettings: "🔔 *सूचना सेटिंग*\n\nप्राप्त करने के लिए सूचनाएं चुनें:",
     notifNewProperties: "🏠 नई प्रॉपर्टीज",
-    notifPriceDrops: "📉 मूल्य में कमी",
+    notifPriceDrops: "📉 कीमत में कमी",
     notifBookings: "📋 बुकिंग अपडेट",
     notifEnabled: "✅ सक्रिय",
     notifDisabled: "❌ निष्क्रिय",
-    notifUpdated: "✅ नोटिफिकेशन सेटिंग्स अपडेट हो गईं",
+    notifUpdated: "✅ सूचना सेटिंग अपडेट हो गई",
 
-    perMonth: "SAR / मासिक",
+    perMonth: "SAR / माह",
     bedrooms: "बेडरूम",
     bathrooms: "बाथरूम",
     sqm: "वर्ग मीटर",
@@ -667,12 +637,12 @@ Envoyez n'importe quelle question et je vous aiderai !
     bookingStart: "📋 *प्रॉपर्टी बुक करें*\n\nशहर चुनें:",
     bookingSelectProperty: "🏠 *बुकिंग के लिए प्रॉपर्टी चुनें:*",
     bookingPropertySelected: "✅ प्रॉपर्टी चुनी गई",
-    bookingEnterCheckIn: "📅 *चेक-इन तिथि*\n\nतिथि दर्ज करें: YYYY-MM-DD\n(उदाहरण: 2026-05-01)",
-    bookingEnterCheckOut: "📅 *चेक-आउट तिथि*\n\nतिथि दर्ज करें: YYYY-MM-DD\n(उदाहरण: 2026-06-01)",
-    bookingInvalidDate: "❌ अमान्य तिथि। प्रारूप: YYYY-MM-DD",
-    bookingCheckOutBeforeCheckIn: "❌ चेक-आउट तिथि चेक-इन के बाद होनी चाहिए।",
-    bookingPastDate: "❌ बीती हुई तिथि नहीं चुनी जा सकती।",
-    bookingConfirmTitle: "📋 *बुकिंग की पुष्टि*",
+    bookingEnterCheckIn: "📅 *चेक-इन तारीख*\n\nतारीख दर्ज करें: YYYY-MM-DD\n(उदाहरण: 2026-05-01)",
+    bookingEnterCheckOut: "📅 *चेक-आउट तारीख*\n\nतारीख दर्ज करें: YYYY-MM-DD\n(उदाहरण: 2026-06-01)",
+    bookingInvalidDate: "❌ अमान्य तारीख। फ़ॉर्मेट: YYYY-MM-DD",
+    bookingCheckOutBeforeCheckIn: "❌ चेक-आउट तारीख चेक-इन के बाद होनी चाहिए।",
+    bookingPastDate: "❌ बीती हुई तारीख नहीं चुन सकते।",
+    bookingConfirmTitle: "📋 *बुकिंग पुष्टि*",
     bookingProperty: "🏠 प्रॉपर्टी",
     bookingCity: "📍 शहर",
     bookingCheckIn: "📅 चेक-इन",
@@ -684,18 +654,18 @@ Envoyez n'importe quelle question et je vous aiderai !
     bookingServiceFee: "📄 सेवा शुल्क",
     bookingVAT: "📊 VAT (15%)",
     bookingGrandTotal: "💵 कुल राशि",
-    bookingConfirmBtn: "✅ पुष्टि करें",
+    bookingConfirmBtn: "✅ बुकिंग की पुष्टि करें",
     bookingCancelBtn: "❌ रद्द करें",
     bookingPayBtn: "💳 अभी भुगतान करें",
-    bookingPayLaterBtn: "⏰ बाद में भुगतान",
-    bookingConfirmed: "✅ *बुकिंग अनुरोध सबमिट हो गया!*\n\nबुकिंग नंबर: #",
+    bookingPayLaterBtn: "⏰ बाद में भुगतान करें",
+    bookingConfirmed: "✅ *बुकिंग अनुरोध सबमिट हो गया!*\n\nबुकिंग ID: #",
     bookingCancelled: "❌ बुकिंग रद्द हो गई।",
-    bookingPaymentPrompt: "💳 *भुगतान*\n\nभुगतान का तरीका चुनें:",
+    bookingPaymentPrompt: "💳 *भुगतान*\n\nभुगतान विधि चुनें:",
     bookingPaid: "✅ *भुगतान सफल!*\n\nधन्यवाद। आपकी बुकिंग की पुष्टि हो गई।",
     bookingNotFound: "बुकिंग नहीं मिली।",
     myBookingsTitle: "📋 *मेरी बुकिंग*",
-    myBookingsEmpty: "आपकी कोई बुकिंग नहीं है।\n\nबुक करने के लिए /book का उपयोग करें।",
-    bookingStatusPending: "⏳ विचाराधीन",
+    myBookingsEmpty: "आपकी अभी कोई बुकिंग नहीं है।",
+    bookingStatusPending: "⏳ लंबित",
     bookingStatusConfirmed: "✅ पुष्टि",
     bookingStatusCancelled: "❌ रद्द",
     bookingStatusActive: "🟢 सक्रिय",
@@ -742,7 +712,7 @@ Envoyez n'importe quelle question et je vous aiderai !
 const supportedLanguages = [
   { code: "ar", name: "العربية", flag: "🇸🇦" },
   { code: "en", name: "English", flag: "🇬🇧" },
-  { code: "fr", name: "Francais", flag: "🇫🇷" },
+  { code: "fr", name: "Français", flag: "🇫🇷" },
   { code: "ur", name: "اردو", flag: "🇵🇰" },
   { code: "hi", name: "हिन्दी", flag: "🇮🇳" },
 ];

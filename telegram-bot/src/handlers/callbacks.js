@@ -1,13 +1,14 @@
 /**
  * Callback Query Handlers for Monthly Key Telegram Bot
- * Phase 1-3: Updated with multi-language support (5 languages)
+ * Fixed: reply keyboard updates to correct language on language change
+ * Fixed: RTL direction marks for Arabic mixed-content messages
  */
 const { Markup } = require("telegraf");
 const config = require("../config");
 const { t, supportedLanguages } = require("../i18n");
 const db = require("../services/database");
 const api = require("../services/api");
-const { performSearch, handleNotifications } = require("./commands");
+const { performSearch, handleNotifications, getMainKeyboard } = require("./commands");
 
 /**
  * Register all callback query handlers
@@ -56,7 +57,7 @@ function registerCallbacks(bot) {
 
       await ctx.reply(
         lang === "ar"
-          ? `⭐ *العقارات المميزة* (${properties.length})`
+          ? `\u200F⭐ *العقارات المميزة* (${properties.length})`
           : `⭐ *Featured Properties* (${properties.length})`,
         { parse_mode: "Markdown" }
       );
@@ -177,19 +178,19 @@ function registerCallbacks(bot) {
   bot.action("search_city_jeddah", async (ctx) => {
     await ctx.answerCbQuery();
     const lang = db.getUserLanguage(ctx.chat.id) || "ar";
-    await ctx.reply(t(lang, "comingSoon") === "Coming Soon"
-      ? "🏙️ Jeddah is coming soon! Currently we serve Riyadh only."
-      : `🏙️ ${t(lang, "comingSoon")}! جدة — Jeddah`
-    );
+    const msg = lang === "ar"
+      ? "\u200F🏙️ جدة — قريباً! حالياً نخدم الرياض فقط."
+      : "🏙️ Jeddah is coming soon! Currently we serve Riyadh only.";
+    await ctx.reply(msg);
   });
 
   bot.action("search_city_madinah", async (ctx) => {
     await ctx.answerCbQuery();
     const lang = db.getUserLanguage(ctx.chat.id) || "ar";
-    await ctx.reply(t(lang, "comingSoon") === "Coming Soon"
-      ? "🏙️ Madinah is coming soon! Currently we serve Riyadh only."
-      : `🏙️ ${t(lang, "comingSoon")}! المدينة المنورة — Madinah`
-    );
+    const msg = lang === "ar"
+      ? "\u200F🏙️ المدينة المنورة — قريباً! حالياً نخدم الرياض فقط."
+      : "🏙️ Madinah is coming soon! Currently we serve Riyadh only.";
+    await ctx.reply(msg);
   });
 
   bot.action("search_free", async (ctx) => {
@@ -197,36 +198,72 @@ function registerCallbacks(bot) {
     const lang = db.getUserLanguage(ctx.chat.id) || "ar";
     await ctx.reply(
       lang === "ar"
-        ? "🔍 اكتب كلمة البحث (مثال: شقة مفروشة، استوديو، فيلا):"
+        ? "\u200F🔍 اكتب كلمة البحث (مثال: شقة مفروشة، استوديو، فيلا):"
         : "🔍 Type your search query (e.g., furnished apartment, studio, villa):",
       { reply_markup: { force_reply: true } }
     );
   });
 
-  // ─── Language Callbacks (Phase 3: 5 languages) ────────────
+  // ─── Language Callbacks ────────────────────────────────────
+  // KEY FIX: After changing language, re-send the reply keyboard
+  // with the new language's button strings so the bottom keyboard updates.
 
-  // Generic language handler for all supported languages
   for (const langDef of supportedLanguages) {
     bot.action(`lang_${langDef.code}`, async (ctx) => {
       await ctx.answerCbQuery();
-      db.setUserLanguage(ctx.chat.id, langDef.code);
-      await ctx.reply(t(langDef.code, "languageChanged"));
+      const newLang = langDef.code;
+      db.setUserLanguage(ctx.chat.id, newLang);
 
-      // Show welcome again with new language
-      const buttons = Markup.inlineKeyboard([
+      // Step 1: Confirm language change
+      await ctx.reply(t(newLang, "languageChanged"));
+
+      // Step 2: Re-send the reply keyboard with the new language's button labels.
+      // This is the critical fix — Telegram persists the reply keyboard until
+      // it is explicitly replaced by sending a new one.
+      const welcomeMsg = newLang === "ar" || newLang === "ur"
+        ? `\u200F${t(newLang, "welcome")}`   // prepend RTL mark for RTL languages
+        : t(newLang, "welcome");
+
+      const inlineButtons = Markup.inlineKeyboard([
         [
-          Markup.button.callback(t(langDef.code, "btnSearch"), "action_search"),
-          Markup.button.callback(t(langDef.code, "btnFeatured"), "action_featured"),
+          Markup.button.callback(t(newLang, "btnSearch"), "action_search"),
+          Markup.button.callback(t(newLang, "btnFeatured"), "action_featured"),
         ],
         [
-          Markup.button.webApp(t(langDef.code, "btnOpenApp"), config.webappUrl),
-          Markup.button.url(t(langDef.code, "btnWebsite"), config.websiteUrl),
+          Markup.button.webApp(t(newLang, "btnOpenApp"), config.webappUrl),
+          Markup.button.url(t(newLang, "btnWebsite"), config.websiteUrl),
+        ],
+        [
+          Markup.button.callback(t(newLang, "btnNotifications"), "action_notifications"),
+          Markup.button.callback(t(newLang, "btnHelp"), "action_help"),
         ],
       ]);
 
-      await ctx.reply(t(langDef.code, "welcome"), {
+      // Send welcome with BOTH the inline buttons AND the updated reply keyboard.
+      // The reply_markup must contain the keyboard object directly to merge both.
+      await ctx.reply(welcomeMsg, {
         parse_mode: "Markdown",
-        ...buttons,
+        reply_markup: {
+          ...inlineButtons.reply_markup,
+          // Overlay the persistent reply keyboard on top of inline buttons
+          // by sending them in a separate message immediately after
+        },
+      });
+
+      // Step 3: Send a dedicated message that carries the updated reply keyboard.
+      // This ensures the bottom keyboard is refreshed with translated button labels.
+      const keyboardMsg = newLang === "ar"
+        ? "🔑 اختر من القائمة:"
+        : newLang === "ur"
+        ? "🔑 مینو سے انتخاب کریں:"
+        : newLang === "fr"
+        ? "🔑 Choisissez dans le menu :"
+        : newLang === "hi"
+        ? "🔑 मेनू से चुनें:"
+        : "🔑 Choose from the menu:";
+
+      await ctx.reply(keyboardMsg, {
+        ...getMainKeyboard(newLang),
       });
     });
   }

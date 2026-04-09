@@ -84,6 +84,27 @@ bot.command("manage_bookings", handleManageBookings);
 bot.command("manage_listings", handleManageListings);
 
 // ─── Text Message Handler (AI Chatbot + Booking/Alert input) ─
+// Also handles reply keyboard button presses in all languages
+
+/**
+ * Build a set of all button labels across all languages for quick lookup.
+ * This lets us detect when a user taps a reply keyboard button regardless
+ * of which language they are using.
+ */
+const { strings } = require("./i18n");
+const ALL_BUTTON_LABELS = (() => {
+  const map = {}; // label -> action
+  for (const [langCode, s] of Object.entries(strings)) {
+    if (s.btnSearch)        map[s.btnSearch]        = "action_search";
+    if (s.btnFeatured)      map[s.btnFeatured]      = "action_featured";
+    if (s.btnHelp)          map[s.btnHelp]          = "action_help";
+    if (s.btnNotifications) map[s.btnNotifications] = "action_notifications";
+    // Language button — open language picker
+    if (s.btnLanguage)      map[s.btnLanguage]      = "action_language";
+    // Website / App buttons are URL-based, no text action needed
+  }
+  return map;
+})();
 
 bot.on("text", async (ctx) => {
   // Ignore commands
@@ -93,6 +114,63 @@ bot.on("text", async (ctx) => {
   // Always ensure user exists in DB before any DB writes (prevents FK constraint errors)
   registerUser(ctx);
   const lang = db.getUserLanguage(chatId) || "ar";
+
+  // ── Reply keyboard button detection ──────────────────────────
+  // If the user tapped a reply keyboard button, route to the correct action
+  // instead of sending the label text to the AI.
+  const buttonAction = ALL_BUTTON_LABELS[userMessage];
+  if (buttonAction) {
+    if (buttonAction === "action_search") {
+      return handleSearch(ctx);
+    }
+    if (buttonAction === "action_featured") {
+      // Simulate the featured callback
+      const { Markup } = require("telegraf");
+      const searchingMsg = await ctx.reply(t(lang, "searching"));
+      try {
+        const api = require("./services/api");
+        const properties = await api.getFeaturedProperties();
+        try { await ctx.deleteMessage(searchingMsg.message_id); } catch (e) {}
+        if (!properties || properties.length === 0) {
+          return ctx.reply(t(lang, "noResults"));
+        }
+        await ctx.reply(
+          lang === "ar"
+            ? `\u200F⭐ *العقارات المميزة* (${properties.length})`
+            : `⭐ *Featured Properties* (${properties.length})`,
+          { parse_mode: "Markdown" }
+        );
+        for (const property of properties.slice(0, 5)) {
+          const formatted = api.formatProperty(property, lang);
+          if (!formatted) continue;
+          const buttons = Markup.inlineKeyboard([
+            [Markup.button.url(t(lang, "viewOnWebsite"), `${config.websiteUrl}/property/${property.id}`)],
+          ]);
+          if (formatted.photo) {
+            try {
+              await ctx.replyWithPhoto(formatted.photo, { caption: formatted.text, parse_mode: "Markdown", ...buttons });
+              continue;
+            } catch (e) {}
+          }
+          await ctx.reply(formatted.text, { parse_mode: "Markdown", ...buttons });
+        }
+      } catch (error) {
+        try { await ctx.deleteMessage(searchingMsg.message_id); } catch (e) {}
+        await ctx.reply(t(lang, "error"));
+      }
+      return;
+    }
+    if (buttonAction === "action_help") {
+      return handleHelp(ctx);
+    }
+    if (buttonAction === "action_notifications") {
+      return handleNotifications(ctx);
+    }
+    if (buttonAction === "action_language") {
+      return handleLanguage(ctx);
+    }
+    return;
+  }
 
   // Phase 2: Check if this is a booking flow input (date entry)
   if (ctx.session?.booking) {
