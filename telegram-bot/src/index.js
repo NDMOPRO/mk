@@ -53,6 +53,8 @@ const {
 // Phase 3 imports
 const {
   handleAdmin,
+  handleAdminLogin,
+  handleAdminLoginInput,
   handleStats,
   handleBroadcast,
   handleManageBookings,
@@ -88,7 +90,8 @@ bot.command("subscribe", handleSubscribe);
 bot.command("unsubscribe", handleUnsubscribe);
 
 // Phase 3: Admin commands
-bot.command("admin", handleAdmin);
+// /admin now starts a username/password login flow if credentials are configured
+bot.command("admin", handleAdminLogin);
 bot.command("stats", handleStats);
 bot.command("broadcast", handleBroadcast);
 bot.command("manage_bookings", handleManageBookings);
@@ -181,6 +184,12 @@ bot.on("text", async (ctx) => {
       return handleLanguage(ctx);
     }
     return;
+  }
+
+  // Phase 3: Check if this is an admin login flow input (username/password)
+  if (ctx.session?.adminLogin) {
+    const handled = await handleAdminLoginInput(ctx);
+    if (handled) return;
   }
 
   // Phase 2: Check if this is a booking flow input (date entry)

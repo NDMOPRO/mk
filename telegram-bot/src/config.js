@@ -31,6 +31,10 @@ const config = {
     .map((id) => parseInt(id.trim(), 10))
     .filter((id) => !isNaN(id)),
 
+  // Admin username/password authentication (alternative to ADMIN_IDS)
+  adminUsername: process.env.ADMIN_USERNAME || "",
+  adminPassword: process.env.ADMIN_PASSWORD || "",
+
   // Phase 3: Channel Auto-Posting
   // Channel ID or @username to post new listings to
   channelId: process.env.CHANNEL_ID || "",

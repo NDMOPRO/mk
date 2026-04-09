@@ -6,7 +6,15 @@ const { OpenAI } = require("openai");
 const config = require("../config");
 const db = require("./database");
 
-const openai = new OpenAI();
+// Support OpenAI-compatible proxy via OPENAI_BASE_URL / OPENAI_API_BASE env vars
+const openaiBaseUrl = process.env.OPENAI_BASE_URL || process.env.OPENAI_API_BASE || undefined;
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
+});
+if (openaiBaseUrl) {
+  console.log(`[AI] Using OpenAI proxy: ${openaiBaseUrl}`);
+}
 
 /**
  * System prompt that defines the AI assistant's behavior

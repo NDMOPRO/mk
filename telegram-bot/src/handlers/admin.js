@@ -13,10 +13,27 @@ const api = require("../services/api");
 
 // ─── Admin Authentication ──────────────────────────────────
 
+/**
+ * In-memory set of authenticated admin chat IDs for this session.
+ * Cleared on bot restart — intentional for security.
+ */
+const authenticatedAdmins = new Set();
+
+/**
+ * Returns true if the user is authenticated as admin.
+ * Accepts either:
+ *  1. Telegram user ID in ADMIN_IDS env var (legacy)
+ *  2. Username/password login via /admin command (new)
+ */
 function isAdmin(ctx) {
   const userId = ctx.from?.id;
+  const chatId = ctx.chat?.id;
   if (!userId) return false;
-  return config.adminIds.includes(userId);
+  // Legacy: Telegram user ID whitelist
+  if (config.adminIds.length > 0 && config.adminIds.includes(userId)) return true;
+  // New: username/password session
+  if (authenticatedAdmins.has(chatId)) return true;
+  return false;
 }
 
 function requireAdmin(ctx) {
@@ -30,6 +47,74 @@ function requireAdmin(ctx) {
     return false;
   }
   return true;
+}
+
+/**
+ * Handle /admin command — starts username/password login flow if credentials
+ * are configured, otherwise falls through to the dashboard (legacy ID-based).
+ */
+async function handleAdminLogin(ctx) {
+  const chatId = ctx.chat.id;
+
+  // Already authenticated — go straight to dashboard
+  if (isAdmin(ctx)) {
+    return handleAdmin(ctx);
+  }
+
+  // No credentials configured and no ID match — deny
+  if (!config.adminUsername || !config.adminPassword) {
+    return ctx.reply("⛔ Admin access is not configured.");
+  }
+
+  // Start login flow
+  ctx.session = ctx.session || {};
+  ctx.session.adminLogin = { step: "username" };
+
+  await ctx.reply(
+    "🔐 *Admin Login*\n\nPlease enter your admin username:",
+    { parse_mode: "Markdown" }
+  );
+}
+
+/**
+ * Handle text input during admin login flow.
+ * Called from index.js text handler when ctx.session.adminLogin is set.
+ * Returns true if the input was consumed by the login flow.
+ */
+async function handleAdminLoginInput(ctx) {
+  const session = ctx.session?.adminLogin;
+  if (!session) return false;
+
+  const chatId = ctx.chat.id;
+  const text = ctx.message.text.trim();
+
+  if (session.step === "username") {
+    ctx.session.adminLogin = { step: "password", username: text };
+    await ctx.reply("🔑 Please enter your admin password:");
+    return true;
+  }
+
+  if (session.step === "password") {
+    const usernameOk = session.username === config.adminUsername;
+    const passwordOk = text === config.adminPassword;
+
+    // Clear login session regardless of outcome
+    delete ctx.session.adminLogin;
+
+    if (usernameOk && passwordOk) {
+      authenticatedAdmins.add(chatId);
+      console.log(`[Admin] Login successful for chat ${chatId}`);
+      await ctx.reply("✅ *Login successful!* Welcome to the admin panel.", { parse_mode: "Markdown" });
+      // Show dashboard
+      return handleAdmin(ctx).then(() => true).catch(() => true);
+    } else {
+      console.warn(`[Admin] Failed login attempt for chat ${chatId}`);
+      await ctx.reply("❌ *Incorrect credentials.* Access denied.", { parse_mode: "Markdown" });
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ─── /admin — Main Admin Dashboard ─────────────────────────
@@ -637,6 +722,8 @@ function registerAdminCallbacks(bot) {
 
 module.exports = {
   handleAdmin,
+  handleAdminLogin,
+  handleAdminLoginInput,
   handleStats,
   handleBroadcast,
   handleManageBookings,
