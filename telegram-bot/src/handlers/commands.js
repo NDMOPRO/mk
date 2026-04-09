@@ -1,0 +1,339 @@
+/**
+ * Command Handlers for Monthly Key Telegram Bot
+ */
+const { Markup } = require("telegraf");
+const config = require("../config");
+const { t } = require("../i18n");
+const db = require("../services/database");
+const api = require("../services/api");
+
+/**
+ * Register user and detect language from Telegram settings
+ */
+function registerUser(ctx) {
+  const user = ctx.from;
+  const langCode = user.language_code || "ar";
+  // Default to Arabic for Arabic-speaking regions, English otherwise
+  const lang = langCode.startsWith("ar") ? "ar" : "en";
+
+  db.upsertUser(ctx.chat.id, {
+    username: user.username,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    language: lang,
+  });
+
+  return lang;
+}
+
+/**
+ * Get main menu keyboard
+ */
+function getMainKeyboard(lang) {
+  return Markup.keyboard([
+    [t(lang, "btnSearch"), t(lang, "btnFeatured")],
+    [t(lang, "btnOpenApp"), t(lang, "btnWebsite")],
+    [t(lang, "btnHelp"), t(lang, "btnLanguage")],
+  ]).resize();
+}
+
+/**
+ * /start command handler
+ */
+async function handleStart(ctx) {
+  const lang = registerUser(ctx);
+
+  const inlineButtons = Markup.inlineKeyboard([
+    [
+      Markup.button.callback(t(lang, "btnSearch"), "action_search"),
+      Markup.button.callback(t(lang, "btnFeatured"), "action_featured"),
+    ],
+    [
+      Markup.button.webApp(t(lang, "btnOpenApp"), config.webappUrl),
+      Markup.button.url(t(lang, "btnWebsite"), config.websiteUrl),
+    ],
+    [
+      Markup.button.callback(t(lang, "btnNotifications"), "action_notifications"),
+      Markup.button.callback(t(lang, "btnHelp"), "action_help"),
+    ],
+  ]);
+
+  await ctx.reply(t(lang, "welcome"), {
+    parse_mode: "Markdown",
+    ...inlineButtons,
+  });
+}
+
+/**
+ * /help command handler
+ */
+async function handleHelp(ctx) {
+  const lang = db.getUserLanguage(ctx.chat.id) || registerUser(ctx);
+
+  const buttons = Markup.inlineKeyboard([
+    [
+      Markup.button.callback(t(lang, "btnSearch"), "action_search"),
+      Markup.button.webApp(t(lang, "btnOpenApp"), config.webappUrl),
+    ],
+    [Markup.button.url(t(lang, "btnWebsite"), config.websiteUrl)],
+  ]);
+
+  await ctx.reply(t(lang, "help"), {
+    parse_mode: "Markdown",
+    ...buttons,
+  });
+}
+
+/**
+ * /search command handler
+ */
+async function handleSearch(ctx) {
+  const lang = db.getUserLanguage(ctx.chat.id) || registerUser(ctx);
+
+  // Check if there's a query after /search
+  const text = ctx.message.text;
+  const query = text.replace(/^\/search\s*/, "").trim();
+
+  if (query) {
+    // Direct search with query
+    return performSearch(ctx, query, lang);
+  }
+
+  // Show city selection
+  const buttons = Markup.inlineKeyboard([
+    [Markup.button.callback(t(lang, "btnRiyadh"), "search_city_riyadh")],
+    [Markup.button.callback(t(lang, "btnJeddah"), "search_city_jeddah")],
+    [Markup.button.callback(t(lang, "btnMadinah"), "search_city_madinah")],
+    [
+      Markup.button.callback(
+        lang === "ar" ? "🔍 بحث حر" : "🔍 Free Search",
+        "search_free"
+      ),
+    ],
+  ]);
+
+  await ctx.reply(t(lang, "searchPrompt"), {
+    parse_mode: "Markdown",
+    ...buttons,
+  });
+}
+
+/**
+ * /language command handler
+ */
+async function handleLanguage(ctx) {
+  const buttons = Markup.inlineKeyboard([
+    [Markup.button.callback("🇸🇦 العربية", "lang_ar")],
+    [Markup.button.callback("🇬🇧 English", "lang_en")],
+  ]);
+
+  await ctx.reply(t("en", "chooseLanguage"), {
+    ...buttons,
+  });
+}
+
+/**
+ * /notifications command handler
+ */
+async function handleNotifications(ctx) {
+  const lang = db.getUserLanguage(ctx.chat.id) || registerUser(ctx);
+  const user = db.getUser(ctx.chat.id);
+
+  const newPropStatus = user?.notify_new_properties
+    ? t(lang, "notifEnabled")
+    : t(lang, "notifDisabled");
+  const priceDropStatus = user?.notify_price_drops
+    ? t(lang, "notifEnabled")
+    : t(lang, "notifDisabled");
+  const bookingStatus = user?.notify_bookings
+    ? t(lang, "notifEnabled")
+    : t(lang, "notifDisabled");
+
+  const buttons = Markup.inlineKeyboard([
+    [
+      Markup.button.callback(
+        `${t(lang, "notifNewProperties")} ${newPropStatus}`,
+        "notif_toggle_new_properties"
+      ),
+    ],
+    [
+      Markup.button.callback(
+        `${t(lang, "notifPriceDrops")} ${priceDropStatus}`,
+        "notif_toggle_price_drops"
+      ),
+    ],
+    [
+      Markup.button.callback(
+        `${t(lang, "notifBookings")} ${bookingStatus}`,
+        "notif_toggle_bookings"
+      ),
+    ],
+  ]);
+
+  await ctx.reply(t(lang, "notifSettings"), {
+    parse_mode: "Markdown",
+    ...buttons,
+  });
+}
+
+/**
+ * Perform a property search and display results
+ */
+async function performSearch(ctx, query, lang) {
+  // Send "searching" message
+  const searchingMsg = await ctx.reply(t(lang, "searching"));
+
+  try {
+    // Try to match city names
+    const cityMatch = matchCity(query);
+    const filters = {};
+
+    if (cityMatch) {
+      filters.city = cityMatch.name_en;
+    } else {
+      filters.query = query;
+    }
+
+    filters.limit = 5;
+
+    const result = await api.searchProperties(filters);
+    const properties = result?.items || result || [];
+
+    // Delete "searching" message
+    try {
+      await ctx.deleteMessage(searchingMsg.message_id);
+    } catch (e) {
+      // Ignore if can't delete
+    }
+
+    if (!properties || properties.length === 0) {
+      const noResultButtons = Markup.inlineKeyboard([
+        [Markup.button.callback(t(lang, "btnSearch"), "action_search")],
+        [Markup.button.webApp(t(lang, "btnOpenApp"), config.webappUrl)],
+      ]);
+
+      return ctx.reply(t(lang, "noResults"), {
+        parse_mode: "Markdown",
+        ...noResultButtons,
+      });
+    }
+
+    // Send results header
+    await ctx.reply(
+      `${t(lang, "searchResults")} (${properties.length})`,
+      { parse_mode: "Markdown" }
+    );
+
+    // Send each property
+    for (const property of properties.slice(0, 5)) {
+      const formatted = api.formatProperty(property, lang);
+      if (!formatted) continue;
+
+      const buttons = Markup.inlineKeyboard([
+        [
+          Markup.button.url(
+            t(lang, "viewOnWebsite"),
+            `${config.websiteUrl}/property/${property.id}`
+          ),
+        ],
+      ]);
+
+      if (formatted.photo) {
+        try {
+          await ctx.replyWithPhoto(formatted.photo, {
+            caption: formatted.text,
+            parse_mode: "Markdown",
+            ...buttons,
+          });
+          continue;
+        } catch (e) {
+          // Fall back to text if photo fails
+        }
+      }
+
+      await ctx.reply(formatted.text, {
+        parse_mode: "Markdown",
+        disable_web_page_preview: false,
+        ...buttons,
+      });
+    }
+
+    // Show "more results" button
+    if (properties.length >= 5) {
+      const moreButtons = Markup.inlineKeyboard([
+        [
+          Markup.button.webApp(
+            lang === "ar" ? "📱 عرض المزيد في التطبيق" : "📱 View More in App",
+            config.webappUrl
+          ),
+        ],
+        [
+          Markup.button.url(
+            lang === "ar" ? "🌐 عرض الكل على الموقع" : "🌐 View All on Website",
+            `${config.websiteUrl}/search${cityMatch ? `?city=${cityMatch.id}` : ""}`
+          ),
+        ],
+      ]);
+
+      await ctx.reply(
+        lang === "ar"
+          ? "👆 هذه أبرز النتائج. للمزيد:"
+          : "👆 These are the top results. For more:",
+        { ...moreButtons }
+      );
+    }
+  } catch (error) {
+    console.error("[Search] Error:", error.message);
+    try {
+      await ctx.deleteMessage(searchingMsg.message_id);
+    } catch (e) {}
+    await ctx.reply(t(lang, "error"));
+  }
+}
+
+/**
+ * Match a query to a city
+ */
+function matchCity(query) {
+  if (!query) return null;
+  const q = query.toLowerCase().trim();
+
+  for (const city of config.serviceAreas) {
+    if (
+      q === city.id ||
+      q === city.name_en.toLowerCase() ||
+      q === city.name_ar ||
+      q.includes(city.name_en.toLowerCase()) ||
+      q.includes(city.name_ar)
+    ) {
+      return city;
+    }
+  }
+
+  // Fuzzy match for common variations
+  const aliases = {
+    riyadh: ["riyad", "riad", "ryad", "الرياض"],
+    jeddah: ["jeddah", "jedda", "jidda", "jida", "جدة", "جده"],
+    madinah: ["madinah", "medina", "madina", "المدينة", "المدينه"],
+  };
+
+  for (const [cityId, names] of Object.entries(aliases)) {
+    if (names.some((n) => q.includes(n))) {
+      return config.serviceAreas.find((c) => c.id === cityId);
+    }
+  }
+
+  return null;
+}
+
+module.exports = {
+  handleStart,
+  handleHelp,
+  handleSearch,
+  handleLanguage,
+  handleNotifications,
+  performSearch,
+  matchCity,
+  registerUser,
+  getMainKeyboard,
+};
