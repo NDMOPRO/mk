@@ -148,16 +148,18 @@ async function handleHelp(ctx) {
 async function handleSearch(ctx) {
   const lang = db.getUserLanguage(ctx.chat.id) || registerUser(ctx);
 
-  // Check if there's a query after /search
-  const text = ctx.message.text;
-  const query = text.replace(/^\/search\s*/, "").trim();
+  // Extract query only when called from a real /search command (not a keyboard button press)
+  // A keyboard button press has ctx.message.text equal to the button label (no leading slash)
+  const rawText = ctx.message?.text || "";
+  const isCommand = rawText.startsWith("/search");
+  const query = isCommand ? rawText.replace(/^\/search\s*/, "").trim() : "";
 
   if (query) {
-    // Direct search with query
+    // Direct search with query: /search riyadh
     return performSearch(ctx, query, lang);
   }
 
-  // Show city selection
+  // Show city selection keyboard
   const buttons = Markup.inlineKeyboard([
     [Markup.button.callback(t(lang, "btnRiyadh"), "search_city_riyadh")],
     [Markup.button.callback(t(lang, "btnJeddah"), "search_city_jeddah")],
