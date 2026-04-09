@@ -7,6 +7,17 @@
  * Phase 3: Admin Dashboard, Channel Auto-Posting, Multi-language, Enhanced Inline
  */
 const { Telegraf, session } = require("telegraf");
+const fs = require("fs");
+const path = require("path");
+
+// ─── Heartbeat (for keep-alive monitor) ──────────────────────
+const HEARTBEAT_FILE = path.join(__dirname, "../.heartbeat");
+function writeHeartbeat() {
+  try { fs.writeFileSync(HEARTBEAT_FILE, Date.now().toString()); } catch (e) {}
+}
+// Write heartbeat every 2 minutes while the bot is polling
+setInterval(writeHeartbeat, 2 * 60 * 1000);
+writeHeartbeat(); // Write immediately on start
 const config = require("./config");
 const db = require("./services/database");
 const ai = require("./services/ai");
@@ -264,6 +275,7 @@ setupBot();
 bot
   .launch()
   .then(() => {
+    writeHeartbeat(); // Confirm bot is up
     console.log("-------------------------------------------");
     console.log("Monthly Key Telegram Bot is RUNNING");
     console.log(`Bot Username: @${bot.botInfo?.username || "Bot"}`);
