@@ -28,11 +28,17 @@ function registerUser(ctx) {
 
 /**
  * Get main menu keyboard
+ * The "Open App" button uses Telegram's web_app KeyboardButton type
+ * so it launches the Mini App directly instead of sending text.
  */
 function getMainKeyboard(lang) {
   return Markup.keyboard([
     [t(lang, "btnSearch"), t(lang, "btnFeatured")],
-    [t(lang, "btnOpenApp"), t(lang, "btnWebsite")],
+    [
+      // web_app button — opens Mini App directly in Telegram
+      { text: t(lang, "btnOpenApp"), web_app: { url: config.webappUrl } },
+      t(lang, "btnWebsite"),
+    ],
     [t(lang, "btnHelp"), t(lang, "btnLanguage")],
   ]).resize();
 }

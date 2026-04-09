@@ -113,9 +113,11 @@ const ALL_BUTTON_LABELS = (() => {
     if (s.btnFeatured)      map[s.btnFeatured]      = "action_featured";
     if (s.btnHelp)          map[s.btnHelp]          = "action_help";
     if (s.btnNotifications) map[s.btnNotifications] = "action_notifications";
-    // Language button — open language picker
     if (s.btnLanguage)      map[s.btnLanguage]      = "action_language";
-    // Website / App buttons are URL-based, no text action needed
+    // Open App and Website buttons — normally web_app/URL buttons don't send text,
+    // but as a fallback (e.g., old keyboards cached by Telegram), intercept them too.
+    if (s.btnOpenApp)       map[s.btnOpenApp]       = "action_open_app";
+    if (s.btnWebsite)       map[s.btnWebsite]       = "action_website";
   }
   return map;
 })();
@@ -182,6 +184,28 @@ bot.on("text", async (ctx) => {
     }
     if (buttonAction === "action_language") {
       return handleLanguage(ctx);
+    }
+    if (buttonAction === "action_open_app") {
+      // Fallback: if the web_app keyboard button sent text instead of opening the app,
+      // reply with an inline keyboard that has a web_app button to launch the Mini App.
+      const { Markup } = require("telegraf");
+      const appMsg = lang === "ar"
+        ? "\u200F📱 اضغط الزر أدناه لفتح التطبيق:"
+        : "📱 Tap the button below to open the app:";
+      const appBtn = Markup.inlineKeyboard([
+        [Markup.button.webApp(t(lang, "btnOpenApp"), config.webappUrl)],
+      ]);
+      return ctx.reply(appMsg, { ...appBtn });
+    }
+    if (buttonAction === "action_website") {
+      const { Markup } = require("telegraf");
+      const webMsg = lang === "ar"
+        ? "\u200F🌐 زر موقعنا:"
+        : "🌐 Visit our website:";
+      const webBtn = Markup.inlineKeyboard([
+        [Markup.button.url(t(lang, "btnWebsite"), config.websiteUrl)],
+      ]);
+      return ctx.reply(webMsg, { ...webBtn });
     }
     return;
   }
