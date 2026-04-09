@@ -1,0 +1,19 @@
+[Unit]
+Description=Monthly Key Daily Operations HQ — Telegram Reminder Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/telegram-bot
+ExecStart=/usr/bin/python3 /home/ubuntu/telegram-bot/bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment=BOT_TOKEN=8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84
+Environment=CHAT_ID=-1003967447285
+
+[Install]
+WantedBy=multi-user.target
