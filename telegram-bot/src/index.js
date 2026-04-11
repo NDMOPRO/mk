@@ -126,10 +126,23 @@ bot.on("text", async (ctx) => {
   // Ignore commands
   if (ctx.message.text.startsWith("/")) return;
   const chatId = ctx.chat.id;
+  const chatType = ctx.chat.type; // 'private', 'group', 'supergroup', 'channel'
+  const isPrivate = chatType === "private";
   const userMessage = ctx.message.text;
   // Always ensure user exists in DB before any DB writes (prevents FK constraint errors)
   registerUser(ctx);
   const lang = db.getUserLanguage(chatId) || "ar";
+
+  // In group chats, only respond if the bot is explicitly mentioned (@monthlykey_bot)
+  // or if the message is a reply to the bot's own message.
+  // This prevents the bot from responding to every message in a busy group.
+  if (!isPrivate) {
+    const botUsername = bot.botInfo?.username;
+    const isMentioned = botUsername && userMessage.includes(`@${botUsername}`);
+    const isReplyToBot =
+      ctx.message.reply_to_message?.from?.id === bot.botInfo?.id;
+    if (!isMentioned && !isReplyToBot) return; // Silently ignore
+  }
 
   // ── Reply keyboard button detection ──────────────────────────
   // If the user tapped a reply keyboard button, route to the correct action
@@ -234,13 +247,24 @@ bot.on("text", async (ctx) => {
   try {
     const aiResponse = await ai.getAiResponse(chatId, userMessage);
 
-    await ctx.reply(aiResponse, {
-      parse_mode: "Markdown",
-      ...getMainKeyboard(lang),
-    });
+    // In group chats, web_app buttons are not allowed by Telegram.
+    // Send the AI response without any keyboard in groups.
+    if (isPrivate) {
+      await ctx.reply(aiResponse, {
+        parse_mode: "Markdown",
+        ...getMainKeyboard(lang),
+      });
+    } else {
+      await ctx.reply(aiResponse, { parse_mode: "Markdown" });
+    }
   } catch (error) {
-    console.error("[Bot] Error in text handler:", error);
-    await ctx.reply(t(lang, "error"));
+    console.error("[Bot] Error in text handler:", error.message);
+    // In groups, try to reply without Markdown in case of parse errors
+    try {
+      await ctx.reply(t(lang, "error"));
+    } catch (e) {
+      console.error("[Bot] Could not send error reply:", e.message);
+    }
   }
 });
 
