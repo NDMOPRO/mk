@@ -794,19 +794,97 @@ async function handleOpsRecurring(ctx) {
 }
 
 async function handleOpsMeeting(ctx) {
-  const chatId = ctx.chat.id;
   const threadId = ctx.message?.message_thread_id || null;
-  const topicInfo = getTopicInfo(threadId);
-  const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
-  const args = extractCommandArgs(ctx.message.text, "meeting");
-  if (args === "start") {
-    const id = opsDb.startMeeting(chatId, threadId, topicInfo.name, user);
-    ctx.reply(`🚀 Meeting started! (#${id})`, { message_thread_id: threadId });
-  } else if (args.startsWith("end")) {
-    const active = opsDb.getActiveMeeting(chatId, threadId);
-    if (!active) return ctx.reply("❌ No active meeting", { message_thread_id: threadId });
-    opsDb.endMeeting(active.id, args.replace("end", "").trim());
-    ctx.reply(`🏁 Meeting ended.`, { message_thread_id: threadId });
+  try {
+    const chatId = ctx.chat.id;
+    const topicInfo = getTopicInfo(threadId);
+    const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+    const args = extractCommandArgs(ctx.message.text, "meeting");
+
+    // ─── No args: show usage ───
+    if (!args) {
+      const en = `📝 *Meeting Manager*\n\nSubcommands:\n• \`/meeting start\` — start a new meeting\n• \`/meeting end [summary]\` — end the active meeting\n• \`/meeting note [text]\` — add a note to the active meeting\n• \`/meeting status\` — show active meeting details`;
+      const ar = `📝 *إدارة الاجتماعات*\n\nالأوامر:\n• \`/meeting start\` — بدء اجتماع جديد\n• \`/meeting end [ملخص]\` — إنهاء الاجتماع الحالي\n• \`/meeting note [نص]\` — إضافة ملاحظة للاجتماع الحالي\n• \`/meeting status\` — عرض تفاصيل الاجتماع الحالي`;
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+
+    // ─── start ───
+    if (args === "start") {
+      const id = opsDb.startMeeting(chatId, threadId, topicInfo.name, user);
+      const en = `🚀 *Meeting started!*\n\n📝 Meeting #${id}\n📍 ${topicInfo.name}\n👤 Started by: ${user}\n\nUse \`/meeting note [text]\` to add notes\nUse \`/meeting end [summary]\` when done`;
+      const ar = `🚀 *بدأ الاجتماع!*\n\n📝 اجتماع #${id}\n📍 ${topicInfo.arName}\n👤 بدأ بواسطة: ${user}\n\nاستخدم \`/meeting note [نص]\` لإضافة ملاحظات\nاستخدم \`/meeting end [ملخص]\` عند الانتهاء`;
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+
+    // ─── end [optional summary] ───
+    if (args === "end" || args.startsWith("end ")) {
+      const active = opsDb.getActiveMeeting(chatId, threadId);
+      if (!active) {
+        const en = `❌ No active meeting in this topic.\nUse \`/meeting start\` to begin one.`;
+        const ar = `❌ لا يوجد اجتماع نشط في هذا الموضوع.\nاستخدم \`/meeting start\` لبدء اجتماع.`;
+        return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      }
+      const summary = args.replace(/^end\s*/i, "").trim();
+      opsDb.endMeeting(active.id, summary || null);
+
+      // Fetch notes count
+      const notes = opsDb.getMeetingMessages(active.id);
+      const startedAt = active.started_at ? new Date(active.started_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "?";
+
+      const en = `🏁 *Meeting ended!*\n\n📝 Meeting #${active.id}\n📍 ${topicInfo.name}\n⏰ Started: ${startedAt}\n📎 Notes captured: ${notes.length}${summary ? `\n📌 Summary: ${summary}` : ""}`;
+      const ar = `🏁 *انتهى الاجتماع!*\n\n📝 اجتماع #${active.id}\n📍 ${topicInfo.arName}\n⏰ بدأ: ${startedAt}\n📎 الملاحظات: ${notes.length}${summary ? `\n📌 الملخص: ${summary}` : ""}`;
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+
+    // ─── note [text] ───
+    if (args.startsWith("note")) {
+      const noteText = args.replace(/^note\s*/i, "").trim();
+      if (!noteText) {
+        const en = `❌ Please provide note text.\nUsage: \`/meeting note Your note here\``;
+        const ar = `❌ يرجى تقديم نص الملاحظة.\nالاستخدام: \`/meeting note ملاحظتك هنا\``;
+        return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      }
+      const active = opsDb.getActiveMeeting(chatId, threadId);
+      if (!active) {
+        const en = `❌ No active meeting. Start one with \`/meeting start\``;
+        const ar = `❌ لا يوجد اجتماع نشط. ابدأ باستخدام \`/meeting start\``;
+        return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      }
+      opsDb.addMeetingMessage(active.id, user, noteText);
+      const notes = opsDb.getMeetingMessages(active.id);
+      const en = `✅ *Note added* (${notes.length} total)\n\n📝 ${noteText}\n👤 ${user}`;
+      const ar = `✅ *تمت إضافة الملاحظة* (المجموع: ${notes.length})\n\n📝 ${noteText}\n👤 ${user}`;
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+
+    // ─── status ───
+    if (args === "status") {
+      const active = opsDb.getActiveMeeting(chatId, threadId);
+      if (!active) {
+        const en = `ℹ️ No active meeting in this topic.\nUse \`/meeting start\` to begin one.`;
+        const ar = `ℹ️ لا يوجد اجتماع نشط في هذا الموضوع.\nاستخدم \`/meeting start\` للبدء.`;
+        return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      }
+      const notes = opsDb.getMeetingMessages(active.id);
+      const startedAt = active.started_at ? new Date(active.started_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "?";
+      let en = `📊 *Active Meeting Status*\n\n📝 Meeting #${active.id}\n📍 ${topicInfo.name}\n👤 Started by: ${active.started_by}\n⏰ Started: ${startedAt}\n📎 Notes: ${notes.length}`;
+      let ar = `📊 *حالة الاجتماع النشط*\n\n📝 اجتماع #${active.id}\n📍 ${topicInfo.arName}\n👤 بدأ بواسطة: ${active.started_by}\n⏰ بدأ: ${startedAt}\n📎 الملاحظات: ${notes.length}`;
+      if (notes.length > 0) {
+        en += `\n\n*Recent notes:*`;
+        ar += `\n\n*آخر الملاحظات:*`;
+        notes.slice(-3).forEach(n => { en += `\n• ${n.message_text} (${n.from_user})`; ar += `\n• ${n.message_text} (${n.from_user})`; });
+      }
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+
+    // ─── Unknown subcommand ───
+    const en = `❌ Unknown subcommand: \`${args.split(" ")[0]}\`\n\nValid: \`start\`, \`end\`, \`note\`, \`status\``;
+    const ar = `❌ أمر غير معروف: \`${args.split(" ")[0]}\`\n\nالصحيح: \`start\`، \`end\`، \`note\`، \`status\``;
+    return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+
+  } catch (e) {
+    console.error("[handleOpsMeeting] Error:", e.message);
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
   }
 }
 
