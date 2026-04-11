@@ -907,6 +907,54 @@ async function flagUncheckedMembers() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 13. Weekly CEO Message ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async function sendWeeklyCeoMessage() {
+  if (!bot) return;
+  if (alreadySent("weekly_ceo")) return;
+
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  const dayOfWeek = ksa.getUTCDay();
+  if (dayOfWeek !== 0 || hour !== 6 || min >= 5) return;
+
+  markSent("weekly_ceo");
+
+  try {
+    const stats = opsDb.getWeeklyStats(OPS_GROUP_ID);
+    const monthly = opsDb.getMonthlyStats(OPS_GROUP_ID);
+    const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
+    const completionRate = stats.created > 0 ? Math.round((stats.completed / stats.created) * 100) : 0;
+
+    let msg = `👑 *Weekly CEO Report | التقرير الأسبوعي للرئيس التنفيذي*\n`;
+    msg += `${DIV}\n\n`;
+    msg += `📊 *Week Summary:*\n`;
+    msg += `  • Created: ${stats.created || 0}\n`;
+    msg += `  • Completed: ${stats.completed || 0}\n`;
+    msg += `  • Completion Rate: ${completionRate}%\n`;
+    msg += `  • Overdue: ${overdue.length}\n`;
+    if (stats.avgResolutionHours) msg += `  • Avg Resolution: ${stats.avgResolutionHours}h\n`;
+    msg += `\n${DIV}\n\n`;
+    msg += `📊 *ملخص الأسبوع:*\n`;
+    msg += `  • المنشأة: ${stats.created || 0}\n`;
+    msg += `  • المكتملة: ${stats.completed || 0}\n`;
+    msg += `  • معدل الإنجاز: ${completionRate}%\n`;
+    msg += `  • المتأخرة: ${overdue.length}\n`;
+    if (stats.avgResolutionHours) msg += `  • متوسط وقت الحل: ${stats.avgResolutionHours} ساعة\n`;
+
+    await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
+      parse_mode: "Markdown",
+      message_thread_id: THREAD_CEO_UPDATE,
+    });
+    console.log("[OpsScheduler] Weekly CEO message posted");
+  } catch (error) {
+    console.error("[OpsScheduler] Weekly CEO message error:", error.message);
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ━━━ 14. Weekly Team Standup ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

@@ -125,7 +125,7 @@ async function handleOpsTemplate(ctx) {
   if (subCmd === "save") {
     const match = args.match(/^save\s+"([^"]+)"\s+"([\s\S]+)"$/);
     if (!match) return ctx.reply("❌ Usage: `/template save \"name\" \"content\"`", { message_thread_id: threadId });
-    v5Db.saveMessageTemplate(chatId, match[1], match[2], ctx.from.username || ctx.from.first_name);
+    v5Db.saveTemplate(chatId, match[1], match[2], ctx.from.username || ctx.from.first_name);
     const en = `✅ *Template Saved*\n\n📝 Name: ${match[1]}`;
     const ar = `✅ *تم حفظ القالب*\n\n📝 الاسم: ${match[1]}`;
     return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
@@ -150,7 +150,7 @@ async function handleOpsClean(ctx) {
     const unitId = parts[1];
     const cleaner = parts[2] || ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
     if (!unitId) return ctx.reply("❌ Usage: `/clean checkin unit5 @CleanerName`", { message_thread_id: threadId });
-    v5Db.addCleaningLog(chatId, unitId, subCmd, cleaner, "", "completed", threadId);
+    v5Db.addCleaningLog(chatId, unitId, subCmd, cleaner, "", threadId);
     const en = `✅ *Cleaning Logged*\n\n🏠 Unit: ${unitId}\n🧹 Type: ${subCmd}\n👤 Cleaner: ${cleaner}`;
     const ar = `✅ *تم تسجيل التنظيف*\n\n🏠 الوحدة: ${unitId}\n🧹 النوع: ${subCmd}\n👤 المنظف: ${cleaner}`;
     return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
@@ -260,7 +260,11 @@ async function handlePhotoReviewCallback(ctx) {
   const photoId = parseInt(match[2]);
   const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
 
-  v5Db.updatePhotoStatus(photoId, action === "approve" ? "approved" : "rejected", user);
+  if (action === "approve") {
+    v5Db.approvePhoto(photoId, user);
+  } else {
+    v5Db.rejectPhoto(photoId, user, null);
+  }
   await ctx.answerCbQuery(action === "approve" ? "✅ Approved / تم القبول" : "❌ Rejected / تم الرفض");
   
   const statusEmoji = action === "approve" ? "✅" : "❌";
@@ -272,8 +276,38 @@ async function handlePhotoReviewCallback(ctx) {
 
 // ─── Exports ────────────────────────────────────────────────
 
+function initV5() {
+  v5Db.initV5Tables();
+}
+
+async function checkAndPostWeatherAlerts(bot) {
+  // Weather alerts - fetch from API and post if extreme conditions
+  try {
+    const fetch = require("node-fetch");
+    const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=24.7136&longitude=46.6753&current=temperature_2m,wind_speed_10m,weather_code&timezone=Asia/Riyadh");
+    const data = await res.json();
+    const temp = data.current?.temperature_2m;
+    const wind = data.current?.wind_speed_10m;
+    const code = data.current?.weather_code;
+    
+    // Only alert for extreme conditions
+    if (temp > 45 || temp < 5 || wind > 50 || (code >= 95 && code <= 99)) {
+      const OPS_GROUP_ID = -1003967447285;
+      const THREAD_OPS = 8;
+      let en = `\u26a0\ufe0f *Weather Alert | \u062a\u0646\u0628\u064a\u0647 \u0637\u0642\u0633*\n\n`;
+      en += `\ud83c\udf21 Temp: ${temp}\u00b0C | \ud83d\udca8 Wind: ${wind} km/h\n`;
+      en += `\ud83d\udccd Riyadh | Code: ${code}\n\n`;
+      en += `Please take necessary precautions.\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u064a\u0631\u062c\u0649 \u0627\u062a\u062e\u0627\u0630 \u0627\u0644\u0627\u062d\u062a\u064a\u0627\u0637\u0627\u062a \u0627\u0644\u0644\u0627\u0632\u0645\u0629.`;
+      await bot.telegram.sendMessage(OPS_GROUP_ID, en, { parse_mode: "Markdown", message_thread_id: THREAD_OPS });
+    }
+  } catch (e) {
+    console.error("[Weather] Alert check error:", e.message);
+  }
+}
+
 module.exports = {
   handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsClean,
   handleOpsTrends, handleOpsWeather, handleOpsIdea, handleOpsIdeas,
-  handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback
+  handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback,
+  initV5, checkAndPostWeatherAlerts,
 };

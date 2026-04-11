@@ -846,14 +846,17 @@ module.exports = {
   // Task queries
   getOverdueTasks, getTasksDueToday, getTasksByAssignee, getTasksByProperty,
   updateTaskProperty, transferTask,
+  moveTask: transferTask,  // alias used by ops.js handleOpsMove
   // KPI / Stats
   getWeeklyStats, getCompletedToday, getStaleBlockers, getMonthlyStats,
   // Time-range queries
   getTasksCreatedSince, getTasksCompletedSince,
   // Follow-ups
   addFollowUp, getDueFollowUps, markFollowUpSent,
+  markFollowUpDone: markFollowUpSent,  // alias used by scheduler
   // Reminders
   addReminder, getDueReminders, markReminderSent,
+  markReminderDone: markReminderSent,  // alias used by scheduler
   // Media Log
   addMediaLog, getMediaByProperty, getMediaByTask, getMediaByThread,
   // Vendor Follow-ups
@@ -862,6 +865,7 @@ module.exports = {
   hasReportBeenSent, markReportSent,
   // SLA (Feature 1)
   setSlaConfig, getSlaConfig, getSlaForThread, hasSlaAlertBeenSent, markSlaAlertSent, getTasksWithSla,
+  getAllSlaConfigs: getSlaConfig,  // alias used by scheduler
   // Approvals (Feature 2)
   addApproval, getApprovalById, decideApproval, getPendingApprovals, getApprovalByMessageId,
   // Recurring Tasks (Feature 3)
