@@ -75,7 +75,7 @@ async function sendMorningBriefing() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  if (hour !== 6 || min >= 5) return;
+  if (hour !== 9 || min >= 5) return;  // 9 AM KSA
 
   markSent("morning_briefing");
 
@@ -204,7 +204,7 @@ async function sendDailyReport() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  if (hour !== 18 || min >= 5) return;
+  if (hour !== 21 || min >= 5) return;  // 9 PM KSA
 
   markSent("daily_report");
 
@@ -327,7 +327,7 @@ async function sendEveningReminder() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  if (hour !== 15 || min >= 5) return;
+  if (hour !== 18 || min >= 5) return;  // 6 PM KSA
 
   markSent("evening_reminder");
 
@@ -739,7 +739,7 @@ async function syncToGoogle() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  if (hour !== 18 || min < 15 || min >= 20) return;
+  if (hour !== 21 || min < 15 || min >= 20) return;  // 9:15 PM KSA
 
   markSent("google_sync");
 
@@ -847,7 +847,7 @@ async function sendCheckinReminder() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  if (hour !== 14 || min >= 5) return;
+  if (hour !== 17 || min >= 5) return;  // 5 PM KSA
 
   markSent("checkin_reminder");
 
@@ -889,7 +889,7 @@ async function flagUncheckedMembers() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  if (hour !== 15 || min >= 5) return;
+  if (hour !== 18 || min >= 5) return;  // 6 PM KSA
 
   markSent("checkin_flag");
 
@@ -918,7 +918,7 @@ async function sendWeeklyCeoMessage() {
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
   const dayOfWeek = ksa.getUTCDay();
-  if (dayOfWeek !== 0 || hour !== 6 || min >= 5) return;
+  if (dayOfWeek !== 0 || hour !== 9 || min >= 5) return;  // Sunday 9 AM KSA
 
   markSent("weekly_ceo");
 
@@ -966,7 +966,7 @@ async function sendWeeklyStandup() {
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
   const dayOfWeek = ksa.getUTCDay();
-  if (dayOfWeek !== 0 || hour !== 6 || min >= 5) return;
+  if (dayOfWeek !== 0 || hour !== 9 || min >= 5) return;  // Sunday 9 AM KSA
 
   markSent("weekly_standup");
 
