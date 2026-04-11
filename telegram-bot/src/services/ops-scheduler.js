@@ -20,6 +20,7 @@
 const opsDb = require("./ops-database");
 const v4Db = require("./ops-database-v4");
 const googleSync = require("./google-sync");
+const v5Handlers = require("../handlers/ops-v5");
 
 let bot = null;
 let schedulerInterval = null;
@@ -902,8 +903,32 @@ async function tick() {
     await flagUncheckedMembers();
     await sendWeeklyStandup();
 
+    // v5: Weather alerts (7:00 AM KSA daily)
+    await checkDailyWeather();
+
   } catch (error) {
     console.error("[OpsScheduler] Tick error:", error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ v5: Weather Check (7 AM KSA daily) ═════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+const weatherCheckDone = {};
+async function checkDailyWeather() {
+  if (!bot) return;
+  const now = new Date();
+  const ksaHour = ((now.getUTCHours() + 3) % 24);
+  const ksaMin = now.getUTCMinutes();
+  const todayKey = `weather_${now.toISOString().split('T')[0]}`;
+  if (ksaHour === 7 && ksaMin < 5 && !weatherCheckDone[todayKey]) {
+    weatherCheckDone[todayKey] = true;
+    try {
+      await v5Handlers.checkAndPostWeatherAlerts(bot);
+    } catch (e) {
+      console.error('[OpsScheduler] Weather check error:', e.message);
+    }
   }
 }
 
@@ -923,6 +948,14 @@ function startOpsScheduler(botInstance) {
     console.log("[OpsScheduler] v4 tables initialized");
   } catch (e) {
     console.error("[OpsScheduler] v4 init error:", e.message);
+  }
+
+  // Initialize v5 tables
+  try {
+    v5Handlers.initV5();
+    console.log("[OpsScheduler] v5 tables initialized");
+  } catch (e) {
+    console.error("[OpsScheduler] v5 init error:", e.message);
   }
 
   // Initialize default SLA configs
@@ -969,9 +1002,10 @@ function startOpsScheduler(botInstance) {
   console.log("  • Google Sheets/Calendar sync: 9:15 PM KSA daily");
   console.log("  • Check-in reminder: 5:00 PM KSA daily");
   console.log("  • Unchecked flag: 6:00 PM KSA daily");
-  console.log("  • Weekly standup: Sunday 9:00 AM KSA");
-  console.log("  • Mention alerts: every 5 min");
-  console.log("  • Priority auto-escalation: every 5 min");
+  console.log("  \u2022 Weekly standup: Sunday 9:00 AM KSA");
+  console.log("  \u2022 Mention alerts: every 5 min");
+  console.log("  \u2022 Priority auto-escalation: every 5 min");
+  console.log("  \u2022 Weather alerts: 7:00 AM KSA daily");
 }
 
 function stopOpsScheduler() {

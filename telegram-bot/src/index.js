@@ -92,6 +92,9 @@ const {
   handleOpsOccupancy,
   handleOpsMeeting,
   handleOpsGsync,
+  // v5
+  handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsTrends, handleOpsWeather, handleOpsClean,
+  handleOpsIdea, handleOpsIdeas, handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback,
   // AI & media handlers
   handleOpsMessage,
   handleOpsMedia,
@@ -119,6 +122,9 @@ const {
   handleV4Passive,
   initV4,
 } = require("./handlers/ops-v4");
+
+// v5 Database Init
+const { initV5Tables } = require("./services/ops-database-v5");
 
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
@@ -387,6 +393,58 @@ bot.command("pin", (ctx) => {
   return handleOpsPin(ctx);
 });
 
+// ─── Phase 4 v5: New Ops Commands (8 features) ─────────────────────────────
+
+bot.command("mlog", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsMlog(ctx);
+});
+
+bot.command("workflow", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsWorkflow(ctx);
+});
+
+bot.command("template", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsTemplate(ctx);
+});
+
+bot.command("trends", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsTrends(ctx);
+});
+
+bot.command("weather", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsWeather(ctx);
+});
+
+bot.command("clean", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsClean(ctx);
+});
+
+bot.command("idea", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsIdea(ctx);
+});
+
+bot.command("ideas", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsIdeas(ctx);
+});
+
+bot.command("brainstorm", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsBrainstorm(ctx);
+});
+
+bot.command("photos", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsPhotos(ctx);
+});
+
 // ─── Text Message Handler ─────────────────────────────────────
 
 /**
@@ -602,6 +660,15 @@ bot.action(/^poll_vote_/, async (ctx) => {
   }
 });
 
+bot.action(/^photo_(approve|reject)_(\d+)$/, async (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  try {
+    await handlePhotoReviewCallback(ctx);
+  } catch (e) {
+    console.error("[Bot] Photo review callback error:", e.message);
+  }
+});
+
 // ─── Inline Search & Callbacks ────────────────────────────────
 
 registerCallbacks(bot);
@@ -664,10 +731,18 @@ async function setupBot() {
         { command: "back",          description: "Mark as back | تعيين عودة" },
         { command: "availability",  description: "Team availability | توفر الفريق" },
         { command: "poll",          description: "Create poll | إنشاء استطلاع" },
-        { command: "pin",           description: "Pin summary | تثبيت ملخص" },
-      ],
-      { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
-    );
+        { command: "pin",          description: "Pin a summary in topic" },
+        { command: "mlog",         description: "Log maintenance" },
+        { command: "workflow",     description: "Manage workflows" },
+        { command: "template",     description: "Message templates" },
+        { command: "trends",       description: "View trends" },
+        { command: "weather",      description: "Check weather" },
+        { command: "clean",        description: "Cleaning log" },
+        { command: "idea",         description: "Submit idea" },
+        { command: "ideas",        description: "Idea board" },
+        { command: "brainstorm",   description: "Start brainstorm" },
+        { command: "photos",       description: "Property photos" },
+    ], { scope: { type: "chat", chat_id: OPS_GROUP_ID } });
 
     await bot.telegram.setChatMenuButton({
       menuButton: {
@@ -705,16 +780,18 @@ bot
     console.log("Phase 1: Search, AI Chat, Notifications");
     console.log("Phase 2: Booking, Payments, Alerts");
     console.log("Phase 3: Admin, Channel, Multi-lang, Inline");
-    console.log("Phase 4: Ops Group v4 — 39 Features (Tasks, KPI, SLA, Roles, Audit, Polls, etc.)");
+    console.log("Phase 4: Ops Group v5 — 49 Features (Tasks, KPI, SLA, Roles, Audit, Polls, Ideas, Photos, etc.)");
     console.log("Languages: AR, EN, FR, UR, HI");
     console.log("-------------------------------------------");
 
-    // Initialize v4 database tables
+    // Initialize v4/v5 database tables
     try {
       initV4();
       console.log("[Bot] v4 tables initialized");
+      initV5Tables();
+      console.log("[Bot] v5 tables initialized");
     } catch (e) {
-      console.error("[Bot] v4 init error:", e.message);
+      console.error("[Bot] v4/v5 init error:", e.message);
     }
 
     // Start the ops scheduler after bot is connected

@@ -304,6 +304,9 @@ const OPS_TOOLS = [
   { type: "function", function: { name: "get_all_tasks_summary", description: "Summary of all tasks across topics.", parameters: { type: "object", properties: {} } } },
   { type: "function", function: { name: "move_task", description: "Move a task to another topic.", parameters: { type: "object", properties: { task_id: { type: "integer" }, target_topic: { type: "string", description: "ops, listings, bookings, support, tech, payments, marketing, legal, blockers, completed, priorities, ceo" } }, required: ["task_id", "target_topic"] } } },
   { type: "function", function: { name: "create_vendor_followup", description: "Track a vendor/contractor promise.", parameters: { type: "object", properties: { vendor_name: { type: "string" }, promise: { type: "string" }, deadline: { type: "string" } }, required: ["vendor_name", "promise", "deadline"] } } },
+  // v5 new tools
+  { type: "function", function: { name: "log_maintenance", description: "Log a maintenance job for a unit with description and cost.", parameters: { type: "object", properties: { unit_id: { type: "string", description: "Unit identifier, e.g. unit5, villa3" }, description: { type: "string", description: "What maintenance was done" }, cost: { type: "number", description: "Cost in SAR, 0 if unknown" }, performed_by: { type: "string", description: "Optional @username of who did the work" } }, required: ["unit_id", "description"] } } },
+  { type: "function", function: { name: "log_cleaning", description: "Log a cleaning activity for a unit.", parameters: { type: "object", properties: { unit_id: { type: "string", description: "Unit identifier" }, cleaning_type: { type: "string", enum: ["checkin", "checkout", "deep"], description: "Type of cleaning" }, cleaner_name: { type: "string", description: "Optional @username of cleaner" }, notes: { type: "string", description: "Optional notes" } }, required: ["unit_id", "cleaning_type"] } } },
   // v3 new tools
   { type: "function", function: { name: "add_expense", description: "Record an expense/cost.", parameters: { type: "object", properties: { amount: { type: "number", description: "Amount in SAR." }, description: { type: "string" }, category: { type: "string", description: "maintenance, supplies, utilities, services, other" }, property_tag: { type: "string" } }, required: ["amount", "description"] } } },
   { type: "function", function: { name: "set_occupancy", description: "Update unit/property occupancy status.", parameters: { type: "object", properties: { unit_name: { type: "string", description: "e.g. unit5, villa3" }, status: { type: "string", enum: ["occupied", "vacant", "maintenance"] }, tenant_name: { type: "string" } }, required: ["unit_name", "status"] } } },
@@ -400,6 +403,16 @@ function executeTool(toolName, args, chatId, threadId, topicInfo, fromUser) {
         opsDb.addTaskDependency(args.task_id, args.depends_on);
         return { success: true, task_id: args.task_id, depends_on: args.depends_on, task_title: t1.title, depends_on_title: t2.title };
       }
+      case "log_maintenance": {
+        const v5Db = require("../services/ops-database-v5");
+        const logId = v5Db.addMaintenanceLog(chatId, args.unit_id, args.description, args.cost || 0, args.performed_by || fromUser, threadId, threadId);
+        return { success: true, log_id: logId, unit_id: args.unit_id, description: args.description, cost: args.cost || 0, performed_by: args.performed_by || fromUser };
+      }
+      case "log_cleaning": {
+        const v5Db = require("../services/ops-database-v5");
+        const cleanId = v5Db.addCleaningLog(chatId, args.unit_id, args.cleaning_type, args.cleaner_name || fromUser, args.notes || null, threadId);
+        return { success: true, log_id: cleanId, unit_id: args.unit_id, cleaning_type: args.cleaning_type, cleaner_name: args.cleaner_name || fromUser };
+      }
       default:
         return { success: false, error: `Unknown tool: ${toolName}` };
     }
@@ -440,6 +453,8 @@ Today: ${today}
 - add_expense — record expenses (amount in SAR, category, property)
 - set_occupancy — update unit status (occupied/vacant/maintenance)
 - add_dependency — set task dependency (task X blocked until task Y done)
+- log_maintenance — log maintenance work for a unit (description, cost, who did it)
+- log_cleaning — log cleaning activity for a unit (checkin/checkout/deep)
 
 ## RULES
 - ❌ Do NOT ask for details already in context
@@ -1235,6 +1250,33 @@ async function handleOpsMedia(ctx) {
   else if (ctx.message.video) { fileId = ctx.message.video.file_id; fileType = "video"; }
   if (!fileId) return;
   const caption = ctx.message.caption || "";
+
+  // Feature 49: Property Photos Approval Topic (thread_id: 103)
+  if (threadId === 103) {
+    const propertyTag = extractPropertyTag(caption);
+    const v5Db = require("../services/ops-database-v5");
+    const photoId = v5Db.addPropertyPhoto(chatId, propertyTag, fileId, fileType, caption, fromUser, threadId, ctx.message.message_id);
+    
+    return ctx.reply(`📸 **New Property Photo Logged**\nUnit: ${propertyTag || "Not specified"}\nSubmitted by: ${fromUser}\n\nReview this photo for the website:`, {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Approve", callback_data: `photo_approve_${photoId}` },
+            { text: "❌ Reject", callback_data: `photo_reject_${photoId}` }
+          ]
+        ]
+      },
+      message_thread_id: threadId
+    });
+  }
+
+  // Feature 45: Receipt Scanner (Topic 07 - Payments & Finance, thread_id: 10)
+  if (threadId === 10 && (fileType === "photo" || fileType === "document")) {
+    const { handleReceiptScan } = require("./ops-v5");
+    return handleReceiptScan(ctx, fileId, fileType);
+  }
+
   const propertyTag = extractPropertyTag(caption);
   const pendingTasks = opsDb.getPendingTasksByThread(chatId, threadId);
   let linkedTaskId = null;
@@ -1614,6 +1656,9 @@ module.exports = {
   handleOpsRecurring, handleOpsDepends, handleOpsHandover,
   handleOpsMonthlyReport, handleOpsExpense, handleOpsExpenses,
   handleOpsOccupancy, handleOpsMeeting, handleOpsGsync,
+  // v5 new command handlers
+  handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsTrends, handleOpsWeather, handleOpsClean,
+  handleOpsIdea, handleOpsIdeas, handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback,
   // AI message handler
   handleOpsMessage,
   // Media handlers
