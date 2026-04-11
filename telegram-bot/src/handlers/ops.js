@@ -1,30 +1,95 @@
 /**
- * Operations Group Handler
+ * Operations Group Handler — v2 (10-Feature Upgrade)
  * ─────────────────────────────────────────────────────────────
  * Handles ALL interactions in the Monthly Key Daily Operations HQ group.
  * Chat ID: -1003967447285
  *
- * This module is COMPLETELY SEPARATE from the public bot features.
- * It is only invoked when ctx.chat.id === OPS_GROUP_ID.
- *
  * Features:
- *  - /task [description]   — Add a task in the current topic
- *  - /checklist item1 | item2 | item3   — Add multiple tasks at once
- *  - /tasks                — List pending tasks in current topic
- *  - /done [task#]         — Mark task as complete
- *  - /remind [time] [msg]  — Set a reminder
- *  - /summary              — Summary of all pending tasks across all topics
- *  - Smart AI with FUNCTION CALLING — auto-creates tasks, reminders, etc.
- *  - Conversation context memory — remembers recent messages per thread
- *  - Auto follow-up detection ("will update tomorrow", etc.)
+ *  1.  Daily Auto-Reports (9 PM KSA → CEO Update topic)
+ *  2.  Task Assignments & Accountability (@username, overdue pings)
+ *  3.  KPI Dashboard (/kpi — weekly stats)
+ *  4.  Escalation Rules (24h stale blockers → CEO Update)
+ *  5.  Tenant/Property Tracking (#unit5 tags, /property command)
+ *  6.  Photo/Document Logging (auto-tag media to topic/task/property)
+ *  7.  Vendor Follow-up Automation (detect promises, auto-remind)
+ *  8.  Handoff Between Topics (/move taskId topicName)
+ *  9.  Morning Briefing (9 AM KSA → CEO Update topic, structured)
+ *  10. Voice Note Transcription (download → transcribe → extract tasks)
+ *
+ *  Plus existing: /task, /checklist, /tasks, /done, /remind, /summary,
+ *  Smart AI with OpenAI function calling, conversation memory,
+ *  follow-up detection, language detection.
  */
 
 const opsDb = require("../services/ops-database");
 const config = require("../config");
+const fs = require("fs");
+const path = require("path");
+const https = require("https");
+const http = require("http");
+
+// ─── Constants ──────────────────────────────────────────────
+
+const OPS_GROUP_ID = -1003967447285;
+
+// Known thread IDs for topics (from user specification)
+const THREAD_IDS = {
+  RULES: 3,
+  CEO_UPDATE: 4,
+  OPERATIONS: 5,
+  LISTINGS: 6,
+  BOOKINGS: 7,
+  SUPPORT: 8,
+  TECH: 9,
+  PAYMENTS: 10,
+  MARKETING: 11,
+  LEGAL: 12,
+  BLOCKERS: 13,
+  COMPLETED: 14,
+  PRIORITIES: 15,
+};
+
+// Reverse map: thread_id → topic short name (for /move command)
+const TOPIC_SHORTNAMES = {
+  rules: THREAD_IDS.RULES,
+  ceo: THREAD_IDS.CEO_UPDATE,
+  "ceo-update": THREAD_IDS.CEO_UPDATE,
+  operations: THREAD_IDS.OPERATIONS,
+  ops: THREAD_IDS.OPERATIONS,
+  listings: THREAD_IDS.LISTINGS,
+  bookings: THREAD_IDS.BOOKINGS,
+  revenue: THREAD_IDS.BOOKINGS,
+  support: THREAD_IDS.SUPPORT,
+  tech: THREAD_IDS.TECH,
+  payments: THREAD_IDS.PAYMENTS,
+  finance: THREAD_IDS.PAYMENTS,
+  marketing: THREAD_IDS.MARKETING,
+  legal: THREAD_IDS.LEGAL,
+  blockers: THREAD_IDS.BLOCKERS,
+  escalations: THREAD_IDS.BLOCKERS,
+  completed: THREAD_IDS.COMPLETED,
+  priorities: THREAD_IDS.PRIORITIES,
+  tomorrow: THREAD_IDS.PRIORITIES,
+};
+
+// Full topic names by thread ID
+const TOPIC_FULL_NAMES = {
+  [THREAD_IDS.RULES]: "00 — Rules & Channel Guide",
+  [THREAD_IDS.CEO_UPDATE]: "01 — Daily CEO Update",
+  [THREAD_IDS.OPERATIONS]: "02 — Operations Follow-Up",
+  [THREAD_IDS.LISTINGS]: "03 — Listings & Inventory",
+  [THREAD_IDS.BOOKINGS]: "04 — Bookings & Revenue",
+  [THREAD_IDS.SUPPORT]: "05 — Customer Support & Complaints",
+  [THREAD_IDS.TECH]: "06 — Website & Tech Issues",
+  [THREAD_IDS.PAYMENTS]: "07 — Payments & Finance",
+  [THREAD_IDS.MARKETING]: "08 — Marketing & Content",
+  [THREAD_IDS.LEGAL]: "09 — Legal / Compliance / Government",
+  [THREAD_IDS.BLOCKERS]: "10 — Blockers & Escalations",
+  [THREAD_IDS.COMPLETED]: "11 — Completed Today",
+  [THREAD_IDS.PRIORITIES]: "12 — Tomorrow Priorities",
+};
 
 // ─── Conversation Context Memory ────────────────────────────
-// Stores recent messages per thread so the AI remembers what it said.
-// Key: `${chatId}:${threadId}` → Array of { role, content } (max 20 messages)
 const conversationMemory = new Map();
 const MAX_MEMORY = 20;
 
@@ -41,19 +106,50 @@ function addToConversation(chatId, threadId, role, content) {
   const key = getConversationKey(chatId, threadId);
   const history = conversationMemory.get(key) || [];
   history.push({ role, content });
-  // Keep only last MAX_MEMORY messages
   if (history.length > MAX_MEMORY) {
     history.splice(0, history.length - MAX_MEMORY);
   }
   conversationMemory.set(key, history);
 }
 
-// ─── Utility: extract args from /command or /command@botname ──
+// ─── Utility Functions ──────────────────────────────────────
 
 function extractCommandArgs(text, command) {
   if (!text) return "";
   const re = new RegExp(`^\/(?:${command})(?:@\\S+)?\\s*`, "i");
   return text.replace(re, "").trim();
+}
+
+function escMd(text) {
+  if (!text) return "";
+  return String(text).replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&");
+}
+
+function detectMessageLanguage(text) {
+  if (!text) return "en";
+  const arabicChars = (text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g) || []).length;
+  const latinChars = (text.match(/[a-zA-Z]/g) || []).length;
+  const totalLetters = arabicChars + latinChars;
+  if (totalLetters === 0) return "en";
+  return arabicChars / totalLetters >= 0.3 ? "ar" : "en";
+}
+
+/**
+ * Extract #property tags from text (e.g., #unit5, #villa3)
+ */
+function extractPropertyTag(text) {
+  if (!text) return null;
+  const match = text.match(/#([a-zA-Z0-9_]+)/);
+  return match ? match[1].toLowerCase() : null;
+}
+
+/**
+ * Extract @username from text for assignment
+ */
+function extractAssignee(text) {
+  if (!text) return null;
+  const match = text.match(/@([a-zA-Z0-9_]+)/);
+  return match ? `@${match[1]}` : null;
 }
 
 // ─── Topic Map ───────────────────────────────────────────────
@@ -76,6 +172,16 @@ const TOPIC_CONTEXT = {
 
 const threadTopicMap = {};
 
+// Pre-populate with known thread IDs
+for (const [threadId, fullName] of Object.entries(TOPIC_FULL_NAMES)) {
+  const tid = parseInt(threadId);
+  const prefix = fullName.substring(0, 2);
+  const info = TOPIC_CONTEXT[prefix];
+  if (info) {
+    threadTopicMap[tid] = { name: info.name, role: info.role, emoji: info.emoji };
+  }
+}
+
 function getTopicInfo(threadId) {
   if (!threadId) return { name: "General", role: "general", emoji: "💬" };
   if (threadTopicMap[threadId]) return threadTopicMap[threadId];
@@ -85,12 +191,10 @@ function getTopicInfo(threadId) {
 function registerTopicFromCtx(ctx) {
   const threadId = ctx.message?.message_thread_id;
   if (!threadId || threadTopicMap[threadId]) return;
-
   const topicCreated = ctx.message?.forum_topic_created;
   if (topicCreated?.name) {
     const name = topicCreated.name;
     threadTopicMap[threadId] = { name, role: getRoleFromName(name), emoji: getEmojiFromName(name) };
-    return;
   }
 }
 
@@ -144,6 +248,26 @@ const FOLLOWUP_PATTERNS = [
   { regex: /(المساء|العصر|الليل|بعد\s+قليل|خلال\s+ساعة)/u, delay: "today_evening" },
 ];
 
+// ─── Vendor Promise Detection (Feature 7) ───────────────────
+
+const VENDOR_PATTERNS = [
+  // English: "Mobily said they'll come tomorrow", "contractor promised by Sunday"
+  { regex: /(\w+)\s+(?:said|promised|confirmed|told us|will come|will deliver|will send|will fix|will install)\b.*\b(tomorrow|tonight|by\s+\w+day|by\s+end\s+of\s+\w+|next\s+week|within\s+\d+\s+days?)/i, delay: "vendor_promise" },
+  { regex: /(?:the|our)\s+(\w+)\s+(?:said|promised|confirmed|will)\b/i, delay: "vendor_promise" },
+  // Arabic vendor patterns
+  { regex: /(شركة|مقاول|فني|موبايلي|stc|زين|الكهربائي|السباك)\s+(?:قال|وعد|أكد|سيأتي|سيرسل|سيصلح|سيركب)/u, delay: "vendor_promise" },
+];
+
+function detectVendorPromise(text) {
+  for (const pattern of VENDOR_PATTERNS) {
+    const match = text.match(pattern.regex);
+    if (match) {
+      return { vendorName: match[1] || "Vendor", matched: true };
+    }
+  }
+  return null;
+}
+
 function detectFollowUpPromise(text) {
   for (const pattern of FOLLOWUP_PATTERNS) {
     if (pattern.regex.test(text)) {
@@ -157,7 +281,6 @@ function calculateFollowUpTime(delayType) {
   const now = new Date();
   const ksaOffset = 3 * 60 * 60 * 1000;
   const ksaNow = new Date(now.getTime() + ksaOffset);
-
   let followUpKSA;
 
   if (delayType === "tomorrow_morning") {
@@ -208,11 +331,9 @@ function parseReminderTime(timeStr) {
     const ampm = (timeMatch[3] || "").toLowerCase();
     if (ampm === "pm" && hours < 12) hours += 12;
     if (ampm === "am" && hours === 12) hours = 0;
-
     const target = new Date(ksaNow);
     target.setHours(hours, mins, 0, 0);
     if (target <= ksaNow) target.setDate(target.getDate() + 1);
-
     const utc = new Date(target.getTime() - ksaOffset);
     return utc.toISOString().replace("T", " ").substring(0, 19);
   }
@@ -231,24 +352,6 @@ function parseReminderTime(timeStr) {
   return null;
 }
 
-// ─── Markdown Escaping ──────────────────────────────────────
-
-function escMd(text) {
-  if (!text) return "";
-  return text.replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&");
-}
-
-// ─── Language Detection ─────────────────────────────────────
-
-function detectMessageLanguage(text) {
-  if (!text) return "en";
-  const arabicChars = (text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g) || []).length;
-  const latinChars = (text.match(/[a-zA-Z]/g) || []).length;
-  const totalLetters = arabicChars + latinChars;
-  if (totalLetters === 0) return "en";
-  return arabicChars / totalLetters >= 0.3 ? "ar" : "en";
-}
-
 // ═══════════════════════════════════════════════════════════════
 // ═══ OpenAI Function Calling — Tool Definitions ═══════════════
 // ═══════════════════════════════════════════════════════════════
@@ -258,27 +361,15 @@ const OPS_TOOLS = [
     type: "function",
     function: {
       name: "create_task",
-      description: "Create a single task/action item in the current topic. Use this when you identify something that needs to be done, tracked, or followed up on.",
+      description: "Create a single task/action item in the current topic. Use this when you identify something that needs to be done.",
       parameters: {
         type: "object",
         properties: {
-          title: {
-            type: "string",
-            description: "Clear, actionable task description. Be specific.",
-          },
-          priority: {
-            type: "string",
-            enum: ["low", "normal", "high", "urgent"],
-            description: "Task priority level. Use 'urgent' for blockers, 'high' for time-sensitive items.",
-          },
-          assigned_to: {
-            type: "string",
-            description: "Optional @username or name of the person responsible. Leave empty if not clear.",
-          },
-          due_date: {
-            type: "string",
-            description: "Optional due date in YYYY-MM-DD format. Use today's date for urgent items.",
-          },
+          title: { type: "string", description: "Clear, actionable task description." },
+          priority: { type: "string", enum: ["low", "normal", "high", "urgent"], description: "Task priority level." },
+          assigned_to: { type: "string", description: "Optional @username of the person responsible." },
+          due_date: { type: "string", description: "Optional due date in YYYY-MM-DD format." },
+          property_tag: { type: "string", description: "Optional property/unit tag (e.g., 'unit5', 'villa3')." },
         },
         required: ["title"],
       },
@@ -288,26 +379,20 @@ const OPS_TOOLS = [
     type: "function",
     function: {
       name: "create_tasks_batch",
-      description: "Create multiple tasks at once. Use this when you identify several action items from a conversation or update. This is more efficient than calling create_task multiple times.",
+      description: "Create multiple tasks at once. Use when you identify several action items from a conversation.",
       parameters: {
         type: "object",
         properties: {
           tasks: {
             type: "array",
-            description: "Array of tasks to create",
             items: {
               type: "object",
               properties: {
-                title: {
-                  type: "string",
-                  description: "Clear, actionable task description",
-                },
-                priority: {
-                  type: "string",
-                  enum: ["low", "normal", "high", "urgent"],
-                },
+                title: { type: "string" },
+                priority: { type: "string", enum: ["low", "normal", "high", "urgent"] },
                 assigned_to: { type: "string" },
                 due_date: { type: "string" },
+                property_tag: { type: "string" },
               },
               required: ["title"],
             },
@@ -321,18 +406,12 @@ const OPS_TOOLS = [
     type: "function",
     function: {
       name: "create_reminder",
-      description: "Set a timed reminder that will be sent to the group at the specified time. Use for deadlines, follow-ups, or scheduled check-ins.",
+      description: "Set a timed reminder. Use for deadlines, follow-ups, or scheduled check-ins.",
       parameters: {
         type: "object",
         properties: {
-          message: {
-            type: "string",
-            description: "The reminder message to send when the time comes",
-          },
-          time: {
-            type: "string",
-            description: "When to send the reminder. Accepts: '9am', '18:00', '2h' (2 hours from now), '30m', 'tomorrow 9am'",
-          },
+          message: { type: "string", description: "The reminder message." },
+          time: { type: "string", description: "When to remind: '9am', '18:00', '2h', '30m', 'tomorrow 9am'" },
         },
         required: ["message", "time"],
       },
@@ -346,10 +425,7 @@ const OPS_TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          task_id: {
-            type: "integer",
-            description: "The task ID number (e.g., from #123)",
-          },
+          task_id: { type: "integer", description: "The task ID number." },
         },
         required: ["task_id"],
       },
@@ -359,16 +435,12 @@ const OPS_TOOLS = [
     type: "function",
     function: {
       name: "list_tasks",
-      description: "List all pending tasks in the current topic. Use when someone asks about pending tasks, what needs to be done, or wants a status update.",
+      description: "List all pending tasks in the current topic.",
       parameters: {
         type: "object",
         properties: {
-          include_done: {
-            type: "boolean",
-            description: "Whether to include completed tasks. Default false.",
-          },
+          include_done: { type: "boolean", description: "Whether to include completed tasks." },
         },
-        required: [],
       },
     },
   },
@@ -376,18 +448,45 @@ const OPS_TOOLS = [
     type: "function",
     function: {
       name: "get_all_tasks_summary",
-      description: "Get a summary of all pending tasks across ALL topics. Use when someone asks for a global overview or daily summary.",
+      description: "Get a summary of all pending tasks across ALL topics.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "move_task",
+      description: "Move/transfer a task to a different topic. Use when a task belongs in another topic.",
       parameters: {
         type: "object",
-        properties: {},
-        required: [],
+        properties: {
+          task_id: { type: "integer", description: "The task ID to move." },
+          target_topic: { type: "string", description: "Target topic short name: ops, listings, bookings, support, tech, payments, marketing, legal, blockers, completed, priorities, ceo" },
+        },
+        required: ["task_id", "target_topic"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_vendor_followup",
+      description: "Create a vendor follow-up tracker. Use when a vendor/contractor/service provider has made a promise or commitment.",
+      parameters: {
+        type: "object",
+        properties: {
+          vendor_name: { type: "string", description: "Name of the vendor/company." },
+          promise: { type: "string", description: "What they promised to do." },
+          deadline: { type: "string", description: "When they promised: 'tomorrow', '2h', 'Sunday', 'next week'" },
+        },
+        required: ["vendor_name", "promise", "deadline"],
       },
     },
   },
 ];
 
 // ═══════════════════════════════════════════════════════════════
-// ═══ Tool Execution Functions ═════════════════════════════════
+// ═══ Tool Execution ═══════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
 function executeTool(toolName, args, chatId, threadId, topicInfo, fromUser) {
@@ -398,9 +497,9 @@ function executeTool(toolName, args, chatId, threadId, topicInfo, fromUser) {
           priority: args.priority || "normal",
           assignedTo: args.assigned_to || null,
           dueDate: args.due_date || null,
+          propertyTag: args.property_tag || null,
           createdBy: fromUser,
         });
-        const task = opsDb.getTaskById(taskId);
         return {
           success: true,
           task_id: taskId,
@@ -408,6 +507,7 @@ function executeTool(toolName, args, chatId, threadId, topicInfo, fromUser) {
           priority: args.priority || "normal",
           assigned_to: args.assigned_to || null,
           due_date: args.due_date || null,
+          property_tag: args.property_tag || null,
           message: `Task #${taskId} created: "${args.title}"`,
         };
       }
@@ -419,6 +519,7 @@ function executeTool(toolName, args, chatId, threadId, topicInfo, fromUser) {
             priority: t.priority || "normal",
             assignedTo: t.assigned_to || null,
             dueDate: t.due_date || null,
+            propertyTag: t.property_tag || null,
             createdBy: fromUser,
           });
           created.push({
@@ -426,109 +527,71 @@ function executeTool(toolName, args, chatId, threadId, topicInfo, fromUser) {
             title: t.title,
             priority: t.priority || "normal",
             assigned_to: t.assigned_to || null,
-            due_date: t.due_date || null,
           });
         }
-        return {
-          success: true,
-          tasks_created: created.length,
-          tasks: created,
-          message: `Created ${created.length} tasks successfully.`,
-        };
+        return { success: true, tasks_created: created.length, tasks: created };
       }
 
       case "create_reminder": {
         const remindAt = parseReminderTime(args.time);
         if (!remindAt) {
-          return {
-            success: false,
-            error: `Could not parse time: "${args.time}". Use formats like 9am, 18:00, 2h, 30m, tomorrow 9am.`,
-          };
+          return { success: false, error: `Could not parse time: "${args.time}"` };
         }
         opsDb.addReminder(chatId, threadId, topicInfo.name, args.message, remindAt, fromUser);
         const ksaTime = new Date(new Date(remindAt.replace(" ", "T") + "Z").getTime() + 3 * 60 * 60 * 1000);
         const timeDisplay = ksaTime.toLocaleString("en-US", {
-          timeZone: "Asia/Riyadh",
-          hour: "2-digit",
-          minute: "2-digit",
-          weekday: "short",
-          day: "numeric",
-          month: "short",
+          timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", weekday: "short", day: "numeric", month: "short",
         });
-        return {
-          success: true,
-          message: args.message,
-          remind_at: timeDisplay,
-          time_ksa: timeDisplay,
-        };
+        return { success: true, message: args.message, time_ksa: timeDisplay };
       }
 
       case "mark_task_done": {
         const task = opsDb.getTaskById(args.task_id);
-        if (!task || task.chat_id !== chatId) {
-          return { success: false, error: `Task #${args.task_id} not found.` };
-        }
-        if (task.status === "done") {
-          return { success: false, error: `Task #${args.task_id} is already completed.` };
-        }
+        if (!task || task.chat_id !== chatId) return { success: false, error: `Task #${args.task_id} not found.` };
+        if (task.status === "done") return { success: false, error: `Task #${args.task_id} already completed.` };
         opsDb.markTaskDone(args.task_id);
-        return {
-          success: true,
-          task_id: args.task_id,
-          title: task.title,
-          message: `Task #${args.task_id} marked as done: "${task.title}"`,
-        };
+        return { success: true, task_id: args.task_id, title: task.title };
       }
 
       case "list_tasks": {
         const tasks = opsDb.getTasksByThread(chatId, threadId);
         const pending = tasks.filter((t) => t.status === "pending");
         const done = tasks.filter((t) => t.status === "done");
-
-        if (pending.length === 0 && done.length === 0) {
-          return { success: true, pending: [], done: [], message: "No tasks in this topic." };
-        }
-
-        const result = {
+        return {
           success: true,
           pending_count: pending.length,
           done_count: done.length,
-          pending: pending.map((t) => ({
-            id: t.id,
-            title: t.title,
-            priority: t.priority,
-            assigned_to: t.assigned_to,
-            due_date: t.due_date,
-          })),
-          done: args.include_done
-            ? done.slice(0, 10).map((t) => ({ id: t.id, title: t.title }))
-            : [],
+          pending: pending.map((t) => ({ id: t.id, title: t.title, priority: t.priority, assigned_to: t.assigned_to, due_date: t.due_date, property_tag: t.property_tag })),
+          done: args.include_done ? done.slice(0, 10).map((t) => ({ id: t.id, title: t.title })) : [],
         };
-        return result;
       }
 
       case "get_all_tasks_summary": {
         const allTasks = opsDb.getAllPendingTasks(chatId);
         const stats = opsDb.getTaskStats(chatId);
-
         const byTopic = {};
         for (const task of allTasks) {
           const key = task.topic_name || "General";
           if (!byTopic[key]) byTopic[key] = [];
-          byTopic[key].push({
-            id: task.id,
-            title: task.title,
-            priority: task.priority,
-            assigned_to: task.assigned_to,
-          });
+          byTopic[key].push({ id: task.id, title: task.title, priority: task.priority, assigned_to: task.assigned_to });
         }
+        return { success: true, total_pending: stats.pending, total_done: stats.done, by_topic: byTopic };
+      }
 
-        return {
-          success: true,
-          total_pending: stats.pending,
-          total_done: stats.done,
-          by_topic: byTopic,
-        };
+      case "move_task": {
+        const task = opsDb.getTaskById(args.task_id);
+        if (!task || task.chat_id !== chatId) return { success: false, error: `Task #${args.task_id} not found.` };
+        const targetThread = TOPIC_SHORTNAMES[args.target_topic?.toLowerCase()];
+        if (!targetThread) return { success: false, error: `Unknown topic: "${args.target_topic}". Use: ops, listings, bookings, support, tech, payments, marketing, legal, blockers, completed, priorities, ceo` };
+        const targetName = TOPIC_FULL_NAMES[targetThread] || args.target_topic;
+        opsDb.transferTask(args.task_id, targetThread, targetName);
+        return { success: true, task_id: args.task_id, title: task.title, from_topic: task.topic_name, to_topic: targetName };
+      }
+
+      case "create_vendor_followup": {
+        const deadlineAt = calculateFollowUpTime(args.deadline === "tomorrow" ? "tomorrow_morning" : "tomorrow_morning");
+        opsDb.addVendorFollowUp(chatId, threadId, topicInfo.name, args.vendor_name, args.promise, fromUser, deadlineAt);
+        return { success: true, vendor: args.vendor_name, promise: args.promise, deadline: deadlineAt };
       }
 
       default:
@@ -547,269 +610,218 @@ function executeTool(toolName, args, chatId, threadId, topicInfo, fromUser) {
 function buildSystemPrompt(topicInfo, msgLang) {
   const langInstruction =
     msgLang === "ar"
-      ? "\n\n⚠️ CRITICAL: The user wrote in Arabic. You MUST reply entirely in Arabic. Do not use English."
-      : "\n\n⚠️ CRITICAL: The user wrote in English. You MUST reply entirely in English. Do not use Arabic.";
+      ? "\n\n⚠️ CRITICAL: The user wrote in Arabic. You MUST reply entirely in Arabic."
+      : "\n\n⚠️ CRITICAL: The user wrote in English. You MUST reply entirely in English.";
 
   const today = new Date().toISOString().split("T")[0];
 
-  return `You are the smart operations assistant for Monthly Key (المفتاح الشهري), a monthly rental platform in Saudi Arabia. You are inside the internal "Daily Operations HQ" Telegram group, in the topic: "${topicInfo.name}".
+  return `You are the smart operations assistant for Monthly Key (المفتاح الشهري), a monthly rental platform in Saudi Arabia. You are inside the "Daily Operations HQ" Telegram group, topic: "${topicInfo.name}".
 
-Today's date: ${today}
+Today: ${today}
 
-## YOUR CORE BEHAVIOR — BE ACTION-ORIENTED, NOT CONVERSATIONAL
+## CORE BEHAVIOR — BE AN EXECUTOR, NOT A CHATBOT
+1. When you see action items → IMMEDIATELY use tools to create them. Do NOT ask "would you like me to create these?"
+2. When user says "yes", "create them", "do it" → look at conversation history and CREATE the tasks you previously identified
+3. Extract #property tags (e.g., #unit5) and @assignees from messages automatically
+4. When someone reports a vendor promise → use create_vendor_followup to track it
+5. When someone says to move a task → use move_task tool
 
-You are an EXECUTOR, not a chatbot. When you see action items, tasks, or things that need to be done:
-1. **IMMEDIATELY use your tools to create them** — do NOT just list them and ask "would you like me to create these?"
-2. **Extract tasks from context** — when someone posts an update with issues, action items, or to-dos, create tasks for ALL of them automatically
-3. **When the user says "yes", "create them", "do it", "go ahead", "create task reminders", etc.** — look at your previous messages in the conversation, find the action items you mentioned, and CREATE THEM using create_tasks_batch. Do NOT ask for details again.
-4. **Be proactive** — if the conversation implies something needs tracking, create a task for it
-5. **Always confirm what you DID** — after creating tasks/reminders, show a clean summary of what was created with task IDs
+## TOOLS AVAILABLE
+- create_task / create_tasks_batch — create tasks with priority, assignee, due_date, property_tag
+- create_reminder — set timed reminders
+- mark_task_done — complete tasks
+- list_tasks / get_all_tasks_summary — show status
+- move_task — transfer task to another topic (ops, listings, bookings, support, tech, payments, marketing, legal, blockers, completed, priorities, ceo)
+- create_vendor_followup — track vendor/contractor promises
 
-## TOOL USAGE RULES
-- Use create_tasks_batch when there are 2+ action items (more efficient than individual calls)
-- Use create_task for a single item
-- Use create_reminder for time-sensitive follow-ups
-- Use mark_task_done when someone reports completing something
-- Use list_tasks to show current status
-- Use get_all_tasks_summary for cross-topic overviews
-- You can call MULTIPLE tools in a single response when needed
-
-## WHAT NOT TO DO
-- ❌ Do NOT say "Would you like me to create tasks for these?" — just CREATE them
-- ❌ Do NOT ask for task details when the context already has them
-- ❌ Do NOT have back-and-forth conversations about creating tasks
-- ❌ Do NOT give generic advice — take ACTION
-- ❌ Do NOT repeat information the user already told you
-
-## RESPONSE STYLE
-- Be concise and structured
-- Use bullet points and task references (#ID)
-- After executing tools, give a brief confirmation summary
-- If you created tasks, show them in a clean list with their IDs${langInstruction}`;
+## RULES
+- ❌ Do NOT ask for details already in context
+- ❌ Do NOT have back-and-forth about creating tasks
+- ✅ Extract property tags (#unit5) and include them in tasks
+- ✅ Extract @assignees and include them in tasks
+- ✅ Be concise, use bullet points and task IDs
+- ✅ After tool execution, confirm what was done${langInstruction}`;
 }
 
-// ─── Command Handlers ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// ═══ Command Handlers ════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 async function handleOpsTask(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
-
   const text = ctx.message.text || "";
   const title = extractCommandArgs(text, "task");
 
   if (!title) {
     const lang = detectMessageLanguage(text);
-    const msg =
-      lang === "ar"
-        ? `⬜ *إضافة مهمة جديدة*\n\nالاستخدام:\n\`/task وصف المهمة\`\n\nمثال:\n\`/task التواصل مع شركة موبايلي للحصول على عرض سعر\``
-        : `⬜ *Add a new task*\n\nUsage:\n\`/task task description\`\n\nExample:\n\`/task Contact Mobily for a price quote\``;
+    const msg = lang === "ar"
+      ? `⬜ *إضافة مهمة جديدة*\n\nالاستخدام:\n\`/task وصف المهمة @المسؤول #الوحدة\`\n\nمثال:\n\`/task إصلاح التكييف @Mushtaq #unit5\``
+      : `⬜ *Add a new task*\n\nUsage:\n\`/task description @assignee #property\`\n\nExample:\n\`/task Fix AC unit @Mushtaq #unit5\``;
     return ctx.reply(msg, { parse_mode: "Markdown", message_thread_id: threadId });
   }
 
   const createdBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
-  const taskId = opsDb.addTask(chatId, threadId, topicInfo.name, title, { createdBy });
+  const assignee = extractAssignee(title);
+  const propertyTag = extractPropertyTag(title);
+
+  const taskId = opsDb.addTask(chatId, threadId, topicInfo.name, title, {
+    createdBy,
+    assignedTo: assignee,
+    propertyTag,
+  });
 
   const lang = detectMessageLanguage(title);
-  const reply =
-    lang === "ar"
-      ? `✅ *تم إضافة المهمة #${taskId}*\n\n⬜ ${escMd(title)}\n\n📍 ${escMd(topicInfo.name)}\n\nاستخدم /done ${taskId} عند الانتهاء`
-      : `✅ *Task #${taskId} created*\n\n⬜ ${escMd(title)}\n\n📍 ${escMd(topicInfo.name)}\n\nUse /done ${taskId} when complete`;
+  const parts = [`✅ *Task #${taskId} created*\n\n⬜ ${escMd(title)}`];
+  if (assignee) parts.push(`👤 ${escMd(assignee)}`);
+  if (propertyTag) parts.push(`🏠 #${escMd(propertyTag)}`);
+  parts.push(`📍 ${escMd(topicInfo.name)}`);
+  parts.push(lang === "ar" ? `\nاستخدم /done ${taskId} عند الانتهاء` : `\nUse /done ${taskId} when complete`);
 
-  await ctx.reply(reply, { parse_mode: "MarkdownV2", message_thread_id: threadId });
+  await ctx.reply(parts.join("\n"), { parse_mode: "Markdown", message_thread_id: threadId });
 }
 
 async function handleOpsChecklist(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
-
   const text = ctx.message.text || "";
   const argsText = extractCommandArgs(text, "checklist");
 
   if (!argsText) {
     return ctx.reply(
-      `📋 *إنشاء قائمة مهام*\n\nالاستخدام:\n\`/checklist مهمة 1 | مهمة 2 | مهمة 3\`\n\nمثال:\n\`/checklist تجهيز الإنترنت في مزرعة | الحصول على عرض سعر من موبايلي | جدولة زيارة الموقع\``,
+      `📋 *Create a checklist*\n\nUsage:\n\`/checklist task 1 | task 2 | task 3\``,
       { parse_mode: "Markdown", message_thread_id: threadId }
     );
   }
 
-  const items = argsText
-    .split(/\||\n/)
-    .map((s) => s.replace(/^["'\s]+|["'\s]+$/g, "").trim())
-    .filter((s) => s.length > 0);
-
+  const items = argsText.split(/\||\n/).map((s) => s.trim()).filter((s) => s.length > 0);
   if (items.length === 0) {
-    return ctx.reply("❌ لم يتم العثور على مهام. استخدم | للفصل بين المهام.", { message_thread_id: threadId });
+    return ctx.reply("❌ No tasks found. Use | to separate tasks.", { message_thread_id: threadId });
   }
 
   const createdBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
   const taskIds = [];
-
   for (const item of items) {
-    const id = opsDb.addTask(chatId, threadId, topicInfo.name, item, { createdBy });
+    const id = opsDb.addTask(chatId, threadId, topicInfo.name, item, {
+      createdBy,
+      assignedTo: extractAssignee(item),
+      propertyTag: extractPropertyTag(item),
+    });
     taskIds.push({ id, title: item });
   }
 
-  let reply = `📋 *قائمة المهام الجديدة — ${escMd(topicInfo.name)}*\n\n`;
+  let reply = `📋 *${taskIds.length} tasks created — ${topicInfo.name}*\n\n`;
   taskIds.forEach(({ id, title }, i) => {
-    reply += `${i + 1}\\. ⬜ ${escMd(title)} \\[#${id}\\]\n`;
+    reply += `${i + 1}. ⬜ ${title} [#${id}]\n`;
   });
-  reply += `\n✏️ استخدم \`/done [رقم المهمة]\` عند الانتهاء`;
+  reply += `\nUse \`/done [number]\` to complete`;
 
-  await ctx.reply(reply, { parse_mode: "MarkdownV2", message_thread_id: threadId });
+  await ctx.reply(reply, { parse_mode: "Markdown", message_thread_id: threadId });
 }
 
 async function handleOpsTasks(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
-
   const tasks = opsDb.getTasksByThread(chatId, threadId);
 
   if (tasks.length === 0) {
-    return ctx.reply(
-      `${topicInfo.emoji} *${escMd(topicInfo.name)}*\n\n✨ لا توجد مهام في هذا الموضوع\\.\n\nأضف مهمة جديدة:\n\`/task وصف المهمة\``,
-      { parse_mode: "MarkdownV2", message_thread_id: threadId }
-    );
+    return ctx.reply(`${topicInfo.emoji} *${topicInfo.name}*\n\n✨ No tasks in this topic.\n\nAdd one: \`/task description\``, {
+      parse_mode: "Markdown", message_thread_id: threadId,
+    });
   }
 
   const pending = tasks.filter((t) => t.status === "pending");
   const done = tasks.filter((t) => t.status === "done");
 
-  let reply = `${topicInfo.emoji} *${escMd(topicInfo.name)}* — المهام\n\n`;
-
+  let reply = `${topicInfo.emoji} *${topicInfo.name}* — Tasks\n\n`;
   if (pending.length > 0) {
-    reply += `*⬜ قيد التنفيذ \\(${pending.length}\\):*\n`;
+    reply += `*⬜ Pending (${pending.length}):*\n`;
     pending.forEach((task, i) => {
-      const priority = task.priority === "urgent" ? " 🔴" : task.priority === "high" ? " 🟠" : "";
-      const assignee = task.assigned_to ? ` → ${escMd(task.assigned_to)}` : "";
-      reply += `${i + 1}\\. ⬜ ${escMd(task.title)}${priority}${assignee} \\[\\#${task.id}\\]\n`;
+      const prio = task.priority === "urgent" ? " 🔴" : task.priority === "high" ? " 🟠" : "";
+      const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
+      const prop = task.property_tag ? ` 🏠#${task.property_tag}` : "";
+      const due = task.due_date ? ` 📅${task.due_date}` : "";
+      reply += `${i + 1}. ⬜ ${task.title}${prio}${assignee}${prop}${due} [#${task.id}]\n`;
     });
   }
-
   if (done.length > 0) {
-    reply += `\n*✅ مكتملة \\(${done.length}\\):*\n`;
+    reply += `\n*✅ Done (${done.length}):*\n`;
     done.slice(0, 5).forEach((task) => {
-      reply += `✅ ${escMd(task.title)} \\[\\#${task.id}\\]\n`;
+      reply += `✅ ~~${task.title}~~ [#${task.id}]\n`;
     });
-    if (done.length > 5) reply += `_\\.\\.\\. و ${done.length - 5} أخرى_\n`;
+    if (done.length > 5) reply += `_... and ${done.length - 5} more_\n`;
   }
+  if (pending.length > 0) reply += `\n\`/done [number]\` to complete`;
 
-  if (pending.length > 0) {
-    reply += `\n✏️ \`/done [رقم]\` للإنهاء`;
-  }
-
-  await ctx.reply(reply, { parse_mode: "MarkdownV2", message_thread_id: threadId });
+  await ctx.reply(reply, { parse_mode: "Markdown", message_thread_id: threadId });
 }
 
 async function handleOpsDone(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   const chatId = ctx.chat.id;
-
   const text = ctx.message.text || "";
   const args = extractCommandArgs(text, "done");
   const taskId = parseInt(args, 10);
 
   if (!taskId || isNaN(taskId)) {
     const tasks = opsDb.getPendingTasksByThread(chatId, threadId);
-    if (tasks.length === 0) {
-      return ctx.reply("✅ لا توجد مهام معلقة في هذا الموضوع.", { message_thread_id: threadId });
-    }
-    let reply = `✅ *إنهاء مهمة*\n\nاستخدم: \`/done [رقم المهمة]\`\n\n*المهام المعلقة:*\n`;
-    tasks.forEach((task, i) => {
-      reply += `${i + 1}. ⬜ ${task.title} [#${task.id}]\n`;
-    });
+    if (tasks.length === 0) return ctx.reply("✅ No pending tasks in this topic.", { message_thread_id: threadId });
+    let reply = `✅ *Complete a task*\n\nUse: \`/done [task number]\`\n\n*Pending:*\n`;
+    tasks.forEach((task) => { reply += `⬜ ${task.title} [#${task.id}]\n`; });
     return ctx.reply(reply, { parse_mode: "Markdown", message_thread_id: threadId });
   }
 
   const task = opsDb.getTaskById(taskId);
-  if (!task || task.chat_id !== chatId) {
-    return ctx.reply(`❌ لم يتم العثور على المهمة #${taskId}.`, { message_thread_id: threadId });
-  }
-  if (task.status === "done") {
-    return ctx.reply(`✅ المهمة #${taskId} مكتملة بالفعل.`, { message_thread_id: threadId });
-  }
+  if (!task || task.chat_id !== chatId) return ctx.reply(`❌ Task #${taskId} not found.`, { message_thread_id: threadId });
+  if (task.status === "done") return ctx.reply(`✅ Task #${taskId} already completed.`, { message_thread_id: threadId });
 
   opsDb.markTaskDone(taskId);
-
-  await ctx.reply(
-    `✅ *تم إنهاء المهمة #${taskId}*\n\n~~${escMd(task.title)}~~\n\n🎉 أحسنت\\!`,
-    { parse_mode: "MarkdownV2", message_thread_id: threadId }
-  );
+  await ctx.reply(`✅ *Task #${taskId} completed!*\n\n~~${task.title}~~\n\n🎉 Well done!`, { parse_mode: "Markdown", message_thread_id: threadId });
 }
 
 async function handleOpsRemind(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
-
   const text = ctx.message.text || "";
   const argsText = extractCommandArgs(text, "remind");
 
   if (!argsText) {
     return ctx.reply(
-      `⏰ *تعيين تذكير*\n\nالاستخدام:\n\`/remind [الوقت] [الرسالة]\`\n\nأمثلة:\n• \`/remind 9am اجتماع مع الفريق\`\n• \`/remind 2h متابعة العميل\`\n• \`/remind tomorrow 9am مراجعة التقارير\`\n• \`/remind 18:00 تحديث تقرير اليوم\``,
+      `⏰ *Set a reminder*\n\nUsage: \`/remind [time] [message]\`\n\nExamples:\n• \`/remind 9am Team meeting\`\n• \`/remind 2h Follow up with client\`\n• \`/remind tomorrow 9am Review reports\``,
       { parse_mode: "Markdown", message_thread_id: threadId }
     );
   }
 
   let timeStr, message;
   const tomorrowMatch = argsText.match(/^(tomorrow\s+\S+)\s+(.+)$/i);
-  if (tomorrowMatch) {
-    timeStr = tomorrowMatch[1];
-    message = tomorrowMatch[2];
-  } else {
-    const parts = argsText.split(/\s+/);
-    timeStr = parts[0];
-    message = parts.slice(1).join(" ");
-  }
+  if (tomorrowMatch) { timeStr = tomorrowMatch[1]; message = tomorrowMatch[2]; }
+  else { const parts = argsText.split(/\s+/); timeStr = parts[0]; message = parts.slice(1).join(" "); }
 
-  if (!message) {
-    return ctx.reply("❌ يرجى تحديد رسالة التذكير.\n\nمثال: `/remind 9am اجتماع مع الفريق`", {
-      parse_mode: "Markdown",
-      message_thread_id: threadId,
-    });
-  }
+  if (!message) return ctx.reply("❌ Please specify a reminder message.", { parse_mode: "Markdown", message_thread_id: threadId });
 
   const remindAt = parseReminderTime(timeStr);
-  if (!remindAt) {
-    return ctx.reply(
-      `❌ لم أتمكن من فهم الوقت: \`${timeStr}\`\n\nاستخدم: \`9am\`, \`18:00\`, \`2h\`, \`30m\`, \`tomorrow 9am\``,
-      { parse_mode: "Markdown", message_thread_id: threadId }
-    );
-  }
+  if (!remindAt) return ctx.reply(`❌ Could not parse time: \`${timeStr}\``, { parse_mode: "Markdown", message_thread_id: threadId });
 
   const createdBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
   opsDb.addReminder(chatId, threadId, topicInfo.name, message, remindAt, createdBy);
 
   const ksaTime = new Date(new Date(remindAt.replace(" ", "T") + "Z").getTime() + 3 * 60 * 60 * 1000);
-  const timeDisplay = ksaTime.toLocaleString("ar-SA", {
-    timeZone: "Asia/Riyadh",
-    hour: "2-digit",
-    minute: "2-digit",
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+  const timeDisplay = ksaTime.toLocaleString("en-US", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", weekday: "short", day: "numeric", month: "short" });
 
-  await ctx.reply(
-    `⏰ *تم تعيين التذكير*\n\n📝 ${escMd(message)}\n🕐 ${escMd(timeDisplay)} \\(توقيت الرياض\\)`,
-    { parse_mode: "MarkdownV2", message_thread_id: threadId }
-  );
+  await ctx.reply(`⏰ *Reminder set*\n\n📝 ${message}\n🕐 ${timeDisplay} (Riyadh)`, { parse_mode: "Markdown", message_thread_id: threadId });
 }
 
 async function handleOpsSummary(ctx) {
   const chatId = ctx.chat.id;
   const threadId = ctx.message?.message_thread_id || null;
-
   const allTasks = opsDb.getAllPendingTasks(chatId);
 
   if (allTasks.length === 0) {
-    return ctx.reply(
-      `📊 *ملخص المهام*\n\n✨ لا توجد مهام معلقة في أي موضوع\\. عمل رائع\\!`,
-      { parse_mode: "MarkdownV2", message_thread_id: threadId }
-    );
+    return ctx.reply(`📊 *Task Summary*\n\n✨ No pending tasks. Great work!`, { parse_mode: "Markdown", message_thread_id: threadId });
   }
 
   const byTopic = {};
@@ -820,20 +832,377 @@ async function handleOpsSummary(ctx) {
   }
 
   const stats = opsDb.getTaskStats(chatId);
-  let reply = `📊 *ملخص المهام المعلقة*\n`;
-  reply += `📌 إجمالي: ${stats.pending} معلقة / ${stats.done} مكتملة\n\n`;
-
+  let reply = `📊 *Task Summary*\n📌 ${stats.pending} pending / ${stats.done} done\n\n`;
   for (const [topicName, tasks] of Object.entries(byTopic)) {
     const emoji = getEmojiFromName(topicName);
-    reply += `${emoji} *${escMd(topicName)}* \\(${tasks.length}\\):\n`;
+    reply += `${emoji} *${topicName}* (${tasks.length}):\n`;
     tasks.slice(0, 5).forEach((task, i) => {
-      reply += `  ${i + 1}\\. ⬜ ${escMd(task.title)} \\[\\#${task.id}\\]\n`;
+      const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
+      reply += `  ${i + 1}. ⬜ ${task.title}${assignee} [#${task.id}]\n`;
     });
-    if (tasks.length > 5) reply += `  _\\.\\.\\. و ${tasks.length - 5} أخرى_\n`;
+    if (tasks.length > 5) reply += `  _... and ${tasks.length - 5} more_\n`;
     reply += "\n";
   }
 
-  await ctx.reply(reply, { parse_mode: "MarkdownV2", message_thread_id: threadId });
+  await ctx.reply(reply, { parse_mode: "Markdown", message_thread_id: threadId });
+}
+
+// ─── Feature 3: KPI Dashboard (/kpi) ────────────────────────
+
+async function handleOpsKpi(ctx) {
+  const chatId = ctx.chat.id;
+  const threadId = ctx.message?.message_thread_id || null;
+
+  const weekly = opsDb.getWeeklyStats(chatId);
+  const stats = opsDb.getTaskStats(chatId);
+  const overdue = opsDb.getOverdueTasks(chatId);
+
+  const completionRate = weekly.created > 0 ? Math.round((weekly.completed / weekly.created) * 100) : 0;
+
+  let reply = `📊 *Weekly KPI Dashboard*\n`;
+  reply += `📅 Last 7 days\n\n`;
+  reply += `*Task Metrics:*\n`;
+  reply += `• Created: ${weekly.created}\n`;
+  reply += `• Completed: ${weekly.completed}\n`;
+  reply += `• Completion Rate: ${completionRate}%\n`;
+  if (weekly.avgResolutionHours) {
+    reply += `• Avg Resolution: ${weekly.avgResolutionHours}h\n`;
+  }
+  reply += `\n*Current Status:*\n`;
+  reply += `• Total Pending: ${stats.pending}\n`;
+  reply += `• Total Done: ${stats.done}\n`;
+  reply += `• High Priority: ${weekly.highPriorityCount}\n`;
+  reply += `• Overdue: ${overdue.length}\n`;
+
+  if (weekly.pendingByTopic.length > 0) {
+    reply += `\n*Busiest Topics (pending):*\n`;
+    weekly.pendingByTopic.slice(0, 5).forEach((t) => {
+      reply += `• ${t.topic_name || "General"}: ${t.c} tasks\n`;
+    });
+  }
+
+  if (overdue.length > 0) {
+    reply += `\n*⚠️ Overdue Tasks:*\n`;
+    overdue.slice(0, 5).forEach((t) => {
+      const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
+      reply += `• #${t.id} ${t.title}${assignee} (due: ${t.due_date})\n`;
+    });
+  }
+
+  await ctx.reply(reply, { parse_mode: "Markdown", message_thread_id: threadId });
+}
+
+// ─── Feature 5: Property Tracking (/property) ───────────────
+
+async function handleOpsProperty(ctx) {
+  const chatId = ctx.chat.id;
+  const threadId = ctx.message?.message_thread_id || null;
+  const text = ctx.message.text || "";
+  const tag = extractCommandArgs(text, "property").replace(/^#/, "").toLowerCase().trim();
+
+  if (!tag) {
+    return ctx.reply(
+      `🏠 *Property Tracker*\n\nUsage: \`/property unit5\`\n\nShows all tasks and media linked to a property/unit.`,
+      { parse_mode: "Markdown", message_thread_id: threadId }
+    );
+  }
+
+  const tasks = opsDb.getTasksByProperty(chatId, tag);
+  const media = opsDb.getMediaByProperty(chatId, tag);
+
+  if (tasks.length === 0 && media.length === 0) {
+    return ctx.reply(`🏠 *#${tag}*\n\nNo tasks or media found for this property.`, { parse_mode: "Markdown", message_thread_id: threadId });
+  }
+
+  const pending = tasks.filter((t) => t.status === "pending");
+  const done = tasks.filter((t) => t.status === "done");
+
+  let reply = `🏠 *Property: #${tag}*\n\n`;
+
+  if (pending.length > 0) {
+    reply += `*⬜ Pending Tasks (${pending.length}):*\n`;
+    pending.forEach((t) => {
+      const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
+      reply += `• #${t.id} ${t.title}${assignee}\n`;
+    });
+    reply += "\n";
+  }
+
+  if (done.length > 0) {
+    reply += `*✅ Completed (${done.length}):*\n`;
+    done.slice(0, 5).forEach((t) => { reply += `• #${t.id} ~~${t.title}~~\n`; });
+    reply += "\n";
+  }
+
+  if (media.length > 0) {
+    reply += `*📷 Media Files (${media.length}):*\n`;
+    media.slice(0, 5).forEach((m) => {
+      reply += `• ${m.file_type} from ${m.from_user || "unknown"} (${m.created_at})\n`;
+    });
+  }
+
+  await ctx.reply(reply, { parse_mode: "Markdown", message_thread_id: threadId });
+}
+
+// ─── Feature 8: Handoff Between Topics (/move) ──────────────
+
+async function handleOpsMove(ctx) {
+  const chatId = ctx.chat.id;
+  const threadId = ctx.message?.message_thread_id || null;
+  const text = ctx.message.text || "";
+  const argsText = extractCommandArgs(text, "move");
+
+  if (!argsText) {
+    return ctx.reply(
+      `🔄 *Move a task to another topic*\n\nUsage: \`/move [task#] [topic]\`\n\nTopics: ops, listings, bookings, support, tech, payments, marketing, legal, blockers, completed, priorities, ceo\n\nExample: \`/move 5 payments\``,
+      { parse_mode: "Markdown", message_thread_id: threadId }
+    );
+  }
+
+  const parts = argsText.split(/\s+/);
+  const taskId = parseInt(parts[0], 10);
+  const targetTopic = parts.slice(1).join(" ").toLowerCase();
+
+  if (!taskId || isNaN(taskId)) return ctx.reply("❌ Please specify a valid task number.", { message_thread_id: threadId });
+
+  const task = opsDb.getTaskById(taskId);
+  if (!task || task.chat_id !== chatId) return ctx.reply(`❌ Task #${taskId} not found.`, { message_thread_id: threadId });
+
+  const targetThread = TOPIC_SHORTNAMES[targetTopic];
+  if (!targetThread) {
+    return ctx.reply(`❌ Unknown topic: "${targetTopic}"\n\nValid: ops, listings, bookings, support, tech, payments, marketing, legal, blockers, completed, priorities, ceo`, { message_thread_id: threadId });
+  }
+
+  const targetName = TOPIC_FULL_NAMES[targetThread] || targetTopic;
+  const oldTopic = task.topic_name || "General";
+  opsDb.transferTask(taskId, targetThread, targetName);
+
+  // Post in original topic
+  await ctx.reply(`🔄 *Task #${taskId} moved*\n\n📤 From: ${oldTopic}\n📥 To: ${targetName}\n\n⬜ ${task.title}`, { parse_mode: "Markdown", message_thread_id: threadId });
+
+  // Cross-post to new topic
+  try {
+    await ctx.telegram.sendMessage(chatId, `📥 *Task #${taskId} transferred here*\n\n⬜ ${task.title}\n\n📤 From: ${oldTopic}\n👤 ${task.assigned_to || task.created_by || "Unassigned"}`, {
+      parse_mode: "Markdown",
+      message_thread_id: targetThread,
+    });
+  } catch (e) {
+    console.error("[Ops] Cross-post failed:", e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ Feature 6: Photo/Document Logging ═══════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+async function handleOpsMedia(ctx) {
+  const threadId = ctx.message?.message_thread_id || null;
+  const topicInfo = getTopicInfo(threadId);
+  const chatId = ctx.chat.id;
+  const fromUser = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+
+  let fileId = null;
+  let fileType = null;
+
+  if (ctx.message.photo) {
+    // Get highest resolution photo
+    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+    fileId = photo.file_id;
+    fileType = "photo";
+  } else if (ctx.message.document) {
+    fileId = ctx.message.document.file_id;
+    fileType = "document";
+  } else if (ctx.message.video) {
+    fileId = ctx.message.video.file_id;
+    fileType = "video";
+  }
+
+  if (!fileId) return;
+
+  const caption = ctx.message.caption || "";
+  const propertyTag = extractPropertyTag(caption);
+
+  // Find the most recent pending task in this thread to auto-link
+  const pendingTasks = opsDb.getPendingTasksByThread(chatId, threadId);
+  let linkedTaskId = null;
+
+  // If caption mentions a task ID like #5, link to that
+  const taskIdMatch = caption.match(/#(\d+)/);
+  if (taskIdMatch) {
+    linkedTaskId = parseInt(taskIdMatch[1], 10);
+  } else if (pendingTasks.length > 0) {
+    // Auto-link to most recent pending task
+    linkedTaskId = pendingTasks[pendingTasks.length - 1].id;
+  }
+
+  opsDb.addMediaLog(chatId, threadId, topicInfo.name, fileId, fileType, {
+    caption,
+    fromUser,
+    taskId: linkedTaskId,
+    propertyTag,
+  });
+
+  // Send a subtle confirmation
+  const parts = [`📎 *Logged*`];
+  if (propertyTag) parts.push(`🏠 #${propertyTag}`);
+  if (linkedTaskId) parts.push(`🔗 Task #${linkedTaskId}`);
+  parts.push(`📍 ${topicInfo.name}`);
+
+  await ctx.reply(parts.join(" | "), { parse_mode: "Markdown", message_thread_id: threadId });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ Feature 10: Voice Note Transcription ════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+async function handleOpsVoice(ctx, openaiClient) {
+  const threadId = ctx.message?.message_thread_id || null;
+  const topicInfo = getTopicInfo(threadId);
+  const chatId = ctx.chat.id;
+  const fromUser = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+
+  const voice = ctx.message.voice || ctx.message.audio;
+  if (!voice) return;
+
+  // Show typing
+  try { await ctx.sendChatAction("typing"); } catch (e) {}
+
+  try {
+    // Get file info from Telegram
+    const file = await ctx.telegram.getFile(voice.file_id);
+    const fileUrl = `https://api.telegram.org/file/bot${config.botToken}/${file.file_path}`;
+
+    // Download the file
+    const tmpDir = path.join(__dirname, "..", "..", "data", "tmp");
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const ext = file.file_path.split(".").pop() || "ogg";
+    const tmpFile = path.join(tmpDir, `voice_${Date.now()}.${ext}`);
+
+    await downloadFile(fileUrl, tmpFile);
+
+    // Transcribe using OpenAI Whisper API
+    const transcription = await transcribeAudio(openaiClient, tmpFile);
+
+    // Clean up temp file
+    try { fs.unlinkSync(tmpFile); } catch (e) {}
+
+    if (!transcription) {
+      return ctx.reply("🎤 Could not transcribe the voice message.", { message_thread_id: threadId });
+    }
+
+    const msgLang = detectMessageLanguage(transcription);
+
+    // Log the media
+    opsDb.addMediaLog(chatId, threadId, topicInfo.name, voice.file_id, "voice", {
+      caption: transcription.substring(0, 500),
+      fromUser,
+    });
+
+    // Send transcription
+    const header = msgLang === "ar" ? "🎤 *تفريغ الرسالة الصوتية*" : "🎤 *Voice Transcription*";
+    await ctx.reply(`${header}\n👤 ${fromUser}\n\n${transcription}`, {
+      parse_mode: "Markdown",
+      message_thread_id: threadId,
+    });
+
+    // Now use AI to extract action items from the transcription
+    try { await ctx.sendChatAction("typing"); } catch (e) {}
+
+    const systemPrompt = buildSystemPrompt(topicInfo, msgLang);
+    const aiMessages = [
+      { role: "system", content: systemPrompt + "\n\nA voice message was just transcribed. Analyze it for action items, tasks, and commitments. If you find any, CREATE them immediately using your tools. Be proactive." },
+      { role: "user", content: `${fromUser} sent a voice message. Transcription:\n\n"${transcription}"\n\nExtract and create any action items, tasks, or follow-ups from this voice message.` },
+    ];
+
+    const response = await openaiClient.chat.completions.create({
+      model: config.aiModel || "gpt-4.1-mini",
+      messages: aiMessages,
+      tools: OPS_TOOLS,
+      tool_choice: "auto",
+      max_tokens: 1200,
+      temperature: 0.3,
+    });
+
+    let assistantMessage = response.choices[0]?.message;
+    let allToolResults = [];
+    let loopCount = 0;
+
+    while (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0 && loopCount < 5) {
+      loopCount++;
+      aiMessages.push(assistantMessage);
+      for (const toolCall of assistantMessage.tool_calls) {
+        let toolArgs;
+        try { toolArgs = JSON.parse(toolCall.function.arguments); } catch (e) { toolArgs = {}; }
+        const result = executeTool(toolCall.function.name, toolArgs, chatId, threadId, topicInfo, fromUser);
+        allToolResults.push({ tool: toolCall.function.name, result });
+        aiMessages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(result) });
+      }
+      const nextResponse = await openaiClient.chat.completions.create({
+        model: config.aiModel || "gpt-4.1-mini",
+        messages: aiMessages,
+        tools: OPS_TOOLS,
+        tool_choice: "auto",
+        max_tokens: 1200,
+        temperature: 0.3,
+      });
+      assistantMessage = nextResponse.choices[0]?.message;
+    }
+
+    const aiReply = assistantMessage?.content;
+    if (aiReply) {
+      try {
+        await ctx.reply(aiReply, { parse_mode: "Markdown", message_thread_id: threadId });
+      } catch (e) {
+        await ctx.reply(aiReply.replace(/[_*`\[\]]/g, ""), { message_thread_id: threadId });
+      }
+    } else if (allToolResults.length > 0) {
+      const summary = buildToolResultsSummary(allToolResults, msgLang);
+      if (summary) await ctx.reply(summary, { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+
+  } catch (error) {
+    console.error("[Ops] Voice transcription error:", error.message);
+    await ctx.reply("🎤 Error processing voice message. Please try again.", { message_thread_id: threadId });
+  }
+}
+
+function downloadFile(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    const client = url.startsWith("https") ? https : http;
+    client.get(url, (response) => {
+      if (response.statusCode === 302 || response.statusCode === 301) {
+        // Follow redirect
+        return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+      }
+      response.pipe(file);
+      file.on("finish", () => { file.close(resolve); });
+    }).on("error", (err) => {
+      fs.unlink(dest, () => {});
+      reject(err);
+    });
+  });
+}
+
+async function transcribeAudio(openaiClient, filePath) {
+  try {
+    const transcription = await openaiClient.audio.transcriptions.create({
+      file: fs.createReadStream(filePath),
+      model: "whisper-1",
+    });
+    return transcription.text;
+  } catch (error) {
+    console.error("[Ops] Whisper API error:", error.message);
+    // Fallback: try manus-speech-to-text if available
+    try {
+      const { execSync } = require("child_process");
+      const result = execSync(`manus-speech-to-text "${filePath}"`, { timeout: 60000 }).toString().trim();
+      return result;
+    } catch (e) {
+      console.error("[Ops] manus-speech-to-text fallback also failed:", e.message);
+      return null;
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -857,52 +1226,49 @@ async function handleOpsMessage(ctx, openaiClient) {
     opsDb.addFollowUp(chatId, threadId, topicInfo.name, text, fromUser, followUpAt);
   }
 
+  // Feature 7: Check for vendor promises
+  const vendorPromise = detectVendorPromise(text);
+  if (vendorPromise) {
+    const deadlineAt = calculateFollowUpTime("tomorrow_morning");
+    opsDb.addVendorFollowUp(chatId, threadId, topicInfo.name, vendorPromise.vendorName, text.substring(0, 200), fromUser, deadlineAt);
+    console.log(`[Ops] Vendor follow-up detected: ${vendorPromise.vendorName}`);
+  }
+
   // Only send AI response if bot was mentioned or replied to
   const botUsername = ctx.botInfo?.username || "monthlykey_bot";
   const isMentioned = text.includes(`@${botUsername}`);
   const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.botInfo?.id;
 
-  if (!isMentioned && !isReplyToBot) {
-    return;
-  }
+  if (!isMentioned && !isReplyToBot) return;
 
-  // Strip the @mention
   const cleanText = text.replace(new RegExp(`@${botUsername}`, "gi"), "").trim();
 
-  // Show typing
-  try {
-    await ctx.sendChatAction("typing");
-  } catch (e) {}
+  try { await ctx.sendChatAction("typing"); } catch (e) {}
 
   try {
     const msgLang = detectMessageLanguage(cleanText);
     const systemPrompt = buildSystemPrompt(topicInfo, msgLang);
 
-    // Build messages with conversation history
     const history = getConversationHistory(chatId, threadId);
     const messages = [{ role: "system", content: systemPrompt }];
 
-    // Add recent conversation history (last 10 messages for context)
+    // Add recent conversation history
     const recentHistory = history.slice(-10);
-    for (const msg of recentHistory) {
-      messages.push(msg);
-    }
+    for (const msg of recentHistory) messages.push(msg);
 
-    // Add the current user message
     const userContent = cleanText || (msgLang === "ar" ? "مرحباً" : "Hello");
 
-    // If replying to a bot message, include the original bot message as context
+    // If replying to bot, include the original message as context
     if (isReplyToBot && ctx.message.reply_to_message?.text) {
       const repliedText = ctx.message.reply_to_message.text;
       messages.push({
         role: "user",
-        content: `[Replying to the bot's previous message: "${repliedText.substring(0, 1000)}"]\n\nUser says: ${userContent}`,
+        content: `[Replying to bot's message: "${repliedText.substring(0, 1000)}"]\n\n${fromUser} says: ${userContent}`,
       });
     } else {
       messages.push({ role: "user", content: `${fromUser} says: ${userContent}` });
     }
 
-    // Store user message in memory
     addToConversation(chatId, threadId, "user", `${fromUser}: ${userContent}`);
 
     // Call OpenAI with function calling
@@ -918,44 +1284,21 @@ async function handleOpsMessage(ctx, openaiClient) {
     let assistantMessage = response.choices[0]?.message;
     let allToolResults = [];
     let loopCount = 0;
-    const MAX_LOOPS = 5;
 
-    // Process tool calls in a loop (AI may call multiple tools)
-    while (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0 && loopCount < MAX_LOOPS) {
+    while (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0 && loopCount < 5) {
       loopCount++;
-
-      // Show typing while processing tools
-      try {
-        await ctx.sendChatAction("typing");
-      } catch (e) {}
-
-      // Add assistant message with tool calls to the conversation
+      try { await ctx.sendChatAction("typing"); } catch (e) {}
       messages.push(assistantMessage);
 
-      // Execute each tool call
       for (const toolCall of assistantMessage.tool_calls) {
-        const toolName = toolCall.function.name;
         let toolArgs;
-        try {
-          toolArgs = JSON.parse(toolCall.function.arguments);
-        } catch (e) {
-          toolArgs = {};
-        }
-
-        console.log(`[Ops] Executing tool: ${toolName}`, JSON.stringify(toolArgs).substring(0, 200));
-
-        const result = executeTool(toolName, toolArgs, chatId, threadId, topicInfo, fromUser);
-        allToolResults.push({ tool: toolName, args: toolArgs, result });
-
-        // Add tool result to messages for the next AI call
-        messages.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(result),
-        });
+        try { toolArgs = JSON.parse(toolCall.function.arguments); } catch (e) { toolArgs = {}; }
+        console.log(`[Ops] Tool: ${toolCall.function.name}`, JSON.stringify(toolArgs).substring(0, 200));
+        const result = executeTool(toolCall.function.name, toolArgs, chatId, threadId, topicInfo, fromUser);
+        allToolResults.push({ tool: toolCall.function.name, args: toolArgs, result });
+        messages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(result) });
       }
 
-      // Call AI again with tool results so it can generate a response
       response = await openaiClient.chat.completions.create({
         model: config.aiModel || "gpt-4.1-mini",
         messages,
@@ -964,147 +1307,90 @@ async function handleOpsMessage(ctx, openaiClient) {
         max_tokens: 1200,
         temperature: 0.3,
       });
-
       assistantMessage = response.choices[0]?.message;
     }
 
-    // Get the final text response
     let aiReply = assistantMessage?.content || "";
-
-    // If AI returned no text but executed tools, build a summary
     if (!aiReply && allToolResults.length > 0) {
       aiReply = buildToolResultsSummary(allToolResults, msgLang);
     }
+    if (!aiReply) aiReply = msgLang === "ar" ? "تم." : "Done.";
 
-    // Fallback
-    if (!aiReply) {
-      aiReply = msgLang === "ar" ? "تم." : "Done.";
-    }
-
-    // Add follow-up note if detected
+    // Add follow-up note
     if (followUpDelay) {
-      const ksaOffset = 3 * 60 * 60 * 1000;
       const followUpAt = calculateFollowUpTime(followUpDelay);
-      const ksaTime = new Date(new Date(followUpAt.replace(" ", "T") + "Z").getTime() + ksaOffset);
-      const timeDisplay = ksaTime.toLocaleString("ar-SA", {
-        timeZone: "Asia/Riyadh",
-        hour: "2-digit",
-        minute: "2-digit",
-        weekday: "short",
-      });
-      if (msgLang === "ar") {
-        aiReply += `\n\n📌 _تم تسجيل متابعة تلقائية لـ ${fromUser} — سيتم التذكير ${timeDisplay}_`;
-      } else {
-        aiReply += `\n\n📌 _Auto follow-up registered for ${fromUser} — reminder set for ${timeDisplay}_`;
-      }
+      const ksaTime = new Date(new Date(followUpAt.replace(" ", "T") + "Z").getTime() + 3 * 60 * 60 * 1000);
+      const timeDisplay = ksaTime.toLocaleString("en-US", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", weekday: "short" });
+      aiReply += msgLang === "ar"
+        ? `\n\n📌 _تم تسجيل متابعة لـ ${fromUser} — ${timeDisplay}_`
+        : `\n\n📌 _Follow-up registered for ${fromUser} — ${timeDisplay}_`;
     }
 
-    // Store assistant reply in memory
+    // Add vendor follow-up note
+    if (vendorPromise) {
+      aiReply += msgLang === "ar"
+        ? `\n\n🏢 _تم تسجيل متابعة مورد: ${vendorPromise.vendorName}_`
+        : `\n\n🏢 _Vendor follow-up tracked: ${vendorPromise.vendorName}_`;
+    }
+
     addToConversation(chatId, threadId, "assistant", aiReply);
 
-    // Send the reply
     try {
-      await ctx.reply(aiReply, {
-        parse_mode: "Markdown",
-        message_thread_id: threadId,
-      });
+      await ctx.reply(aiReply, { parse_mode: "Markdown", message_thread_id: threadId });
     } catch (mdError) {
-      // If Markdown fails, send as plain text
-      console.warn("[Ops] Markdown parse failed, sending as plain text");
-      await ctx.reply(aiReply.replace(/[_*`\[\]]/g, ""), {
-        message_thread_id: threadId,
-      });
+      await ctx.reply(aiReply.replace(/[_*`\[\]]/g, ""), { message_thread_id: threadId });
     }
   } catch (error) {
     console.error("[Ops] AI error:", error.message);
-    const errMsg =
-      detectMessageLanguage(cleanText) === "en"
-        ? `⚙️ Processing error. You can use commands directly:\n• /task [description]\n• /tasks\n• /done [number]\n• /summary`
-        : `⚙️ حدث خطأ في المعالجة. يمكنك استخدام الأوامر مباشرة:\n• /task [مهمة]\n• /tasks\n• /done [رقم]\n• /summary`;
+    const errMsg = detectMessageLanguage(cleanText) === "en"
+      ? `⚙️ Processing error. Use commands:\n• /task [desc]\n• /tasks\n• /done [#]\n• /summary\n• /kpi\n• /property [tag]\n• /move [#] [topic]`
+      : `⚙️ خطأ. استخدم الأوامر:\n• /task [وصف]\n• /tasks\n• /done [رقم]\n• /summary\n• /kpi\n• /property [وحدة]\n• /move [رقم] [موضوع]`;
     await ctx.reply(errMsg, { message_thread_id: threadId });
   }
 }
 
-// ─── Build a summary when AI returns no text after tool calls ──
+// ─── Build tool results summary ─────────────────────────────
 
 function buildToolResultsSummary(toolResults, lang) {
   const lines = [];
-
   for (const { tool, result } of toolResults) {
-    if (!result.success) {
-      lines.push(lang === "ar" ? `❌ خطأ: ${result.error}` : `❌ Error: ${result.error}`);
-      continue;
-    }
-
+    if (!result.success) { lines.push(`❌ ${result.error}`); continue; }
     switch (tool) {
       case "create_task":
-        lines.push(
-          lang === "ar"
-            ? `✅ تم إنشاء المهمة #${result.task_id}: ${result.title}`
-            : `✅ Created task #${result.task_id}: ${result.title}`
-        );
+        lines.push(`✅ Task #${result.task_id}: ${result.title}`);
         break;
-
       case "create_tasks_batch":
-        if (lang === "ar") {
-          lines.push(`✅ تم إنشاء ${result.tasks_created} مهام:`);
-          for (const t of result.tasks) {
-            const prio = t.priority === "urgent" ? " 🔴" : t.priority === "high" ? " 🟠" : "";
-            const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
-            lines.push(`  • #${t.task_id} — ${t.title}${prio}${assignee}`);
-          }
-        } else {
-          lines.push(`✅ Created ${result.tasks_created} tasks:`);
-          for (const t of result.tasks) {
-            const prio = t.priority === "urgent" ? " 🔴" : t.priority === "high" ? " 🟠" : "";
-            const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
-            lines.push(`  • #${t.task_id} — ${t.title}${prio}${assignee}`);
-          }
+        lines.push(lang === "ar" ? `✅ تم إنشاء ${result.tasks_created} مهام:` : `✅ Created ${result.tasks_created} tasks:`);
+        for (const t of result.tasks) {
+          const prio = t.priority === "urgent" ? " 🔴" : t.priority === "high" ? " 🟠" : "";
+          const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
+          lines.push(`  • #${t.task_id} — ${t.title}${prio}${assignee}`);
         }
         break;
-
       case "create_reminder":
-        lines.push(
-          lang === "ar"
-            ? `⏰ تم تعيين تذكير: "${result.message}" — ${result.time_ksa}`
-            : `⏰ Reminder set: "${result.message}" — ${result.time_ksa}`
-        );
+        lines.push(`⏰ Reminder: "${result.message}" — ${result.time_ksa}`);
         break;
-
       case "mark_task_done":
-        lines.push(
-          lang === "ar"
-            ? `✅ تم إنهاء المهمة #${result.task_id}: ${result.title}`
-            : `✅ Completed task #${result.task_id}: ${result.title}`
-        );
+        lines.push(`✅ Completed #${result.task_id}: ${result.title}`);
         break;
-
+      case "move_task":
+        lines.push(`🔄 Moved #${result.task_id} → ${result.to_topic}`);
+        break;
+      case "create_vendor_followup":
+        lines.push(`🏢 Vendor tracked: ${result.vendor} — "${result.promise}"`);
+        break;
       case "list_tasks":
-        if (result.pending_count === 0) {
-          lines.push(lang === "ar" ? "✨ لا توجد مهام معلقة." : "✨ No pending tasks.");
-        } else {
-          lines.push(
-            lang === "ar"
-              ? `📋 المهام المعلقة (${result.pending_count}):`
-              : `📋 Pending tasks (${result.pending_count}):`
-          );
-          for (const t of result.pending) {
-            const prio = t.priority === "urgent" ? " 🔴" : t.priority === "high" ? " 🟠" : "";
-            lines.push(`  • #${t.id} — ${t.title}${prio}`);
-          }
+        if (result.pending_count === 0) { lines.push("✨ No pending tasks."); }
+        else {
+          lines.push(`📋 Pending (${result.pending_count}):`);
+          for (const t of result.pending) lines.push(`  • #${t.id} — ${t.title}`);
         }
         break;
-
       case "get_all_tasks_summary":
-        lines.push(
-          lang === "ar"
-            ? `📊 ملخص: ${result.total_pending} معلقة / ${result.total_done} مكتملة`
-            : `📊 Summary: ${result.total_pending} pending / ${result.total_done} done`
-        );
+        lines.push(`📊 ${result.total_pending} pending / ${result.total_done} done`);
         break;
     }
   }
-
   return lines.join("\n");
 }
 
@@ -1119,18 +1405,23 @@ async function handleOpsPassive(ctx) {
 
   registerTopicFromCtx(ctx);
 
-  // Store all messages in conversation memory for context
   if (text.length > 0) {
     addToConversation(chatId, threadId, "user", `${fromUser}: ${text}`);
   }
 
-  // Detect follow-up promises silently
   if (text.length > 5) {
     const followUpDelay = detectFollowUpPromise(text);
     if (followUpDelay) {
       const followUpAt = calculateFollowUpTime(followUpDelay);
       opsDb.addFollowUp(chatId, threadId, topicInfo.name, text, fromUser, followUpAt);
-      console.log(`[Ops] Follow-up detected from ${fromUser} in ${topicInfo.name}, due: ${followUpAt}`);
+    }
+
+    // Feature 7: Passive vendor promise detection
+    const vendorPromise = detectVendorPromise(text);
+    if (vendorPromise) {
+      const deadlineAt = calculateFollowUpTime("tomorrow_morning");
+      opsDb.addVendorFollowUp(chatId, threadId, topicInfo.name, vendorPromise.vendorName, text.substring(0, 200), fromUser, deadlineAt);
+      console.log(`[Ops] Vendor follow-up detected passively: ${vendorPromise.vendorName}`);
     }
   }
 }
@@ -1139,25 +1430,41 @@ async function handleOpsPassive(ctx) {
 
 function registerTopicName(threadId, name) {
   if (!threadId || !name) return;
-  threadTopicMap[threadId] = {
-    name,
-    role: getRoleFromName(name),
-    emoji: getEmojiFromName(name),
-  };
+  threadTopicMap[threadId] = { name, role: getRoleFromName(name), emoji: getEmojiFromName(name) };
   console.log(`[Ops] Registered topic: #${threadId} → ${name}`);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ═══ Exports ═════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+
 module.exports = {
+  // Command handlers
   handleOpsTask,
   handleOpsChecklist,
   handleOpsTasks,
   handleOpsDone,
   handleOpsRemind,
   handleOpsSummary,
+  handleOpsKpi,
+  handleOpsProperty,
+  handleOpsMove,
+  // AI message handler
   handleOpsMessage,
+  // Media handlers
+  handleOpsMedia,
+  handleOpsVoice,
+  // Passive handler
   handleOpsPassive,
+  // Topic management
   registerTopicName,
   getTopicInfo,
+  // Utilities (used by scheduler)
   detectFollowUpPromise,
   calculateFollowUpTime,
+  escMd: escMd,
+  // Constants (used by scheduler)
+  THREAD_IDS,
+  TOPIC_FULL_NAMES,
+  OPS_GROUP_ID,
 };

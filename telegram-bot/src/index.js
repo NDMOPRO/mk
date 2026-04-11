@@ -68,7 +68,7 @@ const {
 } = require("./handlers/admin");
 const { initChannelPosting, stopChannelPosting } = require("./services/channel");
 
-// Phase 4: Operations Group imports
+// Phase 4: Operations Group imports (v2 — 10-feature upgrade)
 const {
   handleOpsTask,
   handleOpsChecklist,
@@ -76,7 +76,12 @@ const {
   handleOpsDone,
   handleOpsRemind,
   handleOpsSummary,
+  handleOpsKpi,
+  handleOpsProperty,
+  handleOpsMove,
   handleOpsMessage,
+  handleOpsMedia,
+  handleOpsVoice,
   handleOpsPassive,
   registerTopicName,
 } = require("./handlers/ops");
@@ -203,6 +208,21 @@ bot.command("remind", (ctx) => {
 bot.command("summary", (ctx) => {
   if (!isOpsGroup(ctx)) return;
   return handleOpsSummary(ctx);
+});
+
+bot.command("kpi", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsKpi(ctx);
+});
+
+bot.command("property", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsProperty(ctx);
+});
+
+bot.command("move", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsMove(ctx);
 });
 
 // ─── Text Message Handler ─────────────────────────────────────
@@ -375,6 +395,26 @@ bot.on("text", async (ctx) => {
   }
 });
 
+// ─── Phase 4: Ops Group — Photo/Document Logging (Feature 6) ──
+bot.on(["photo", "document", "video"], async (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  try {
+    await handleOpsMedia(ctx);
+  } catch (e) {
+    console.error("[Bot] Ops media handler error:", e.message);
+  }
+});
+
+// ─── Phase 4: Ops Group — Voice Note Transcription (Feature 10) ─
+bot.on(["voice", "audio"], async (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  try {
+    await handleOpsVoice(ctx, ai.getOpenAIClient());
+  } catch (e) {
+    console.error("[Bot] Ops voice handler error:", e.message);
+  }
+});
+
 // ─── Inline Search & Callbacks ────────────────────────────────
 
 registerCallbacks(bot);
@@ -401,15 +441,18 @@ async function setupBot() {
       { command: "help",          description: "Show help | المساعدة" },
     ]);
 
-    // Set ops-specific commands for the ops group
+    // Set ops-specific commands for the ops group (v2 — 10-feature upgrade)
     await bot.telegram.setMyCommands(
       [
-        { command: "task",      description: "إضافة مهمة جديدة" },
-        { command: "checklist", description: "إنشاء قائمة مهام" },
-        { command: "tasks",     description: "عرض المهام المعلقة" },
-        { command: "done",      description: "إنهاء مهمة" },
-        { command: "remind",    description: "تعيين تذكير" },
-        { command: "summary",   description: "ملخص جميع المهام" },
+        { command: "task",      description: "Add task | إضافة مهمة" },
+        { command: "checklist", description: "Create checklist | قائمة مهام" },
+        { command: "tasks",     description: "View tasks | عرض المهام" },
+        { command: "done",      description: "Complete task | إنهاء مهمة" },
+        { command: "remind",    description: "Set reminder | تذكير" },
+        { command: "summary",   description: "All tasks summary | ملخص" },
+        { command: "kpi",       description: "Weekly KPI dashboard | لوحة الأداء" },
+        { command: "property",  description: "Property tracker | متابعة الوحدات" },
+        { command: "move",      description: "Move task to topic | نقل مهمة" },
       ],
       { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
     );
@@ -450,7 +493,7 @@ bot
     console.log("Phase 1: Search, AI Chat, Notifications");
     console.log("Phase 2: Booking, Payments, Alerts");
     console.log("Phase 3: Admin, Channel, Multi-lang, Inline");
-    console.log("Phase 4: Ops Group — Tasks, Reminders, Follow-ups");
+    console.log("Phase 4: Ops Group v2 — 10 Features (Tasks, KPI, Escalation, Voice, etc.)");
     console.log("Languages: AR, EN, FR, UR, HI");
     console.log("-------------------------------------------");
 
