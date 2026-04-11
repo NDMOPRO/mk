@@ -226,15 +226,20 @@ const ALL_BUTTON_LABELS = (() => {
 })();
 
 bot.on("text", async (ctx) => {
-  if (ctx.message.text.startsWith("/")) return;
-
   const chatId = ctx.chat.id;
   const chatType = ctx.chat.type;
   const isPrivate = chatType === "private";
-  const userMessage = ctx.message.text;
+  const userMessage = ctx.message.text || "";
 
   // ── Phase 4: Ops Group ───────────────────────────────────────
   if (isOpsGroup(ctx)) {
+    // Skip slash commands here — they are handled by bot.command() above.
+    // bot.command() in Telegraf fires BEFORE on("text"), so commands that
+    // matched will already have been handled. However, if a /command@botname
+    // message somehow reaches here (e.g., Telegraf didn’t match it), we
+    // still want to ignore it rather than send it to the AI.
+    if (userMessage.startsWith("/")) return;
+
     // Passive monitoring: detect follow-up promises in ALL messages
     await handleOpsPassive(ctx);
 
@@ -248,6 +253,9 @@ bot.on("text", async (ctx) => {
     }
     return;
   }
+
+  // Skip slash commands in all other contexts too
+  if (userMessage.startsWith("/")) return;
 
   // ── Public Bot (private chats + other groups) ────────────────
   registerUser(ctx);

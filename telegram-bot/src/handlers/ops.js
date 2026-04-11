@@ -21,6 +21,21 @@
 const opsDb = require("../services/ops-database");
 const config = require("../config");
 
+// ─── Utility: extract args from /command or /command@botname ──
+
+/**
+ * Extract the arguments from a command message, handling both:
+ *   /task description
+ *   /task@monthlykey_bot description
+ * Returns the text after the command (and optional @mention), trimmed.
+ */
+function extractCommandArgs(text, command) {
+  if (!text) return "";
+  // Match /command or /command@anything at the start, case-insensitive
+  const re = new RegExp(`^\/(?:${command})(?:@\\S+)?\\s*`, "i");
+  return text.replace(re, "").trim();
+}
+
 // ─── Topic Map ───────────────────────────────────────────────
 // Maps Telegram thread IDs to topic names.
 // These are populated dynamically as the bot sees messages in each topic.
@@ -322,9 +337,9 @@ async function handleOpsTask(ctx) {
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
 
-  // Extract task title from command args
+  // Extract task title from command args (handles /task and /task@botname)
   const text = ctx.message.text || "";
-  const title = text.replace(/^\/task\s*/i, "").trim();
+  const title = extractCommandArgs(text, "task");
 
   if (!title) {
     return ctx.reply(
@@ -352,7 +367,7 @@ async function handleOpsChecklist(ctx) {
   const chatId = ctx.chat.id;
 
   const text = ctx.message.text || "";
-  const argsText = text.replace(/^\/checklist\s*/i, "").trim();
+  const argsText = extractCommandArgs(text, "checklist");
 
   if (!argsText) {
     return ctx.reply(
@@ -442,7 +457,7 @@ async function handleOpsDone(ctx) {
   const chatId = ctx.chat.id;
 
   const text = ctx.message.text || "";
-  const args = text.replace(/^\/done\s*/i, "").trim();
+  const args = extractCommandArgs(text, "done");
   const taskId = parseInt(args, 10);
 
   if (!taskId || isNaN(taskId)) {
@@ -487,7 +502,7 @@ async function handleOpsRemind(ctx) {
   const chatId = ctx.chat.id;
 
   const text = ctx.message.text || "";
-  const argsText = text.replace(/^\/remind\s*/i, "").trim();
+  const argsText = extractCommandArgs(text, "remind");
 
   if (!argsText) {
     return ctx.reply(
