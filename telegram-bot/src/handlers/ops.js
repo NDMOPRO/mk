@@ -301,12 +301,30 @@ function escMd(text) {
   return text.replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&");
 }
 
+// ─── Language Detection ─────────────────────────────────────
+
+/**
+ * Detect whether a message is primarily Arabic or English.
+ * Returns 'ar' if more than 30% of letter characters are Arabic script,
+ * otherwise returns 'en'.
+ */
+function detectMessageLanguage(text) {
+  if (!text) return 'en';
+  const arabicChars = (text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g) || []).length;
+  const latinChars  = (text.match(/[a-zA-Z]/g) || []).length;
+  const totalLetters = arabicChars + latinChars;
+  if (totalLetters === 0) return 'en';
+  return (arabicChars / totalLetters) >= 0.3 ? 'ar' : 'en';
+}
+
 // ─── Smart topic-aware AI response ──────────────────────────
 
 function getTopicSystemPrompt(topicInfo) {
   const base = `You are the operations assistant for Monthly Key (المفتاح الشهري), a monthly rental platform in Saudi Arabia. You are operating inside the internal Daily Operations HQ group on Telegram. You are context-aware of the current topic: "${topicInfo.name}".
 
 Always respond in the same language the user wrote in (Arabic or English). Be concise, practical, and action-oriented. Do NOT give generic customer service replies. Focus on operational tasks, follow-ups, and actionable next steps.`;
+
+  // Language-specific override appended per-call — see handleOpsMessage
 
   const rolePrompts = {
     ceo_update: `${base}\n\nYou are in the CEO Daily Update topic. Help summarize key metrics, flag blockers, and structure daily updates. Ask about: bookings today, revenue, operational issues, and tomorrow's priorities.`,
@@ -637,13 +655,19 @@ async function handleOpsMessage(ctx, openaiClient) {
   try { await ctx.sendChatAction("typing"); } catch (e) {}
 
   try {
-    const systemPrompt = getTopicSystemPrompt(topicInfo);
+    const msgLang = detectMessageLanguage(cleanText);
+    const langInstruction = msgLang === 'ar'
+      ? '\n\n⚠️ IMPORTANT: The user wrote in Arabic. You MUST reply entirely in Arabic. Do not use any English words or sentences.'
+      : '\n\n⚠️ IMPORTANT: The user wrote in English. You MUST reply entirely in English. Do not use any Arabic words or sentences.';
+
+    const basePrompt = getTopicSystemPrompt(topicInfo);
+    const systemPrompt = basePrompt + langInstruction;
 
     const response = await openaiClient.chat.completions.create({
       model: config.aiModel || "gpt-4.1-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: cleanText || "مرحباً، كيف يمكنك مساعدتي؟" },
+        { role: "user", content: cleanText || (msgLang === 'ar' ? 'مرحباً، كيف يمكنك مساعدتي؟' : 'Hello, how can you help me?') },
       ],
       max_tokens: 600,
       temperature: 0.5,
@@ -660,7 +684,12 @@ async function handleOpsMessage(ctx, openaiClient) {
       const timeDisplay = ksaTime.toLocaleString("ar-SA", {
         timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", weekday: "short"
       });
-      finalReply += `\n\n📌 _تم تسجيل متابعة تلقائية لـ ${fromUser} — سيتم التذكير ${timeDisplay}_`;
+      // Follow-up note in the same language as the message
+      if (msgLang === 'ar') {
+        finalReply += `\n\n📌 _تم تسجيل متابعة تلقائية لـ ${fromUser} — سيتم التذكير ${timeDisplay}_`;
+      } else {
+        finalReply += `\n\n📌 _Auto follow-up registered for ${fromUser} — reminder set for ${timeDisplay}_`;
+      }
     }
 
     await ctx.reply(finalReply, {
@@ -669,10 +698,10 @@ async function handleOpsMessage(ctx, openaiClient) {
     });
   } catch (error) {
     console.error("[Ops] AI error:", error.message);
-    await ctx.reply(
-      `⚙️ حدث خطأ في المعالجة. يمكنك استخدام الأوامر مباشرة:\n• /task [مهمة]\n• /tasks\n• /done [رقم]\n• /summary`,
-      { message_thread_id: threadId }
-    );
+    const errMsg = (detectMessageLanguage(cleanText) === 'en')
+      ? `⚙️ Processing error. You can use commands directly:\n• /task [description]\n• /tasks\n• /done [number]\n• /summary`
+      : `⚙️ حدث خطأ في المعالجة. يمكنك استخدام الأوامر مباشرة:\n• /task [مهمة]\n• /tasks\n• /done [رقم]\n• /summary`;
+    await ctx.reply(errMsg, { message_thread_id: threadId });
   }
 }
 
