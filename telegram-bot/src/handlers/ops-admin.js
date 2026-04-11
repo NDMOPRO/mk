@@ -64,27 +64,33 @@ const SCHEDULED_JOBS = [
 // ─── Admin Check ─────────────────────────────────────────────
 
 /**
- * Returns true if the user is the root administrator.
+ * Returns true if the user is a root administrator.
  * Checks (in order):
  *   1. ADMIN_IDS env var — comma-separated Telegram user IDs
- *   2. ADMIN_USERNAME env var — Telegram @username (without @)
+ *   2. ADMIN_USERNAME env var — comma-separated Telegram usernames (without @)
+ *      e.g. "Monthlykey,hobart2007"
+ *   3. ROOT_ADMIN_ID env var — single numeric Telegram user ID (legacy)
  */
 function isRootAdmin(ctx) {
   const userId = ctx.from?.id;
   const username = (ctx.from?.username || "").toLowerCase();
 
-  // Check ADMIN_IDS
+  // 1. Check ADMIN_IDS (comma-separated numeric user IDs)
   if (config.adminIds && config.adminIds.length > 0) {
     if (config.adminIds.includes(userId)) return true;
   }
 
-  // Check ADMIN_USERNAME
+  // 2. Check ADMIN_USERNAME (comma-separated usernames, case-insensitive)
+  //    Supports both single value ("Monthlykey") and multiple ("Monthlykey,hobart2007")
   if (config.adminUsername) {
-    const adminUser = config.adminUsername.replace(/^@/, "").toLowerCase();
-    if (username && username === adminUser) return true;
+    const adminUsernames = config.adminUsername
+      .split(",")
+      .map(u => u.trim().replace(/^@/, "").toLowerCase())
+      .filter(Boolean);
+    if (username && adminUsernames.includes(username)) return true;
   }
 
-  // Check ROOT_ADMIN_ID env var directly (additional safety net)
+  // 3. Check ROOT_ADMIN_ID env var (additional safety net)
   const rootId = parseInt(process.env.ROOT_ADMIN_ID || "0", 10);
   if (rootId && userId === rootId) return true;
 
