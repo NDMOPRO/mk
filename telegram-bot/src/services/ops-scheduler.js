@@ -1,28 +1,18 @@
 /**
- * Operations Scheduler — v2 (10-Feature Upgrade)
+ * Operations Scheduler — v3 (21-Feature)
  * ─────────────────────────────────────────────────────────────
  * Handles all time-based operations for the Daily Ops HQ group:
  *
- * 1. Morning Briefing — 9:00 AM KSA → "01 — Daily CEO Update" (thread 4)
- *    Structured: today's priorities, overdue items, tasks due today, reminders
- *
- * 2. Daily Auto-Report — 9:00 PM KSA → "01 — Daily CEO Update" (thread 4)
- *    What was completed, what's pending, what's overdue
- *
- * 3. Evening Reminder — 6:00 PM KSA → General
- *    Remind team to update "Completed Today" and "Tomorrow Priorities"
- *
- * 4. Escalation Checker — Every 5 minutes
- *    If a task in "10 — Blockers" (thread 13) is >24h old → post to CEO Update
- *
- * 5. Vendor Follow-up Checker — Every 5 minutes
- *    If vendor deadline passed with no update → post follow-up in same topic
- *
- * 6. Overdue Task Pinger — Every hour
- *    If a task is overdue and has an assignee → ping them in the topic
- *
- * 7. Follow-up Checker — Every minute — Send due follow-up reminders
- * 8. Reminder Checker — Every minute — Send due manual reminders
+ *  1. Morning Briefing — 9:00 AM KSA → CEO Update (thread 4)
+ *  2. Daily Auto-Report — 9:00 PM KSA → CEO Update (thread 4)
+ *  3. Evening Reminder — 6:00 PM KSA → General
+ *  4. Escalation Checker — Every 5 min (blockers >24h → CEO Update)
+ *  5. Vendor Follow-up Checker — Every 5 min
+ *  6. Overdue Task Pinger — Every 60 min
+ *  7. Follow-up Checker — Every 1 min
+ *  8. Reminder Checker — Every 1 min
+ *  9. SLA Checker — Every 5 min (warn at 75%, breach at 100%)
+ * 10. Recurring Task Creator — Every 5 min (daily/weekly/monthly)
  *
  * All times are in KSA (UTC+3).
  */
@@ -70,7 +60,7 @@ function markSent(reportType) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ═══ Feature 9: Morning Briefing (9 AM KSA) ═════════════════
+// ═══ Morning Briefing (9 AM KSA) ════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
 async function sendMorningBriefing() {
@@ -80,7 +70,6 @@ async function sendMorningBriefing() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  // 9 AM KSA = 6 AM UTC
   if (hour !== 6 || min >= 5) return;
 
   markSent("morning_briefing");
@@ -90,9 +79,9 @@ async function sendMorningBriefing() {
     const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
     const dueToday = opsDb.getTasksDueToday(OPS_GROUP_ID);
     const stats = opsDb.getTaskStats(OPS_GROUP_ID);
-
-    // Get tomorrow priorities (tasks in thread 15)
     const priorities = opsDb.getPendingTasksByThread(OPS_GROUP_ID, THREAD_PRIORITIES);
+    const pendingApprovals = opsDb.getPendingApprovals(OPS_GROUP_ID);
+    const occSummary = opsDb.getOccupancySummary(OPS_GROUP_ID);
 
     const dateStr = ksa.toLocaleDateString("en-US", {
       weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -100,9 +89,8 @@ async function sendMorningBriefing() {
 
     let msg = `☀️ *Morning Briefing — ${dateStr}*\n\n`;
 
-    // Today's priorities
     if (priorities.length > 0) {
-      msg += `📅 *Today's Priorities* (from Tomorrow Priorities):\n`;
+      msg += `📅 *Today's Priorities:*\n`;
       priorities.slice(0, 10).forEach((t, i) => {
         const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
         msg += `${i + 1}. ${t.title}${assignee} [#${t.id}]\n`;
@@ -110,9 +98,8 @@ async function sendMorningBriefing() {
       msg += "\n";
     }
 
-    // Overdue items
     if (overdue.length > 0) {
-      msg += `⚠️ *Overdue Tasks (${overdue.length}):*\n`;
+      msg += `⚠️ *Overdue (${overdue.length}):*\n`;
       overdue.slice(0, 10).forEach((t) => {
         const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
         msg += `• 🔴 ${t.title}${assignee} (due: ${t.due_date}) [#${t.id}]\n`;
@@ -120,7 +107,6 @@ async function sendMorningBriefing() {
       msg += "\n";
     }
 
-    // Due today
     if (dueToday.length > 0) {
       msg += `📌 *Due Today (${dueToday.length}):*\n`;
       dueToday.slice(0, 10).forEach((t) => {
@@ -130,28 +116,39 @@ async function sendMorningBriefing() {
       msg += "\n";
     }
 
-    // Summary stats
-    msg += `📊 *Status:* ${stats.pending} pending / ${stats.done} completed total\n`;
-
-    if (allTasks.length === 0 && overdue.length === 0) {
-      msg += `\n✨ All clear — no pending tasks!\n`;
+    if (pendingApprovals.length > 0) {
+      msg += `📝 *Pending Approvals (${pendingApprovals.length}):*\n`;
+      pendingApprovals.slice(0, 3).forEach(a => {
+        msg += `• #${a.id}: "${a.request_text.substring(0, 60)}" by ${a.requested_by}\n`;
+      });
+      msg += "\n";
     }
 
-    msg += `\n💡 Use /summary for full details`;
+    msg += `📊 *Status:* ${stats.pending} pending / ${stats.done} completed`;
+    if (occSummary.total > 0) {
+      const occRate = Math.round((occSummary.occupied / occSummary.total) * 100);
+      msg += ` | 🏠 ${occRate}% occupancy`;
+    }
+
+    if (allTasks.length === 0 && overdue.length === 0) {
+      msg += `\n\n✨ All clear — no pending tasks!`;
+    }
+
+    msg += `\n\n💡 Use /summary, /kpi, /handover for details`;
 
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
       parse_mode: "Markdown",
       message_thread_id: THREAD_CEO_UPDATE,
     });
 
-    console.log("[OpsScheduler] Morning briefing sent to CEO Update topic.");
+    console.log("[OpsScheduler] Morning briefing sent.");
   } catch (error) {
     console.error("[OpsScheduler] Morning briefing error:", error.message);
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ═══ Feature 1: Daily Auto-Report (9 PM KSA) ════════════════
+// ═══ Daily Auto-Report (9 PM KSA) ═══════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
 async function sendDailyReport() {
@@ -161,7 +158,6 @@ async function sendDailyReport() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  // 9 PM KSA = 6 PM UTC (18:00)
   if (hour !== 18 || min >= 5) return;
 
   markSent("daily_report");
@@ -171,6 +167,7 @@ async function sendDailyReport() {
     const allPending = opsDb.getAllPendingTasks(OPS_GROUP_ID);
     const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
     const stats = opsDb.getTaskStats(OPS_GROUP_ID);
+    const expSummary = opsDb.getExpenseSummary(OPS_GROUP_ID);
 
     const dateStr = ksa.toLocaleDateString("en-US", {
       weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -178,7 +175,6 @@ async function sendDailyReport() {
 
     let msg = `📊 *Daily Report — ${dateStr}*\n\n`;
 
-    // Completed today
     if (completedToday.length > 0) {
       msg += `✅ *Completed Today (${completedToday.length}):*\n`;
       completedToday.slice(0, 15).forEach((t) => {
@@ -191,16 +187,13 @@ async function sendDailyReport() {
       msg += `✅ *Completed Today:* None\n\n`;
     }
 
-    // Still pending
     if (allPending.length > 0) {
-      // Group by topic
       const byTopic = {};
       for (const t of allPending) {
         const key = t.topic_name || "General";
         if (!byTopic[key]) byTopic[key] = [];
         byTopic[key].push(t);
       }
-
       msg += `⬜ *Still Pending (${allPending.length}):*\n`;
       for (const [topic, tasks] of Object.entries(byTopic)) {
         msg += `  _${topic}:_ ${tasks.length} tasks\n`;
@@ -208,7 +201,6 @@ async function sendDailyReport() {
       msg += "\n";
     }
 
-    // Overdue
     if (overdue.length > 0) {
       msg += `🔴 *Overdue (${overdue.length}):*\n`;
       overdue.slice(0, 10).forEach((t) => {
@@ -218,7 +210,10 @@ async function sendDailyReport() {
       msg += "\n";
     }
 
-    // Summary line
+    if (expSummary.totalAmount > 0) {
+      msg += `💰 *Today's Expenses:* ${expSummary.totalAmount.toLocaleString()} SAR\n\n`;
+    }
+
     msg += `📈 *Totals:* ${stats.done} done / ${stats.pending} pending / ${overdue.length} overdue`;
 
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
@@ -226,7 +221,7 @@ async function sendDailyReport() {
       message_thread_id: THREAD_CEO_UPDATE,
     });
 
-    console.log("[OpsScheduler] Daily report sent to CEO Update topic.");
+    console.log("[OpsScheduler] Daily report sent.");
   } catch (error) {
     console.error("[OpsScheduler] Daily report error:", error.message);
   }
@@ -243,7 +238,6 @@ async function sendEveningReminder() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  // 6 PM KSA = 3 PM UTC (15:00)
   if (hour !== 15 || min >= 5) return;
 
   markSent("evening_reminder");
@@ -275,17 +269,15 @@ async function sendEveningReminder() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ═══ Feature 4: Escalation Checker ═══════════════════════════
+// ═══ Escalation Checker ═════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
-// Track which tasks we've already escalated to avoid spam
 const escalatedTasks = new Set();
 
 async function checkEscalations() {
   if (!bot) return;
 
   try {
-    // Get tasks in Blockers topic that are >24h old
     const staleBlockers = opsDb.getStaleBlockers(OPS_GROUP_ID, THREAD_BLOCKERS, 24);
 
     for (const task of staleBlockers) {
@@ -315,7 +307,7 @@ async function checkEscalations() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ═══ Feature 7: Vendor Follow-up Checker ═════════════════════
+// ═══ Vendor Follow-up Checker ═══════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
 async function checkVendorFollowUps() {
@@ -350,11 +342,10 @@ async function checkVendorFollowUps() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ═══ Feature 2: Overdue Task Pinger ══════════════════════════
+// ═══ Overdue Task Pinger ════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
-// Track which overdue tasks we've pinged today
-const pingedOverdueToday = new Map(); // taskId → date string
+const pingedOverdueToday = new Map();
 
 async function pingOverdueTasks() {
   if (!bot) return;
@@ -456,6 +447,148 @@ async function checkReminders() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ═══ Feature 11: SLA Checker ════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+async function checkSlaBreaches() {
+  if (!bot) return;
+
+  try {
+    const tasksWithSla = opsDb.getTasksWithSla(OPS_GROUP_ID);
+
+    for (const task of tasksWithSla) {
+      const createdAt = new Date(task.created_at).getTime();
+      const now = Date.now();
+      const elapsedHours = (now - createdAt) / (60 * 60 * 1000);
+      const slaHours = task.sla_hours;
+
+      // 75% warning
+      if (elapsedHours >= slaHours * 0.75 && elapsedHours < slaHours) {
+        if (!opsDb.hasSlaAlertBeenSent(task.id, "warning")) {
+          opsDb.markSlaAlertSent(task.id, "warning");
+
+          const remaining = Math.round(slaHours - elapsedHours);
+          const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
+          const msg = `⚠️ *SLA Warning — ${remaining}h remaining*\n\n` +
+            `⬜ ${task.title}${assignee}\n` +
+            `⏱️ SLA: ${slaHours}h | Elapsed: ${Math.round(elapsedHours)}h\n` +
+            `📍 ${task.topic_name || "General"}\n` +
+            `🔗 Task #${task.id}\n\n` +
+            `_Approaching SLA deadline. Please prioritize._`;
+
+          const sendOpts = { parse_mode: "Markdown" };
+          if (task.thread_id) sendOpts.message_thread_id = task.thread_id;
+
+          try {
+            await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
+            console.log(`[OpsScheduler] SLA warning for task #${task.id}`);
+          } catch (err) {
+            console.error(`[OpsScheduler] SLA warning error #${task.id}:`, err.message);
+          }
+        }
+      }
+
+      // 100% breach
+      if (elapsedHours >= slaHours) {
+        if (!opsDb.hasSlaAlertBeenSent(task.id, "breach")) {
+          opsDb.markSlaAlertSent(task.id, "breach");
+
+          const overBy = Math.round(elapsedHours - slaHours);
+          const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
+          const msg = `🔴 *SLA BREACHED — ${task.topic_name || "General"}*\n\n` +
+            `⬜ ${task.title}${assignee}\n` +
+            `⏱️ SLA: ${slaHours}h | Elapsed: ${Math.round(elapsedHours)}h (+${overBy}h over)\n` +
+            `📍 ${task.topic_name || "General"}\n` +
+            `🔗 Task #${task.id}\n\n` +
+            `_SLA breached. Immediate action required._`;
+
+          // Post to the task's topic
+          const sendOpts = { parse_mode: "Markdown" };
+          if (task.thread_id) sendOpts.message_thread_id = task.thread_id;
+          try {
+            await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
+          } catch (err) {
+            console.error(`[OpsScheduler] SLA breach topic error #${task.id}:`, err.message);
+          }
+
+          // Also post to CEO Update
+          try {
+            await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
+              parse_mode: "Markdown",
+              message_thread_id: THREAD_CEO_UPDATE,
+            });
+            console.log(`[OpsScheduler] SLA breach escalated for task #${task.id}`);
+          } catch (err) {
+            console.error(`[OpsScheduler] SLA breach CEO error #${task.id}:`, err.message);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[OpsScheduler] SLA check error:", error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ Feature 13: Recurring Task Creator ═════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+async function processRecurringTasks() {
+  if (!bot) return;
+
+  try {
+    const recurring = opsDb.getActiveRecurringTasks(OPS_GROUP_ID);
+    const ksa = ksaNow();
+    const today = todayKSA();
+    const dayOfWeek = ksa.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+    const dayOfMonth = ksa.getUTCDate();
+
+    for (const rec of recurring) {
+      // Skip if already created today
+      if (rec.last_created === today) continue;
+
+      let shouldCreate = false;
+
+      if (rec.schedule_type === "daily") {
+        shouldCreate = true;
+      } else if (rec.schedule_type === "weekly") {
+        shouldCreate = (dayOfWeek === rec.schedule_value.toLowerCase());
+      } else if (rec.schedule_type === "monthly") {
+        const targetDay = parseInt(rec.schedule_value, 10);
+        shouldCreate = (dayOfMonth === targetDay);
+      }
+
+      if (!shouldCreate) continue;
+
+      // Create the task
+      try {
+        const taskId = opsDb.addTask(rec.chat_id, rec.thread_id, rec.topic_name, rec.title, {
+          priority: rec.priority || "normal",
+          assignedTo: rec.assigned_to || null,
+          propertyTag: rec.property_tag || null,
+          createdBy: "Recurring",
+        });
+
+        opsDb.updateRecurringLastCreated(rec.id, today);
+
+        // Notify in the topic
+        const msg = `🔄 *Recurring Task Created*\n\n⬜ ${rec.title} [#${taskId}]\n📅 ${rec.schedule_type}: ${rec.schedule_value}${rec.assigned_to ? `\n👤 ${rec.assigned_to}` : ""}`;
+
+        const sendOpts = { parse_mode: "Markdown" };
+        if (rec.thread_id) sendOpts.message_thread_id = rec.thread_id;
+
+        await bot.telegram.sendMessage(rec.chat_id, msg, sendOpts);
+        console.log(`[OpsScheduler] Recurring task created: "${rec.title}" → #${taskId}`);
+      } catch (err) {
+        console.error(`[OpsScheduler] Recurring task error for ID ${rec.id}:`, err.message);
+      }
+    }
+  } catch (error) {
+    console.error("[OpsScheduler] Recurring task check error:", error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ═══ Main Scheduler Tick ═════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
@@ -469,10 +602,12 @@ async function tick() {
     await checkFollowUps();
     await checkReminders();
 
-    // Every 5 minutes: check escalations and vendor follow-ups
+    // Every 5 minutes: check escalations, vendor follow-ups, SLA, recurring
     if (tickCount % 5 === 0) {
       await checkEscalations();
       await checkVendorFollowUps();
+      await checkSlaBreaches();
+      await processRecurringTasks();
     }
 
     // Every 60 minutes: ping overdue tasks
@@ -500,18 +635,38 @@ function startOpsScheduler(botInstance) {
   // Initialize the ops database
   opsDb.getDb();
 
+  // Initialize default SLA configs
+  try {
+    const defaultSla = { 8: 12, 13: 24, 9: 48 }; // support: 12h, blockers: 24h, tech: 48h
+    for (const [threadId, hours] of Object.entries(defaultSla)) {
+      const existing = opsDb.getSlaForThread(OPS_GROUP_ID, parseInt(threadId));
+      if (!existing) {
+        const topicNames = {
+          8: "05 — Customer Support & Complaints",
+          13: "10 — Blockers & Escalations",
+          9: "06 — Website & Tech Issues",
+        };
+        opsDb.setSlaConfig(OPS_GROUP_ID, parseInt(threadId), topicNames[threadId], hours);
+      }
+    }
+  } catch (e) {
+    console.error("[OpsScheduler] SLA init error:", e.message);
+  }
+
   // Run every 60 seconds
   schedulerInterval = setInterval(tick, 60 * 1000);
 
   // Run immediately on start (after a short delay to let bot connect)
   setTimeout(tick, 5000);
 
-  console.log("[OpsScheduler] Started v2. Schedule:");
-  console.log("  • Morning Briefing: 9:00 AM KSA → CEO Update topic");
+  console.log("[OpsScheduler] Started v3. Schedule:");
+  console.log("  • Morning Briefing: 9:00 AM KSA → CEO Update");
   console.log("  • Evening Reminder: 6:00 PM KSA → General");
-  console.log("  • Daily Report: 9:00 PM KSA → CEO Update topic");
+  console.log("  • Daily Report: 9:00 PM KSA → CEO Update");
   console.log("  • Escalation check: every 5 min");
   console.log("  • Vendor follow-ups: every 5 min");
+  console.log("  • SLA check: every 5 min");
+  console.log("  • Recurring tasks: every 5 min");
   console.log("  • Overdue pings: every 60 min");
   console.log("  • Reminders/follow-ups: every 1 min");
 }

@@ -68,7 +68,7 @@ const {
 } = require("./handlers/admin");
 const { initChannelPosting, stopChannelPosting } = require("./services/channel");
 
-// Phase 4: Operations Group imports (v2 — 10-feature upgrade)
+// Phase 4: Operations Group imports (v3 — 21-feature upgrade)
 const {
   handleOpsTask,
   handleOpsChecklist,
@@ -79,6 +79,19 @@ const {
   handleOpsKpi,
   handleOpsProperty,
   handleOpsMove,
+  // v3 new command handlers
+  handleOpsSla,
+  handleOpsApprove,
+  handleOpsReject,
+  handleOpsRecurring,
+  handleOpsDepends,
+  handleOpsHandover,
+  handleOpsMonthlyReport,
+  handleOpsExpense,
+  handleOpsExpenses,
+  handleOpsOccupancy,
+  handleOpsMeeting,
+  // AI & media handlers
   handleOpsMessage,
   handleOpsMedia,
   handleOpsVoice,
@@ -223,6 +236,63 @@ bot.command("property", (ctx) => {
 bot.command("move", (ctx) => {
   if (!isOpsGroup(ctx)) return;
   return handleOpsMove(ctx);
+});
+
+// ─── Phase 4 v3: New Ops Commands ───────────────────────────
+
+bot.command("sla", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsSla(ctx);
+});
+
+bot.command("approve", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsApprove(ctx);
+});
+
+bot.command("reject", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsReject(ctx);
+});
+
+bot.command("recurring", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsRecurring(ctx);
+});
+
+bot.command("depends", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsDepends(ctx);
+});
+
+bot.command("handover", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsHandover(ctx);
+});
+
+bot.command("monthlyreport", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsMonthlyReport(ctx);
+});
+
+bot.command("expense", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsExpense(ctx);
+});
+
+bot.command("expenses", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsExpenses(ctx);
+});
+
+bot.command("occupancy", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsOccupancy(ctx);
+});
+
+bot.command("meeting", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsMeeting(ctx);
 });
 
 // ─── Text Message Handler ─────────────────────────────────────
@@ -441,18 +511,29 @@ async function setupBot() {
       { command: "help",          description: "Show help | المساعدة" },
     ]);
 
-    // Set ops-specific commands for the ops group (v2 — 10-feature upgrade)
+    // Set ops-specific commands for the ops group (v3 — 21-feature upgrade)
     await bot.telegram.setMyCommands(
       [
-        { command: "task",      description: "Add task | إضافة مهمة" },
-        { command: "checklist", description: "Create checklist | قائمة مهام" },
-        { command: "tasks",     description: "View tasks | عرض المهام" },
-        { command: "done",      description: "Complete task | إنهاء مهمة" },
-        { command: "remind",    description: "Set reminder | تذكير" },
-        { command: "summary",   description: "All tasks summary | ملخص" },
-        { command: "kpi",       description: "Weekly KPI dashboard | لوحة الأداء" },
-        { command: "property",  description: "Property tracker | متابعة الوحدات" },
-        { command: "move",      description: "Move task to topic | نقل مهمة" },
+        { command: "task",          description: "Add task | إضافة مهمة" },
+        { command: "tasks",         description: "View tasks | عرض المهام" },
+        { command: "done",          description: "Complete task | إنهاء مهمة" },
+        { command: "summary",       description: "All tasks summary | ملخص" },
+        { command: "kpi",           description: "KPI dashboard | لوحة الأداء" },
+        { command: "sla",           description: "SLA timers | مؤقتات SLA" },
+        { command: "recurring",     description: "Recurring tasks | مهام متكررة" },
+        { command: "expense",       description: "Log expense | تسجيل مصروف" },
+        { command: "expenses",      description: "Expense summary | ملخص المصاريف" },
+        { command: "occupancy",     description: "Unit occupancy | إشغال الوحدات" },
+        { command: "meeting",       description: "Meeting notes | محضر اجتماع" },
+        { command: "handover",      description: "Shift handover | تسليم الوردية" },
+        { command: "monthlyreport", description: "Monthly report | تقرير شهري" },
+        { command: "property",      description: "Property tracker | متابعة الوحدات" },
+        { command: "move",          description: "Move task | نقل مهمة" },
+        { command: "remind",        description: "Set reminder | تذكير" },
+        { command: "depends",       description: "Task dependency | اعتمادية مهمة" },
+        { command: "approve",       description: "Approve request | موافقة" },
+        { command: "reject",        description: "Reject request | رفض" },
+        { command: "checklist",     description: "Create checklist | قائمة مهام" },
       ],
       { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
     );
@@ -493,7 +574,7 @@ bot
     console.log("Phase 1: Search, AI Chat, Notifications");
     console.log("Phase 2: Booking, Payments, Alerts");
     console.log("Phase 3: Admin, Channel, Multi-lang, Inline");
-    console.log("Phase 4: Ops Group v2 — 10 Features (Tasks, KPI, Escalation, Voice, etc.)");
+    console.log("Phase 4: Ops Group v3 — 21 Features (Tasks, KPI, SLA, Approvals, Meetings, etc.)");
     console.log("Languages: AR, EN, FR, UR, HI");
     console.log("-------------------------------------------");
 

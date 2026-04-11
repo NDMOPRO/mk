@@ -1,0 +1,15 @@
+DATABASE STATUS: ops-database.js already has ALL tables and methods needed for 11 new features.
+- SLA: setSlaConfig, getSlaConfig, getSlaForThread, hasSlaAlertBeenSent, markSlaAlertSent, getTasksWithSla
+- Approvals: addApproval, getApprovalById, decideApproval, getPendingApprovals, getApprovalByMessageId
+- Recurring: addRecurringTask, getActiveRecurringTasks, getRecurringTaskById, deleteRecurringTask, updateRecurringLastCreated
+- Dependencies: addTaskDependency, getTaskDependencies, getDependentTasks, isTaskBlocked
+- Expenses: addExpense, getMonthlyExpenses, getExpensesByProperty, getExpenseSummary, getMonthlyExpenseTotal
+- Occupancy: setOccupancy, getOccupancy, getOccupancyByUnit, getOccupancySummary
+- Meetings: startMeeting, getActiveMeeting, endMeeting, addMeetingMessage, getMeetingMessages, getMeetingById
+- Monthly stats: getMonthlyStats
+- Shift handover: getTasksCreatedSince, getTasksCompletedSince
+
+NO CHANGES NEEDED to ops-database.js.
+
+NEXT: Update ops-scheduler.js with SLA checks, recurring task creation, Google Sheets sync
+THEN: Update index.js to wire all new commands
