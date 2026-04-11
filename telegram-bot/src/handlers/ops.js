@@ -20,7 +20,8 @@ const http = require("http");
 // v5 handlers
 const {
   handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsTrends, handleOpsWeather, handleOpsClean,
-  handleOpsIdea, handleOpsIdeas, handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback
+  handleOpsIdea, handleOpsIdeas, handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback,
+  handleIdeaVoteCallback
 } = require("./ops-v5");
 
 // ─── Constants ──────────────────────────────────────────────
@@ -1182,5 +1183,6 @@ module.exports = {
   handleOpsVoice, handleOpsMessage, handleOpsMedia,
   handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsTrends, handleOpsWeather, handleOpsClean,
   handleOpsIdea, handleOpsIdeas, handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback,
+  handleIdeaVoteCallback,
   handleOpsGsync, handleOpsRecurring, handleOpsMeeting, handleOpsPassive, registerTopicName,
 };

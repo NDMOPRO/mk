@@ -218,21 +218,44 @@ async function handleOpsIdea(ctx) {
     const args = extractCommandArgs(text, "idea");
 
     if (!args) {
-      const en = `💡 *Submit Idea*\n\nUsage: \`/idea Your idea description\`\nExample: \`/idea Add cinema to 5-star units\``;
-      const ar = `💡 *تقديم فكرة*\n\nالاستخدام: \`/idea وصف الفكرة\`\nمثال: \`/idea إضافة سينما للوحدات الفاخرة\``;
+      const en = `💡 *Submit Idea*\n\nUsage:\n• \`/idea Your idea description\` — submit a new idea\n• \`/idea vote [id]\` — vote on an idea (e.g. \`/idea vote 3\`)\n• \`/ideas\` — view all ideas with vote buttons`;
+      const ar = `💡 *تقديم فكرة*\n\nالاستخدام:\n• \`/idea وصف الفكرة\` — تقديم فكرة جديدة\n• \`/idea vote [رقم]\` — التصويت على فكرة (مثال: \`/idea vote 3\`)\n• \`/ideas\` — عرض جميع الأفكار مع أزرار التصويت`;
       return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
     }
 
+    // ─── Vote subcommand: /idea vote [id] ───
+    const voteMatch = args.match(/^vote\s+(\d+)$/i);
+    if (voteMatch) {
+      const ideaId = parseInt(voteMatch[1]);
+      const idea = v5Db.getIdeaById(ideaId);
+      if (!idea) {
+        const en = `❌ Idea #${ideaId} not found. Use /ideas to see all ideas.`;
+        const ar = `❌ الفكرة #${ideaId} غير موجودة. استخدم /ideas لعرض جميع الأفكار.`;
+        return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      }
+      const result = v5Db.voteIdea(ideaId, ctx.from.id);
+      if (result.alreadyVoted) {
+        const en = `ℹ️ You already voted on idea #${ideaId}.\n\n💡 *${idea.description}* — 👍 ${idea.votes} votes`;
+        const ar = `ℹ️ لقد صوّتت بالفعل على الفكرة #${ideaId}.\n\n💡 *${idea.description}* — 👍 ${idea.votes} أصوات`;
+        return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      }
+      const updated = v5Db.getIdeaById(ideaId);
+      const en = `✅ *Vote recorded!*\n\n💡 *#${ideaId}:* ${idea.description}\n👍 Now at ${updated.votes} vote${updated.votes !== 1 ? "s" : ""}`;
+      const ar = `✅ *تم تسجيل صوتك!*\n\n💡 *#${ideaId}:* ${idea.description}\n👍 الآن ${updated.votes} صوت`;
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+
+    // ─── Submit new idea ───
     const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
     const ideaId = v5Db.addIdea(chatId, args, user, threadId);
 
-    const en = `✅ *Idea Submitted!*\n\n💡 *#${ideaId}:* ${args}\n👤 By: ${user}\n\nUse /ideas to see all ideas.`;
-    const ar = `✅ *تم تقديم الفكرة!*\n\n💡 *#${ideaId}:* ${args}\n👤 بواسطة: ${user}\n\nاستخدم /ideas لعرض جميع الأفكار.`;
+    const en = `✅ *Idea Submitted!*\n\n💡 *#${ideaId}:* ${args}\n👤 By: ${user}\n\nTap 👍 on /ideas to vote, or use \`/idea vote ${ideaId}\``;
+    const ar = `✅ *تم تقديم الفكرة!*\n\n💡 *#${ideaId}:* ${args}\n👤 بواسطة: ${user}\n\nاضغط 👍 في /ideas للتصويت، أو استخدم \`/idea vote ${ideaId}\``;
 
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
   } catch (e) {
     console.error("[handleOpsIdea] Error:", e.message);
-    await ctx.reply(`❌ Error submitting idea: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
   }
 }
 
@@ -256,10 +279,61 @@ async function handleOpsIdeas(ctx) {
       ar += `${statusEmoji} *#${i.id}:* ${i.description}\n   👤 ${i.submitted_by} | 👍 ${i.votes} أصوات\n\n`;
     });
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    // Build inline vote buttons — one row per idea (up to 10 shown)
+    const shownIdeas = ideas.slice(0, 10);
+    const inlineKeyboard = shownIdeas.map(i => ([
+      { text: `👍 Vote #${i.id} (${i.votes})`, callback_data: `idea_vote_${i.id}` }
+    ]));
+
+    await ctx.reply(getBilingualText(en, ar), {
+      parse_mode: "Markdown",
+      message_thread_id: threadId,
+      reply_markup: { inline_keyboard: inlineKeyboard }
+    });
   } catch (e) {
     console.error("[handleOpsIdeas] Error:", e.message);
     await ctx.reply(`❌ Error loading ideas: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+  }
+}
+
+// Callback handler for inline vote buttons on /ideas board
+async function handleIdeaVoteCallback(ctx) {
+  try {
+    const data = ctx.callbackQuery?.data || "";
+    const match = data.match(/^idea_vote_(\d+)$/);
+    if (!match) return ctx.answerCbQuery("❌ Invalid vote");
+
+    const ideaId = parseInt(match[1]);
+    const idea = v5Db.getIdeaById(ideaId);
+    if (!idea) return ctx.answerCbQuery(`❌ Idea #${ideaId} not found`);
+
+    const result = v5Db.voteIdea(ideaId, ctx.from.id);
+    if (result.alreadyVoted) {
+      return ctx.answerCbQuery(`ℹ️ Already voted on #${ideaId} / لقد صوّتت بالفعل`);
+    }
+
+    const updated = v5Db.getIdeaById(ideaId);
+    await ctx.answerCbQuery(`✅ Vote recorded! #${ideaId} now has ${updated.votes} vote${updated.votes !== 1 ? "s" : ""} / تم تسجيل صوتك!`);
+
+    // Try to update the button text to reflect new vote count
+    try {
+      const keyboard = ctx.callbackQuery.message?.reply_markup?.inline_keyboard;
+      if (keyboard) {
+        const newKeyboard = keyboard.map(row =>
+          row.map(btn => {
+            const m = btn.callback_data?.match(/^idea_vote_(\d+)$/);
+            if (m && parseInt(m[1]) === ideaId) {
+              return { ...btn, text: `👍 Vote #${ideaId} (${updated.votes})` };
+            }
+            return btn;
+          })
+        );
+        await ctx.editMessageReplyMarkup({ inline_keyboard: newKeyboard });
+      }
+    } catch (e) { /* ignore edit errors */ }
+  } catch (e) {
+    console.error("[handleIdeaVoteCallback] Error:", e.message);
+    await ctx.answerCbQuery("❌ Error recording vote").catch(() => {});
   }
 }
 
@@ -370,5 +444,6 @@ module.exports = {
   handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsClean,
   handleOpsTrends, handleOpsWeather, handleOpsIdea, handleOpsIdeas,
   handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback,
+  handleIdeaVoteCallback,
   initV5, checkAndPostWeatherAlerts,
 };

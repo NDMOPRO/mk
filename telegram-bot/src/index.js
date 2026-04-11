@@ -95,6 +95,7 @@ const {
   // v5
   handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsTrends, handleOpsWeather, handleOpsClean,
   handleOpsIdea, handleOpsIdeas, handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback,
+  handleIdeaVoteCallback,
   // AI & media handlers
   handleOpsMessage,
   handleOpsMedia,
@@ -682,6 +683,17 @@ bot.action(/^photo_(approve|reject)_(\d+)$/, async (ctx) => {
     await handlePhotoReviewCallback(ctx);
   } catch (e) {
     console.error("[Bot] Photo review callback error:", e.message);
+  }
+});
+
+// ─── Phase 5 v5: Idea Vote Callbacks ────────────────────────
+bot.action(/^idea_vote_\d+$/, async (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  try {
+    await handleIdeaVoteCallback(ctx);
+  } catch (e) {
+    console.error("[Bot] Idea vote callback error:", e.message);
+    await ctx.answerCbQuery("\u274c Error recording vote").catch(() => {});
   }
 });
 
