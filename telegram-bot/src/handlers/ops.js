@@ -27,6 +27,12 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 
+// v5 handlers
+const {
+  handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsTrends, handleOpsWeather, handleOpsClean,
+  handleOpsIdea, handleOpsIdeas, handleOpsBrainstorm, handleOpsPhotos, handlePhotoReviewCallback
+} = require("./ops-v5");
+
 // ─── Constants ──────────────────────────────────────────────
 
 const OPS_GROUP_ID = -1003967447285;
