@@ -56,6 +56,46 @@ async function handleOpsRoles(ctx) {
   }
 }
 
+/**
+ * Fuzzy-match a role string to one of the three valid roles.
+ * Handles case variations and common typos (e.g. Manger → Manager).
+ * Returns the canonical role string ("CEO", "Manager", "Staff") or null.
+ */
+function normalizeRole(input) {
+  if (!input) return null;
+  const s = input.toLowerCase().trim();
+  // Exact canonical matches
+  if (s === "ceo")     return "CEO";
+  if (s === "manager") return "Manager";
+  if (s === "staff")   return "Staff";
+  // Known typos — Manager
+  const managerTypos = ["manger", "maneger", "mangaer", "mangger", "managar",
+                        "managr", "manaer", "maanger", "mnager", "manegr",
+                        "manageer", "manaager", "managerr", "mabager", "manaber"];
+  if (managerTypos.includes(s)) return "Manager";
+  // Known typos — Staff
+  const staffTypos = ["staf", "staaf", "stff", "satff", "sttaf", "stafg"];
+  if (staffTypos.includes(s)) return "Staff";
+  // Known typos — CEO
+  const ceoTypos = ["coo", "c.e.o", "c.o.o", "ceo."];
+  if (ceoTypos.includes(s)) return "CEO";
+  // Levenshtein distance ≤ 2 fallback for anything else
+  function levenshtein(a, b) {
+    const dp = Array.from({ length: a.length + 1 }, (_, i) =>
+      Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+    );
+    for (let i = 1; i <= a.length; i++)
+      for (let j = 1; j <= b.length; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    return dp[a.length][b.length];
+  }
+  const candidates = [["CEO", "ceo"], ["Manager", "manager"], ["Staff", "staff"]];
+  for (const [label, canonical] of candidates) {
+    if (levenshtein(s, canonical) <= 2) return label;
+  }
+  return null;
+}
+
 async function handleOpsSetRole(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   try {
@@ -63,24 +103,32 @@ async function handleOpsSetRole(ctx) {
     const text = ctx.message.text || "";
     const args = extractCommandArgs(text, "setrole");
 
-    const match = args.match(/^@?(\S+)\s+(CEO|Manager|Staff)$/i);
+    // Accept any two-token input: @user role  (role is fuzzy-matched)
+    const match = args.match(/^@?(\S+)\s+(\S+)$/);
     if (!match) {
-      const en = `👥 *Set Team Role*\n\nUsage: \`/setrole @user [CEO|Manager|Staff]\``;
-      const ar = `👥 *تعيين دور الفريق*\n\nالاستخدام: \`/setrole @user [CEO|Manager|Staff]\``;
+      const en = `👥 *Set Team Role*\n\nUsage: \`/setrole @user [CEO|Manager|Staff]\`\nExample: \`/setrole @SAQ198 Manager\``;
+      const ar = `👥 *تعيين دور الفريق*\n\nالاستخدام: \`/setrole @user [CEO|Manager|Staff]\`\nمثال: \`/setrole @SAQ198 Manager\``;
       return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
     }
 
     const targetUsername = match[1].replace(/^@/, "");
-    const role = match[2].toLowerCase();
+    const rawRole = match[2];
+    const role = normalizeRole(rawRole);
 
-    // Try to find user ID from team members or just use username
+    if (!role) {
+      const en = `❌ *Unknown role:* \`${rawRole}\`\n\nValid roles: *CEO*, *Manager*, *Staff*`;
+      const ar = `❌ *دور غير معروف:* \`${rawRole}\`\n\nالأدوار الصحيحة: *CEO*، *Manager*، *Staff*`;
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+
+    // Try to find user ID from team members or fall back to 0
     const teamMember = v4Db.getTeamMemberByUsername(chatId, `@${targetUsername}`);
     const targetUserId = teamMember ? teamMember.user_id : 0;
 
-    v4Db.setRole(chatId, targetUserId, `@${targetUsername}`, targetUsername, role, ctx.from.username || ctx.from.first_name);
+    v4Db.setRole(chatId, targetUserId, `@${targetUsername}`, targetUsername, role.toLowerCase(), ctx.from.username || ctx.from.first_name);
 
-    const en = `✅ *Role updated*\n\n👤 @${escMd(targetUsername)} is now *${role.toUpperCase()}*`;
-    const ar = `✅ *تم تحديث الدور*\n\n👤 @${escMd(targetUsername)} الآن هو *${role.toUpperCase()}*`;
+    const en = `✅ *Role updated*\n\n👤 @${escMd(targetUsername)} is now *${role}*`;
+    const ar = `✅ *تم تحديث الدور*\n\n👤 @${escMd(targetUsername)} الآن هو *${role}*`;
 
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
   } catch (e) {
