@@ -5,6 +5,11 @@
  * Phase 1: Search, AI Chat, Notifications, Mini App
  * Phase 2: Booking System, Payment Integration, Property Alerts
  * Phase 3: Admin Dashboard, Channel Auto-Posting, Multi-language, Enhanced Inline
+ * Phase 4: Operations Group — Tasks, Checklists, Follow-ups, Daily Reminders
+ *
+ * ─── Context Routing ─────────────────────────────────────────
+ * OPS_GROUP_ID (-1003967447285) → Operations management mode
+ * All other chats                → Public bot mode (property search, AI, etc.)
  */
 const { Telegraf, session } = require("telegraf");
 const fs = require("fs");
@@ -15,9 +20,9 @@ const HEARTBEAT_FILE = path.join(__dirname, "../.heartbeat");
 function writeHeartbeat() {
   try { fs.writeFileSync(HEARTBEAT_FILE, Date.now().toString()); } catch (e) {}
 }
-// Write heartbeat every 2 minutes while the bot is polling
 setInterval(writeHeartbeat, 2 * 60 * 1000);
-writeHeartbeat(); // Write immediately on start
+writeHeartbeat();
+
 const config = require("./config");
 const db = require("./services/database");
 const ai = require("./services/ai");
@@ -63,59 +68,157 @@ const {
 } = require("./handlers/admin");
 const { initChannelPosting, stopChannelPosting } = require("./services/channel");
 
-// Initialize Bot
+// Phase 4: Operations Group imports
+const {
+  handleOpsTask,
+  handleOpsChecklist,
+  handleOpsTasks,
+  handleOpsDone,
+  handleOpsRemind,
+  handleOpsSummary,
+  handleOpsMessage,
+  handleOpsPassive,
+  registerTopicName,
+} = require("./handlers/ops");
+const { startOpsScheduler, stopOpsScheduler } = require("./services/ops-scheduler");
+
+// ─── Ops Group ID ─────────────────────────────────────────────
+const OPS_GROUP_ID = -1003967447285;
+
+function isOpsGroup(ctx) {
+  return ctx.chat?.id === OPS_GROUP_ID;
+}
+
+// ─── Initialize Bot ───────────────────────────────────────────
 const bot = new Telegraf(config.botToken);
-
-// Middleware
 bot.use(session());
-
-// Initialize Database
 db.getDb();
 
-// ─── Command Handlers ────────────────────────────────────────
+// ─── Command Handlers ─────────────────────────────────────────
+// Ops commands are registered globally but gated by isOpsGroup() inside.
+// Public commands are ignored in the ops group.
 
-bot.start(handleStart);
-bot.help(handleHelp);
-bot.command("search", handleSearch);
-bot.command("language", handleLanguage);
-bot.command("notifications", handleNotifications);
+// /start — only in private chats
+bot.start((ctx) => {
+  if (isOpsGroup(ctx)) return; // Ignore /start in ops group
+  return handleStart(ctx);
+});
 
-// Phase 2: Booking commands
-bot.command("book", handleBook);
-bot.command("mybookings", handleMyBookings);
+// /help — only in private chats
+bot.help((ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleHelp(ctx);
+});
 
-// Phase 2: Alert commands
-bot.command("alerts", handleAlerts);
-bot.command("subscribe", handleSubscribe);
-bot.command("unsubscribe", handleUnsubscribe);
+// /search — only in private chats
+bot.command("search", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleSearch(ctx);
+});
 
-// Phase 3: Admin commands
-// /admin now starts a username/password login flow if credentials are configured
-bot.command("admin", handleAdminLogin);
-bot.command("stats", handleStats);
-bot.command("broadcast", handleBroadcast);
-bot.command("manage_bookings", handleManageBookings);
-bot.command("manage_listings", handleManageListings);
+bot.command("language", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleLanguage(ctx);
+});
 
-// ─── Text Message Handler (AI Chatbot + Booking/Alert input) ─
-// Also handles reply keyboard button presses in all languages
+bot.command("notifications", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleNotifications(ctx);
+});
+
+// Phase 2: Booking commands (private only)
+bot.command("book", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleBook(ctx);
+});
+bot.command("mybookings", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleMyBookings(ctx);
+});
+
+// Phase 2: Alert commands (private only)
+bot.command("alerts", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleAlerts(ctx);
+});
+bot.command("subscribe", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleSubscribe(ctx);
+});
+bot.command("unsubscribe", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleUnsubscribe(ctx);
+});
+
+// Phase 3: Admin commands (private only)
+bot.command("admin", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleAdminLogin(ctx);
+});
+bot.command("stats", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleStats(ctx);
+});
+bot.command("broadcast", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleBroadcast(ctx);
+});
+bot.command("manage_bookings", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleManageBookings(ctx);
+});
+bot.command("manage_listings", (ctx) => {
+  if (isOpsGroup(ctx)) return;
+  return handleManageListings(ctx);
+});
+
+// ─── Phase 4: Ops Group Commands ─────────────────────────────
+// These commands ONLY work in the ops group.
+
+bot.command("task", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsTask(ctx);
+});
+
+bot.command("checklist", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsChecklist(ctx);
+});
+
+bot.command("tasks", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsTasks(ctx);
+});
+
+bot.command("done", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsDone(ctx);
+});
+
+bot.command("remind", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsRemind(ctx);
+});
+
+bot.command("summary", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsSummary(ctx);
+});
+
+// ─── Text Message Handler ─────────────────────────────────────
 
 /**
  * Build a set of all button labels across all languages for quick lookup.
- * This lets us detect when a user taps a reply keyboard button regardless
- * of which language they are using.
  */
 const { strings } = require("./i18n");
 const ALL_BUTTON_LABELS = (() => {
-  const map = {}; // label -> action
+  const map = {};
   for (const [langCode, s] of Object.entries(strings)) {
     if (s.btnSearch)        map[s.btnSearch]        = "action_search";
     if (s.btnFeatured)      map[s.btnFeatured]      = "action_featured";
     if (s.btnHelp)          map[s.btnHelp]          = "action_help";
     if (s.btnNotifications) map[s.btnNotifications] = "action_notifications";
     if (s.btnLanguage)      map[s.btnLanguage]      = "action_language";
-    // Open App and Website buttons — normally web_app/URL buttons don't send text,
-    // but as a fallback (e.g., old keyboards cached by Telegram), intercept them too.
     if (s.btnOpenApp)       map[s.btnOpenApp]       = "action_open_app";
     if (s.btnWebsite)       map[s.btnWebsite]       = "action_website";
   }
@@ -123,37 +226,48 @@ const ALL_BUTTON_LABELS = (() => {
 })();
 
 bot.on("text", async (ctx) => {
-  // Ignore commands
   if (ctx.message.text.startsWith("/")) return;
+
   const chatId = ctx.chat.id;
-  const chatType = ctx.chat.type; // 'private', 'group', 'supergroup', 'channel'
+  const chatType = ctx.chat.type;
   const isPrivate = chatType === "private";
   const userMessage = ctx.message.text;
-  // Always ensure user exists in DB before any DB writes (prevents FK constraint errors)
+
+  // ── Phase 4: Ops Group ───────────────────────────────────────
+  if (isOpsGroup(ctx)) {
+    // Passive monitoring: detect follow-up promises in ALL messages
+    await handleOpsPassive(ctx);
+
+    // Active AI response: only when @mentioned or replying to bot
+    const botUsername = bot.botInfo?.username || "monthlykey_bot";
+    const isMentioned = userMessage.includes(`@${botUsername}`);
+    const isReplyToBot = ctx.message.reply_to_message?.from?.id === bot.botInfo?.id;
+
+    if (isMentioned || isReplyToBot) {
+      await handleOpsMessage(ctx, ai.getOpenAIClient());
+    }
+    return;
+  }
+
+  // ── Public Bot (private chats + other groups) ────────────────
   registerUser(ctx);
   const lang = db.getUserLanguage(chatId) || "ar";
 
-  // In group chats, only respond if the bot is explicitly mentioned (@monthlykey_bot)
-  // or if the message is a reply to the bot's own message.
-  // This prevents the bot from responding to every message in a busy group.
+  // In non-ops group chats, only respond if @mentioned or replied to
   if (!isPrivate) {
     const botUsername = bot.botInfo?.username;
     const isMentioned = botUsername && userMessage.includes(`@${botUsername}`);
-    const isReplyToBot =
-      ctx.message.reply_to_message?.from?.id === bot.botInfo?.id;
-    if (!isMentioned && !isReplyToBot) return; // Silently ignore
+    const isReplyToBot = ctx.message.reply_to_message?.from?.id === bot.botInfo?.id;
+    if (!isMentioned && !isReplyToBot) return;
   }
 
   // ── Reply keyboard button detection ──────────────────────────
-  // If the user tapped a reply keyboard button, route to the correct action
-  // instead of sending the label text to the AI.
   const buttonAction = ALL_BUTTON_LABELS[userMessage];
   if (buttonAction) {
     if (buttonAction === "action_search") {
       return handleSearch(ctx);
     }
     if (buttonAction === "action_featured") {
-      // Simulate the featured callback
       const { Markup } = require("telegraf");
       const searchingMsg = await ctx.reply(t(lang, "searching"));
       try {
@@ -189,18 +303,10 @@ bot.on("text", async (ctx) => {
       }
       return;
     }
-    if (buttonAction === "action_help") {
-      return handleHelp(ctx);
-    }
-    if (buttonAction === "action_notifications") {
-      return handleNotifications(ctx);
-    }
-    if (buttonAction === "action_language") {
-      return handleLanguage(ctx);
-    }
+    if (buttonAction === "action_help")          return handleHelp(ctx);
+    if (buttonAction === "action_notifications") return handleNotifications(ctx);
+    if (buttonAction === "action_language")      return handleLanguage(ctx);
     if (buttonAction === "action_open_app") {
-      // Fallback: if the web_app keyboard button sent text instead of opening the app,
-      // reply with an inline keyboard that has a web_app button to launch the Mini App.
       const { Markup } = require("telegraf");
       const appMsg = lang === "ar"
         ? "\u200F📱 اضغط الزر أدناه لفتح التطبيق:"
@@ -212,9 +318,7 @@ bot.on("text", async (ctx) => {
     }
     if (buttonAction === "action_website") {
       const { Markup } = require("telegraf");
-      const webMsg = lang === "ar"
-        ? "\u200F🌐 زر موقعنا:"
-        : "🌐 Visit our website:";
+      const webMsg = lang === "ar" ? "\u200F🌐 زر موقعنا:" : "🌐 Visit our website:";
       const webBtn = Markup.inlineKeyboard([
         [Markup.button.url(t(lang, "btnWebsite"), config.websiteUrl)],
       ]);
@@ -223,32 +327,28 @@ bot.on("text", async (ctx) => {
     return;
   }
 
-  // Phase 3: Check if this is an admin login flow input (username/password)
+  // Phase 3: Admin login flow
   if (ctx.session?.adminLogin) {
     const handled = await handleAdminLoginInput(ctx);
     if (handled) return;
   }
 
-  // Phase 2: Check if this is a booking flow input (date entry)
+  // Phase 2: Booking flow
   if (ctx.session?.booking) {
     const handled = handleBookingTextInput(ctx);
     if (handled) return;
   }
 
-  // Phase 2: Check if this is an alert subscription input (price range)
+  // Phase 2: Alert subscription flow
   if (ctx.session?.alertSubscription) {
     const handled = handleAlertTextInput(ctx);
     if (handled) return;
   }
 
-  // Show typing status
+  // AI Chatbot
   await ctx.sendChatAction("typing");
-
   try {
     const aiResponse = await ai.getAiResponse(chatId, userMessage);
-
-    // In group chats, web_app buttons are not allowed by Telegram.
-    // Send the AI response without any keyboard in groups.
     if (isPrivate) {
       await ctx.reply(aiResponse, {
         parse_mode: "Markdown",
@@ -259,7 +359,6 @@ bot.on("text", async (ctx) => {
     }
   } catch (error) {
     console.error("[Bot] Error in text handler:", error.message);
-    // In groups, try to reply without Markdown in case of parse errors
     try {
       await ctx.reply(t(lang, "error"));
     } catch (e) {
@@ -268,38 +367,45 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// ─── Inline Search & Callbacks ───────────────────────────────
+// ─── Inline Search & Callbacks ────────────────────────────────
 
 registerCallbacks(bot);
 registerInlineHandler(bot);
-
-// Phase 2: Register booking, payment, and alert callbacks
 registerBookingCallbacks(bot);
 registerPaymentHandlers(bot);
 registerAlertCallbacks(bot);
-
-// Phase 3: Register admin callbacks
 registerAdminCallbacks(bot);
 
-// ─── Set Bot Menu & Commands ─────────────────────────────────
+// ─── Set Bot Menu & Commands ──────────────────────────────────
 
 async function setupBot() {
   try {
-    // Set Bot Commands (Phase 1-3, public commands only)
     await bot.telegram.setMyCommands([
-      { command: "start", description: "Start the bot | بدء المحادثة" },
-      { command: "search", description: "Search properties | البحث عن عقارات" },
-      { command: "book", description: "Book a property | حجز عقار" },
-      { command: "mybookings", description: "My bookings | حجوزاتي" },
-      { command: "alerts", description: "Property alerts | تنبيهات العقارات" },
-      { command: "subscribe", description: "Subscribe to alerts | الاشتراك في التنبيهات" },
-      { command: "unsubscribe", description: "Unsubscribe from alerts | إلغاء الاشتراك" },
+      { command: "start",         description: "Start the bot | بدء المحادثة" },
+      { command: "search",        description: "Search properties | البحث عن عقارات" },
+      { command: "book",          description: "Book a property | حجز عقار" },
+      { command: "mybookings",    description: "My bookings | حجوزاتي" },
+      { command: "alerts",        description: "Property alerts | تنبيهات العقارات" },
+      { command: "subscribe",     description: "Subscribe to alerts | الاشتراك في التنبيهات" },
+      { command: "unsubscribe",   description: "Unsubscribe from alerts | إلغاء الاشتراك" },
       { command: "notifications", description: "Notification settings | إعدادات الإشعارات" },
-      { command: "language", description: "Change language | تغيير اللغة" },
-      { command: "help", description: "Show help | المساعدة" },
+      { command: "language",      description: "Change language | تغيير اللغة" },
+      { command: "help",          description: "Show help | المساعدة" },
     ]);
 
-    // Set Menu Button to open Mini App
+    // Set ops-specific commands for the ops group
+    await bot.telegram.setMyCommands(
+      [
+        { command: "task",      description: "إضافة مهمة جديدة" },
+        { command: "checklist", description: "إنشاء قائمة مهام" },
+        { command: "tasks",     description: "عرض المهام المعلقة" },
+        { command: "done",      description: "إنهاء مهمة" },
+        { command: "remind",    description: "تعيين تذكير" },
+        { command: "summary",   description: "ملخص جميع المهام" },
+      ],
+      { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
+    );
+
     await bot.telegram.setChatMenuButton({
       menuButton: {
         type: "web_app",
@@ -310,37 +416,38 @@ async function setupBot() {
 
     console.log("[Bot] Commands and Menu Button configured");
     console.log(`[Bot] Mini App URL: ${config.webappUrl}`);
+    console.log(`[Bot] Ops Group ID: ${OPS_GROUP_ID}`);
 
-    // Phase 3: Log admin config
     if (config.adminIds.length > 0) {
       console.log(`[Bot] Admin IDs: ${config.adminIds.join(", ")}`);
-    } else {
-      console.log("[Bot] No admin IDs configured. Admin commands disabled.");
     }
 
-    // Phase 3: Initialize channel auto-posting
     initChannelPosting(bot);
   } catch (error) {
     console.error("[Bot] Error setting up commands/menu:", error.message);
   }
 }
 
-// ─── Start Bot ───────────────────────────────────────────────
+// ─── Start Bot ────────────────────────────────────────────────
 
 setupBot();
 
 bot
   .launch()
   .then(() => {
-    writeHeartbeat(); // Confirm bot is up
+    writeHeartbeat();
     console.log("-------------------------------------------");
     console.log("Monthly Key Telegram Bot is RUNNING");
     console.log(`Bot Username: @${bot.botInfo?.username || "Bot"}`);
     console.log("Phase 1: Search, AI Chat, Notifications");
     console.log("Phase 2: Booking, Payments, Alerts");
     console.log("Phase 3: Admin, Channel, Multi-lang, Inline");
+    console.log("Phase 4: Ops Group — Tasks, Reminders, Follow-ups");
     console.log("Languages: AR, EN, FR, UR, HI");
     console.log("-------------------------------------------");
+
+    // Start the ops scheduler after bot is connected
+    startOpsScheduler(bot);
   })
   .catch((err) => {
     console.error("Failed to launch bot:", err);
@@ -349,9 +456,11 @@ bot
 // Enable graceful stop
 process.once("SIGINT", () => {
   stopChannelPosting();
+  stopOpsScheduler();
   bot.stop("SIGINT");
 });
 process.once("SIGTERM", () => {
   stopChannelPosting();
+  stopOpsScheduler();
   bot.stop("SIGTERM");
 });

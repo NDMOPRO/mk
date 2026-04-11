@@ -181,7 +181,16 @@ async function getAiResponse(chatId, userMessage, ctx = null) {
   }
 }
 
+/**
+ * Get the shared OpenAI client instance.
+ * Used by ops.js for topic-aware group responses.
+ */
+function getOpenAIClient() {
+  return openai;
+}
+
 module.exports = {
   getAiResponse,
   detectLanguage,
+  getOpenAIClient,
 };
