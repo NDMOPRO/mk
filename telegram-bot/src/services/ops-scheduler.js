@@ -1,20 +1,26 @@
 /**
- * Operations Scheduler — v3 (21-Feature)
- * ─────────────────────────────────────────────────────────────
- * Handles all time-based operations for the Daily Ops HQ group:
+ * Operations Scheduler — v5 Bilingual (EN+AR)
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * All automated messages are bilingual (English first, Arabic second).
+ * Improved visual design with consistent emoji patterns and dividers.
  *
- *  1. Morning Briefing — 9:00 AM KSA → CEO Update (thread 4)
- *  2. Daily Auto-Report — 9:00 PM KSA → CEO Update (thread 4)
- *  3. Evening Reminder — 6:00 PM KSA → General
- *  4. Escalation Checker — Every 5 min (blockers >24h → CEO Update)
- *  5. Vendor Follow-up Checker — Every 5 min
- *  6. Overdue Task Pinger — Every 60 min
- *  7. Follow-up Checker — Every 1 min
- *  8. Reminder Checker — Every 1 min
- *  9. SLA Checker — Every 5 min (warn at 75%, breach at 100%)
- * 10. Recurring Task Creator — Every 5 min (daily/weekly/monthly)
- *
- * All times are in KSA (UTC+3).
+ * Schedule (KSA = UTC+3):
+ *  1. Weather Alerts — 7:00 AM KSA
+ *  2. Morning Briefing — 9:00 AM KSA → CEO Update (thread 4)
+ *  3. Check-in Reminder — 5:00 PM KSA → CEO Update
+ *  4. Evening Reminder — 6:00 PM KSA → General
+ *  5. Unchecked Flag — 6:00 PM KSA
+ *  6. Daily Report — 9:00 PM KSA → CEO Update (thread 4)
+ *  7. Google Sync — 9:15 PM KSA
+ *  8. Weekly Standup — Sunday 9:00 AM KSA
+ *  9. Escalation Checker — every 5 min
+ * 10. Vendor Follow-ups — every 5 min
+ * 11. SLA Checker — every 5 min
+ * 12. Recurring Tasks — every 5 min
+ * 13. Mention Alerts — every 5 min
+ * 14. Priority Escalation — every 5 min
+ * 15. Overdue Pings — every 60 min
+ * 16. Reminders/Follow-ups — every 1 min
  */
 
 const opsDb = require("./ops-database");
@@ -28,13 +34,14 @@ let schedulerInterval = null;
 const OPS_GROUP_ID = -1003967447285;
 const KSA_OFFSET_MS = 3 * 60 * 60 * 1000;
 
-// Thread IDs
 const THREAD_CEO_UPDATE = 4;
 const THREAD_BLOCKERS = 13;
 const THREAD_COMPLETED = 14;
 const THREAD_PRIORITIES = 15;
 
-// ─── Time Utilities ─────────────────────────────────────────
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ Utilities ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function ksaNow() {
   return new Date(Date.now() + KSA_OFFSET_MS);
@@ -44,13 +51,6 @@ function todayKSA() {
   const ksa = ksaNow();
   return `${ksa.getUTCFullYear()}-${String(ksa.getUTCMonth() + 1).padStart(2, "0")}-${String(ksa.getUTCDate()).padStart(2, "0")}`;
 }
-
-function escMd(text) {
-  if (!text) return "";
-  return String(text).replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&");
-}
-
-// ─── Deduplication ──────────────────────────────────────────
 
 function alreadySent(reportType) {
   const today = todayKSA();
@@ -62,9 +62,11 @@ function markSent(reportType) {
   opsDb.markReportSent(OPS_GROUP_ID, today, reportType);
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Morning Briefing (9 AM KSA) ════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+const DIV = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 1. Morning Briefing (9 AM KSA) ━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function sendMorningBriefing() {
   if (!bot) return;
@@ -83,38 +85,42 @@ async function sendMorningBriefing() {
     const dueToday = opsDb.getTasksDueToday(OPS_GROUP_ID);
     const stats = opsDb.getTaskStats(OPS_GROUP_ID);
     const priorities = opsDb.getPendingTasksByThread(OPS_GROUP_ID, THREAD_PRIORITIES);
-    const pendingApprovals = opsDb.getPendingApprovals(OPS_GROUP_ID);
-    const occSummary = opsDb.getOccupancySummary(OPS_GROUP_ID);
+    let pendingApprovals = [];
+    try { pendingApprovals = opsDb.getPendingApprovals(OPS_GROUP_ID); } catch (e) {}
+    let occSummary = { total: 0, occupied: 0 };
+    try { occSummary = opsDb.getOccupancySummary(OPS_GROUP_ID); } catch (e) {}
 
-    const dateStr = ksa.toLocaleDateString("en-US", {
-      weekday: "long", year: "numeric", month: "long", day: "numeric",
-    });
+    const dateEN = ksa.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateAR = ksa.toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-    let msg = `☀️ *Morning Briefing — ${dateStr}*\n\n`;
+    // ── English Section ──
+    let msg = `☀️ *Morning Briefing | الإحاطة الصباحية*\n`;
+    msg += `📅 ${dateEN}\n`;
+    msg += `${DIV}\n\n`;
 
     if (priorities.length > 0) {
-      msg += `📅 *Today's Priorities:*\n`;
+      msg += `📋 *Today's Priorities:*\n`;
       priorities.slice(0, 10).forEach((t, i) => {
         const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
-        msg += `${i + 1}. ${t.title}${assignee} [#${t.id}]\n`;
+        msg += `  ${i + 1}. ${t.title}${assignee} [#${t.id}]\n`;
       });
       msg += "\n";
     }
 
     if (overdue.length > 0) {
-      msg += `⚠️ *Overdue (${overdue.length}):*\n`;
-      overdue.slice(0, 10).forEach((t) => {
+      msg += `🔴 *Overdue (${overdue.length}):*\n`;
+      overdue.slice(0, 8).forEach((t) => {
         const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
-        msg += `• 🔴 ${t.title}${assignee} (due: ${t.due_date}) [#${t.id}]\n`;
+        msg += `  • ${t.title}${assignee} _(due: ${t.due_date})_ [#${t.id}]\n`;
       });
       msg += "\n";
     }
 
     if (dueToday.length > 0) {
       msg += `📌 *Due Today (${dueToday.length}):*\n`;
-      dueToday.slice(0, 10).forEach((t) => {
+      dueToday.slice(0, 8).forEach((t) => {
         const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
-        msg += `• ${t.title}${assignee} [#${t.id}]\n`;
+        msg += `  • ${t.title}${assignee} [#${t.id}]\n`;
       });
       msg += "\n";
     }
@@ -122,37 +128,74 @@ async function sendMorningBriefing() {
     if (pendingApprovals.length > 0) {
       msg += `📝 *Pending Approvals (${pendingApprovals.length}):*\n`;
       pendingApprovals.slice(0, 3).forEach(a => {
-        msg += `• #${a.id}: "${a.request_text.substring(0, 60)}" by ${a.requested_by}\n`;
+        msg += `  • #${a.id}: "${a.request_text.substring(0, 50)}" by ${a.requested_by}\n`;
       });
       msg += "\n";
     }
 
-    msg += `📊 *Status:* ${stats.pending} pending / ${stats.done} completed`;
+    msg += `📊 *Status:* ⏳ ${stats.pending} pending  ✅ ${stats.done} completed`;
     if (occSummary.total > 0) {
       const occRate = Math.round((occSummary.occupied / occSummary.total) * 100);
-      msg += ` | 🏠 ${occRate}% occupancy`;
+      msg += `  🏠 ${occRate}% occupancy`;
     }
 
     if (allTasks.length === 0 && overdue.length === 0) {
       msg += `\n\n✨ All clear — no pending tasks!`;
     }
 
-    msg += `\n\n💡 Use /summary, /kpi, /handover for details`;
+    msg += `\n\n💡 /summary  /kpi  /handover`;
+
+    // ── Arabic Section ──
+    msg += `\n\n${DIV}\n`;
+    msg += `📅 ${dateAR}\n\n`;
+
+    if (priorities.length > 0) {
+      msg += `📋 *أولويات اليوم:*\n`;
+      priorities.slice(0, 10).forEach((t, i) => {
+        const assignee = t.assigned_to ? ` ← ${t.assigned_to}` : "";
+        msg += `  ${i + 1}. ${t.title}${assignee} [#${t.id}]\n`;
+      });
+      msg += "\n";
+    }
+
+    if (overdue.length > 0) {
+      msg += `🔴 *متأخرة (${overdue.length}):*\n`;
+      overdue.slice(0, 8).forEach((t) => {
+        const assignee = t.assigned_to ? ` ← ${t.assigned_to}` : "";
+        msg += `  • ${t.title}${assignee} _(${t.due_date})_ [#${t.id}]\n`;
+      });
+      msg += "\n";
+    }
+
+    if (dueToday.length > 0) {
+      msg += `📌 *مستحقة اليوم (${dueToday.length}):*\n`;
+      dueToday.slice(0, 8).forEach((t) => {
+        const assignee = t.assigned_to ? ` ← ${t.assigned_to}` : "";
+        msg += `  • ${t.title}${assignee} [#${t.id}]\n`;
+      });
+      msg += "\n";
+    }
+
+    msg += `📊 *الحالة:* ⏳ ${stats.pending} معلقة  ✅ ${stats.done} مكتملة`;
+
+    if (allTasks.length === 0 && overdue.length === 0) {
+      msg += `\n\n✨ لا توجد مهام معلقة!`;
+    }
 
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
       parse_mode: "Markdown",
       message_thread_id: THREAD_CEO_UPDATE,
     });
 
-    console.log("[OpsScheduler] Morning briefing sent.");
+    console.log("[OpsScheduler] Morning briefing sent (bilingual).");
   } catch (error) {
     console.error("[OpsScheduler] Morning briefing error:", error.message);
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Daily Auto-Report (9 PM KSA) ═══════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 2. Daily Auto-Report (9 PM KSA) ━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function sendDailyReport() {
   if (!bot) return;
@@ -170,21 +213,24 @@ async function sendDailyReport() {
     const allPending = opsDb.getAllPendingTasks(OPS_GROUP_ID);
     const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
     const stats = opsDb.getTaskStats(OPS_GROUP_ID);
-    const expSummary = opsDb.getExpenseSummary(OPS_GROUP_ID);
+    let expSummary = { totalAmount: 0 };
+    try { expSummary = opsDb.getExpenseSummary(OPS_GROUP_ID); } catch (e) {}
 
-    const dateStr = ksa.toLocaleDateString("en-US", {
-      weekday: "long", year: "numeric", month: "long", day: "numeric",
-    });
+    const dateEN = ksa.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateAR = ksa.toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-    let msg = `📊 *Daily Report — ${dateStr}*\n\n`;
+    // ── English Section ──
+    let msg = `📊 *Daily Report | التقرير اليومي*\n`;
+    msg += `📅 ${dateEN}\n`;
+    msg += `${DIV}\n\n`;
 
     if (completedToday.length > 0) {
       msg += `✅ *Completed Today (${completedToday.length}):*\n`;
-      completedToday.slice(0, 15).forEach((t) => {
+      completedToday.slice(0, 12).forEach((t) => {
         const assignee = t.assigned_to ? ` (${t.assigned_to})` : "";
-        msg += `• ~~${t.title}~~${assignee}\n`;
+        msg += `  • ~~${t.title}~~${assignee}\n`;
       });
-      if (completedToday.length > 15) msg += `_... and ${completedToday.length - 15} more_\n`;
+      if (completedToday.length > 12) msg += `  _... and ${completedToday.length - 12} more_\n`;
       msg += "\n";
     } else {
       msg += `✅ *Completed Today:* None\n\n`;
@@ -197,18 +243,18 @@ async function sendDailyReport() {
         if (!byTopic[key]) byTopic[key] = [];
         byTopic[key].push(t);
       }
-      msg += `⬜ *Still Pending (${allPending.length}):*\n`;
+      msg += `⏳ *Still Pending (${allPending.length}):*\n`;
       for (const [topic, tasks] of Object.entries(byTopic)) {
-        msg += `  _${topic}:_ ${tasks.length} tasks\n`;
+        msg += `  📁 ${topic}: ${tasks.length} tasks\n`;
       }
       msg += "\n";
     }
 
     if (overdue.length > 0) {
       msg += `🔴 *Overdue (${overdue.length}):*\n`;
-      overdue.slice(0, 10).forEach((t) => {
+      overdue.slice(0, 8).forEach((t) => {
         const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
-        msg += `• ${t.title}${assignee} (due: ${t.due_date})\n`;
+        msg += `  • ${t.title}${assignee} _(due: ${t.due_date})_\n`;
       });
       msg += "\n";
     }
@@ -217,22 +263,62 @@ async function sendDailyReport() {
       msg += `💰 *Today's Expenses:* ${expSummary.totalAmount.toLocaleString()} SAR\n\n`;
     }
 
-    msg += `📈 *Totals:* ${stats.done} done / ${stats.pending} pending / ${overdue.length} overdue`;
+    msg += `📈 *Summary:* ✅ ${stats.done} done  ⏳ ${stats.pending} pending  🔴 ${overdue.length} overdue`;
+
+    // ── Arabic Section ──
+    msg += `\n\n${DIV}\n`;
+    msg += `📅 ${dateAR}\n\n`;
+
+    if (completedToday.length > 0) {
+      msg += `✅ *المنجز اليوم (${completedToday.length}):*\n`;
+      completedToday.slice(0, 12).forEach((t) => {
+        const assignee = t.assigned_to ? ` (${t.assigned_to})` : "";
+        msg += `  • ~~${t.title}~~${assignee}\n`;
+      });
+      msg += "\n";
+    } else {
+      msg += `✅ *المنجز اليوم:* لا شيء\n\n`;
+    }
+
+    if (allPending.length > 0) {
+      msg += `⏳ *لا تزال معلقة (${allPending.length}):*\n`;
+      const byTopic = {};
+      for (const t of allPending) {
+        const key = t.topic_name || "عام";
+        if (!byTopic[key]) byTopic[key] = [];
+        byTopic[key].push(t);
+      }
+      for (const [topic, tasks] of Object.entries(byTopic)) {
+        msg += `  📁 ${topic}: ${tasks.length} مهمة\n`;
+      }
+      msg += "\n";
+    }
+
+    if (overdue.length > 0) {
+      msg += `🔴 *متأخرة (${overdue.length}):*\n`;
+      overdue.slice(0, 8).forEach((t) => {
+        const assignee = t.assigned_to ? ` ← ${t.assigned_to}` : "";
+        msg += `  • ${t.title}${assignee} _(${t.due_date})_\n`;
+      });
+      msg += "\n";
+    }
+
+    msg += `📈 *الملخص:* ✅ ${stats.done} مكتملة  ⏳ ${stats.pending} معلقة  🔴 ${overdue.length} متأخرة`;
 
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
       parse_mode: "Markdown",
       message_thread_id: THREAD_CEO_UPDATE,
     });
 
-    console.log("[OpsScheduler] Daily report sent.");
+    console.log("[OpsScheduler] Daily report sent (bilingual).");
   } catch (error) {
     console.error("[OpsScheduler] Daily report error:", error.message);
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Evening Reminder (6 PM KSA) ════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 3. Evening Reminder (6 PM KSA) ━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function sendEveningReminder() {
   if (!bot) return;
@@ -248,32 +334,48 @@ async function sendEveningReminder() {
   try {
     const stats = opsDb.getTaskStats(OPS_GROUP_ID);
 
-    let msg = `🌆 *Evening Reminder*\n\n`;
+    let msg = `🌆 *Evening Reminder | تذكير مسائي*\n`;
+    msg += `${DIV}\n\n`;
+
     msg += `Before end of day, please update:\n\n`;
-    msg += `✅ *11 — Completed Today*\n`;
-    msg += `_What did you accomplish today?_\n\n`;
-    msg += `📅 *12 — Tomorrow Priorities*\n`;
-    msg += `_What are tomorrow's priorities?_\n\n`;
+    msg += `  ✅ *11 — Completed Today | المنجز اليوم*\n`;
+    msg += `  _What did you accomplish today?_\n\n`;
+    msg += `  📌 *12 — Tomorrow Priorities | أولويات الغد*\n`;
+    msg += `  _What are tomorrow's priorities?_\n\n`;
 
     if (stats.pending > 0) {
-      msg += `⚠️ There are still *${stats.pending} pending tasks*. Use /summary to review.`;
+      msg += `⚠️ There are still *${stats.pending} pending tasks*. Use /summary to review.\n`;
     } else {
-      msg += `✨ All tasks completed. Great work today!`;
+      msg += `✨ All tasks completed. Great work today!\n`;
+    }
+
+    msg += `\n${DIV}\n\n`;
+
+    msg += `قبل نهاية اليوم، يرجى التحديث:\n\n`;
+    msg += `  ✅ *11 — المنجز اليوم*\n`;
+    msg += `  _ماذا أنجزت اليوم؟_\n\n`;
+    msg += `  📌 *12 — أولويات الغد*\n`;
+    msg += `  _ما هي أولويات الغد؟_\n\n`;
+
+    if (stats.pending > 0) {
+      msg += `⚠️ لا تزال هناك *${stats.pending} مهمة معلقة*. استخدم /summary للمراجعة.`;
+    } else {
+      msg += `✨ جميع المهام مكتملة. عمل رائع اليوم!`;
     }
 
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
       parse_mode: "Markdown",
     });
 
-    console.log("[OpsScheduler] Evening reminder sent.");
+    console.log("[OpsScheduler] Evening reminder sent (bilingual).");
   } catch (error) {
     console.error("[OpsScheduler] Evening reminder error:", error.message);
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Escalation Checker ═════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 4. Escalation Checker ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const escalatedTasks = new Set();
 
@@ -290,12 +392,21 @@ async function checkEscalations() {
       const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
       const hoursOld = Math.round((Date.now() - new Date(task.created_at).getTime()) / (60 * 60 * 1000));
 
-      const msg = `🚨 *ESCALATION — Blocker Unresolved >24h*\n\n` +
-        `⬜ ${task.title}${assignee}\n` +
-        `⏰ Created ${hoursOld}h ago\n` +
-        `📍 10 — Blockers & Escalations\n` +
-        `🔗 Task #${task.id}\n\n` +
-        `_This blocker needs immediate attention._`;
+      let msg = `🚨 *ESCALATION | تصعيد*\n`;
+      msg += `${DIV}\n\n`;
+      msg += `*Blocker Unresolved >24h*\n`;
+      msg += `  ⬜ ${task.title}${assignee}\n`;
+      msg += `  ⏰ Created ${hoursOld}h ago\n`;
+      msg += `  📍 10 — Blockers & Escalations\n`;
+      msg += `  🔗 Task #${task.id}\n\n`;
+      msg += `  ⚠️ _This blocker needs immediate attention._\n`;
+      msg += `\n${DIV}\n\n`;
+      msg += `*عائق لم يُحل منذ أكثر من 24 ساعة*\n`;
+      msg += `  ⬜ ${task.title}${assignee}\n`;
+      msg += `  ⏰ منذ ${hoursOld} ساعة\n`;
+      msg += `  📍 10 — العوائق والتصعيد\n`;
+      msg += `  🔗 مهمة #${task.id}\n\n`;
+      msg += `  ⚠️ _هذا العائق يحتاج اهتمام فوري._`;
 
       await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
         parse_mode: "Markdown",
@@ -309,34 +420,38 @@ async function checkEscalations() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Vendor Follow-up Checker ═══════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 5. Vendor Follow-up Checker ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function checkVendorFollowUps() {
   if (!bot) return;
 
   try {
-    const dueVendors = opsDb.getDueVendorFollowUps();
+    const overdueVendors = opsDb.getOverdueVendorFollowUps(OPS_GROUP_ID);
 
-    for (const v of dueVendors) {
+    for (const v of overdueVendors) {
+      let msg = `🔔 *Vendor Follow-up | متابعة مورد*\n`;
+      msg += `${DIV}\n\n`;
+      msg += `*EN:* No update received from *${v.vendor_name}*\n`;
+      msg += `  📋 ${v.description}\n`;
+      msg += `  ⏰ Expected by: ${v.expected_date}\n`;
+      msg += `  📍 ${v.topic_name || "Operations"}\n\n`;
+      msg += `${DIV}\n\n`;
+      msg += `*AR:* لم يتم استلام تحديث من *${v.vendor_name}*\n`;
+      msg += `  📋 ${v.description}\n`;
+      msg += `  ⏰ الموعد المتوقع: ${v.expected_date}\n`;
+      msg += `  📍 ${v.topic_name || "العمليات"}`;
+
+      const sendOpts = { parse_mode: "Markdown" };
+      if (v.thread_id) sendOpts.message_thread_id = v.thread_id;
+
       try {
-        const msg = `🏢 *Vendor Follow-Up — No Update Received*\n\n` +
-          `🔧 *${v.vendor_name}*\n` +
-          `📝 "${v.promise_text.substring(0, 200)}"\n` +
-          `👤 Reported by: ${v.from_user || "Unknown"}\n` +
-          `📍 ${v.topic_name || "General"}\n\n` +
-          `_Deadline passed. Has this been resolved?_`;
-
-        const sendOpts = { parse_mode: "Markdown" };
-        if (v.thread_id) sendOpts.message_thread_id = v.thread_id;
-
-        await bot.telegram.sendMessage(v.chat_id, msg, sendOpts);
-        opsDb.markVendorFollowUpSent(v.id);
-        console.log(`[OpsScheduler] Vendor follow-up sent for ID ${v.id}`);
+        await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
+        opsDb.markVendorFollowUpNotified(v.id);
+        console.log(`[OpsScheduler] Vendor follow-up sent for: ${v.vendor_name}`);
       } catch (err) {
-        console.error(`[OpsScheduler] Vendor follow-up error ${v.id}:`, err.message);
-        opsDb.markVendorFollowUpSent(v.id);
+        console.error(`[OpsScheduler] Vendor follow-up error:`, err.message);
       }
     }
   } catch (error) {
@@ -344,75 +459,77 @@ async function checkVendorFollowUps() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Overdue Task Pinger ════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 6. Overdue Task Pinger ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const pingedOverdueToday = new Map();
+const pingedTasks = new Set();
 
 async function pingOverdueTasks() {
   if (!bot) return;
-
-  const today = todayKSA();
 
   try {
     const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
 
     for (const task of overdue) {
       if (!task.assigned_to) continue;
+      const key = `${task.id}_${todayKSA()}`;
+      if (pingedTasks.has(key)) continue;
+      pingedTasks.add(key);
 
-      const pingKey = `${task.id}`;
-      if (pingedOverdueToday.get(pingKey) === today) continue;
-      pingedOverdueToday.set(pingKey, today);
-
-      const msg = `⏰ *Overdue Task Reminder*\n\n` +
-        `${task.assigned_to} — this task is overdue:\n\n` +
-        `⬜ ${task.title}\n` +
-        `📅 Due: ${task.due_date}\n` +
-        `📍 ${task.topic_name || "General"}\n\n` +
-        `Use /done ${task.id} when complete.`;
+      let msg = `⏰ *Overdue Reminder | تذكير بالتأخر*\n`;
+      msg += `${DIV}\n\n`;
+      msg += `${task.assigned_to}, task #${task.id} is overdue:\n`;
+      msg += `  ⬜ ${task.title}\n`;
+      msg += `  📅 Due: ${task.due_date}\n`;
+      msg += `  📍 ${task.topic_name || "General"}\n\n`;
+      msg += `${DIV}\n\n`;
+      msg += `${task.assigned_to}، المهمة #${task.id} متأخرة:\n`;
+      msg += `  ⬜ ${task.title}\n`;
+      msg += `  📅 الاستحقاق: ${task.due_date}\n`;
+      msg += `  📍 ${task.topic_name || "عام"}`;
 
       const sendOpts = { parse_mode: "Markdown" };
       if (task.thread_id) sendOpts.message_thread_id = task.thread_id;
 
       try {
         await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
-        console.log(`[OpsScheduler] Pinged ${task.assigned_to} for overdue task #${task.id}`);
       } catch (err) {
-        console.error(`[OpsScheduler] Overdue ping error for #${task.id}:`, err.message);
+        console.error(`[OpsScheduler] Overdue ping error #${task.id}:`, err.message);
       }
     }
   } catch (error) {
-    console.error("[OpsScheduler] Overdue pinger error:", error.message);
+    console.error("[OpsScheduler] Overdue ping error:", error.message);
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Follow-up & Reminder Checkers ═══════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 7. Follow-up Checker ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function checkFollowUps() {
   if (!bot) return;
 
   try {
-    const dueFollowUps = opsDb.getDueFollowUps();
+    const due = opsDb.getDueFollowUps(OPS_GROUP_ID);
 
-    for (const followUp of dueFollowUps) {
+    for (const fu of due) {
+      let msg = `🔔 *Follow-up | متابعة*\n`;
+      msg += `${DIV}\n\n`;
+      msg += `📋 ${fu.note}\n`;
+      if (fu.task_id) msg += `🔗 Task #${fu.task_id}\n`;
+      msg += `\n${DIV}\n\n`;
+      msg += `📋 ${fu.note}\n`;
+      if (fu.task_id) msg += `🔗 مهمة #${fu.task_id}`;
+
+      const sendOpts = { parse_mode: "Markdown" };
+      if (fu.thread_id) sendOpts.message_thread_id = fu.thread_id;
+
       try {
-        const msg = `🔔 *Follow-Up Reminder*\n` +
-          (followUp.topic_name ? `📍 ${followUp.topic_name}\n\n` : "\n") +
-          `${followUp.from_user} — any update?\n\n` +
-          `_"${followUp.message_text.substring(0, 150)}${followUp.message_text.length > 150 ? "..." : ""}"_`;
-
-        const sendOpts = { parse_mode: "Markdown" };
-        if (followUp.thread_id) sendOpts.message_thread_id = followUp.thread_id;
-
-        await bot.telegram.sendMessage(followUp.chat_id, msg, sendOpts);
-        opsDb.markFollowUpSent(followUp.id);
-        console.log(`[OpsScheduler] Follow-up sent for ID ${followUp.id}`);
+        await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
+        opsDb.markFollowUpDone(fu.id);
       } catch (err) {
-        console.error(`[OpsScheduler] Follow-up error ${followUp.id}:`, err.message);
-        opsDb.markFollowUpSent(followUp.id);
+        console.error(`[OpsScheduler] Follow-up error:`, err.message);
       }
     }
   } catch (error) {
@@ -420,28 +537,31 @@ async function checkFollowUps() {
   }
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 8. Reminder Checker ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 async function checkReminders() {
   if (!bot) return;
 
   try {
-    const dueReminders = opsDb.getDueReminders();
+    const due = opsDb.getDueReminders(OPS_GROUP_ID);
 
-    for (const reminder of dueReminders) {
+    for (const r of due) {
+      let msg = `⏰ *Reminder | تذكير*\n`;
+      msg += `${DIV}\n\n`;
+      msg += `📋 ${r.message}\n`;
+      msg += `\n${DIV}\n\n`;
+      msg += `📋 ${r.message}`;
+
+      const sendOpts = { parse_mode: "Markdown" };
+      if (r.thread_id) sendOpts.message_thread_id = r.thread_id;
+
       try {
-        const msg = `⏰ *Reminder*\n` +
-          (reminder.topic_name ? `📍 ${reminder.topic_name}\n` : "") +
-          (reminder.created_by ? `👤 ${reminder.created_by}\n\n` : "\n") +
-          `${reminder.message}`;
-
-        const sendOpts = { parse_mode: "Markdown" };
-        if (reminder.thread_id) sendOpts.message_thread_id = reminder.thread_id;
-
-        await bot.telegram.sendMessage(reminder.chat_id, msg, sendOpts);
-        opsDb.markReminderSent(reminder.id);
-        console.log(`[OpsScheduler] Reminder sent for ID ${reminder.id}`);
+        await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
+        opsDb.markReminderDone(r.id);
       } catch (err) {
-        console.error(`[OpsScheduler] Reminder error ${reminder.id}:`, err.message);
-        opsDb.markReminderSent(reminder.id);
+        console.error(`[OpsScheduler] Reminder error:`, err.message);
       }
     }
   } catch (error) {
@@ -449,61 +569,74 @@ async function checkReminders() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Feature 11: SLA Checker ════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 9. SLA Checker ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const slaWarned = new Set();
+const slaBreached = new Set();
 
 async function checkSlaBreaches() {
   if (!bot) return;
 
   try {
-    const tasksWithSla = opsDb.getTasksWithSla(OPS_GROUP_ID);
+    const slaConfigs = opsDb.getAllSlaConfigs(OPS_GROUP_ID);
 
-    for (const task of tasksWithSla) {
-      const createdAt = new Date(task.created_at).getTime();
-      const now = Date.now();
-      const elapsedHours = (now - createdAt) / (60 * 60 * 1000);
-      const slaHours = task.sla_hours;
+    for (const sla of slaConfigs) {
+      const slaHours = sla.resolution_hours;
+      const tasks = opsDb.getPendingTasksByThread(OPS_GROUP_ID, sla.thread_id);
 
-      // 75% warning
-      if (elapsedHours >= slaHours * 0.75 && elapsedHours < slaHours) {
-        if (!opsDb.hasSlaAlertBeenSent(task.id, "warning")) {
-          opsDb.markSlaAlertSent(task.id, "warning");
+      for (const task of tasks) {
+        const createdAt = new Date(task.created_at).getTime();
+        const elapsedHours = (Date.now() - createdAt) / (60 * 60 * 1000);
+        const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
 
+        // 75% warning
+        if (elapsedHours >= slaHours * 0.75 && elapsedHours < slaHours && !slaWarned.has(task.id)) {
+          slaWarned.add(task.id);
           const remaining = Math.round(slaHours - elapsedHours);
-          const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
-          const msg = `⚠️ *SLA Warning — ${remaining}h remaining*\n\n` +
-            `⬜ ${task.title}${assignee}\n` +
-            `⏱️ SLA: ${slaHours}h | Elapsed: ${Math.round(elapsedHours)}h\n` +
-            `📍 ${task.topic_name || "General"}\n` +
-            `🔗 Task #${task.id}\n\n` +
-            `_Approaching SLA deadline. Please prioritize._`;
+
+          let msg = `🟡 *SLA Warning | تحذير SLA*\n`;
+          msg += `${DIV}\n\n`;
+          msg += `*EN:* Task approaching SLA deadline\n`;
+          msg += `  ⬜ ${task.title}${assignee}\n`;
+          msg += `  ⏱️ SLA: ${slaHours}h | Remaining: ~${remaining}h\n`;
+          msg += `  📍 ${sla.topic_name}\n`;
+          msg += `  🔗 Task #${task.id}\n\n`;
+          msg += `${DIV}\n\n`;
+          msg += `*AR:* المهمة تقترب من الموعد النهائي\n`;
+          msg += `  ⬜ ${task.title}${assignee}\n`;
+          msg += `  ⏱️ SLA: ${slaHours} ساعة | المتبقي: ~${remaining} ساعة\n`;
+          msg += `  🔗 مهمة #${task.id}`;
 
           const sendOpts = { parse_mode: "Markdown" };
           if (task.thread_id) sendOpts.message_thread_id = task.thread_id;
-
           try {
             await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
-            console.log(`[OpsScheduler] SLA warning for task #${task.id}`);
           } catch (err) {
             console.error(`[OpsScheduler] SLA warning error #${task.id}:`, err.message);
           }
         }
-      }
 
-      // 100% breach
-      if (elapsedHours >= slaHours) {
-        if (!opsDb.hasSlaAlertBeenSent(task.id, "breach")) {
-          opsDb.markSlaAlertSent(task.id, "breach");
-
+        // 100% breach
+        if (elapsedHours >= slaHours && !slaBreached.has(task.id)) {
+          slaBreached.add(task.id);
           const overBy = Math.round(elapsedHours - slaHours);
-          const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
-          const msg = `🔴 *SLA BREACHED — ${task.topic_name || "General"}*\n\n` +
-            `⬜ ${task.title}${assignee}\n` +
-            `⏱️ SLA: ${slaHours}h | Elapsed: ${Math.round(elapsedHours)}h (+${overBy}h over)\n` +
-            `📍 ${task.topic_name || "General"}\n` +
-            `🔗 Task #${task.id}\n\n` +
-            `_SLA breached. Immediate action required._`;
+
+          let msg = `🔴 *SLA BREACHED | تجاوز SLA*\n`;
+          msg += `${DIV}\n\n`;
+          msg += `*EN:* SLA deadline exceeded\n`;
+          msg += `  ⬜ ${task.title}${assignee}\n`;
+          msg += `  ⏱️ SLA: ${slaHours}h | Elapsed: ${Math.round(elapsedHours)}h (+${overBy}h over)\n`;
+          msg += `  📍 ${sla.topic_name}\n`;
+          msg += `  🔗 Task #${task.id}\n\n`;
+          msg += `  ⚠️ _SLA breached. Immediate action required._\n`;
+          msg += `\n${DIV}\n\n`;
+          msg += `*AR:* تم تجاوز الموعد النهائي\n`;
+          msg += `  ⬜ ${task.title}${assignee}\n`;
+          msg += `  ⏱️ SLA: ${slaHours} ساعة | المنقضي: ${Math.round(elapsedHours)} ساعة (+${overBy} ساعة)\n`;
+          msg += `  🔗 مهمة #${task.id}\n\n`;
+          msg += `  ⚠️ _تم تجاوز SLA. مطلوب إجراء فوري._`;
 
           // Post to the task's topic
           const sendOpts = { parse_mode: "Markdown" };
@@ -532,9 +665,9 @@ async function checkSlaBreaches() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Feature 13: Recurring Task Creator ═════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 10. Recurring Task Creator ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function processRecurringTasks() {
   if (!bot) return;
@@ -547,11 +680,9 @@ async function processRecurringTasks() {
     const dayOfMonth = ksa.getUTCDate();
 
     for (const rec of recurring) {
-      // Skip if already created today
       if (rec.last_created === today) continue;
 
       let shouldCreate = false;
-
       if (rec.schedule_type === "daily") {
         shouldCreate = true;
       } else if (rec.schedule_type === "weekly") {
@@ -563,7 +694,6 @@ async function processRecurringTasks() {
 
       if (!shouldCreate) continue;
 
-      // Create the task
       try {
         const taskId = opsDb.addTask(rec.chat_id, rec.thread_id, rec.topic_name, rec.title, {
           priority: rec.priority || "normal",
@@ -574,8 +704,15 @@ async function processRecurringTasks() {
 
         opsDb.updateRecurringLastCreated(rec.id, today);
 
-        // Notify in the topic
-        const msg = `🔄 *Recurring Task Created*\n\n⬜ ${rec.title} [#${taskId}]\n📅 ${rec.schedule_type}: ${rec.schedule_value}${rec.assigned_to ? `\n👤 ${rec.assigned_to}` : ""}`;
+        let msg = `🔄 *Recurring Task | مهمة متكررة*\n`;
+        msg += `${DIV}\n\n`;
+        msg += `  ⬜ ${rec.title} [#${taskId}]\n`;
+        msg += `  📅 ${rec.schedule_type}: ${rec.schedule_value}`;
+        if (rec.assigned_to) msg += `\n  👤 ${rec.assigned_to}`;
+        msg += `\n\n${DIV}\n\n`;
+        msg += `  ⬜ ${rec.title} [#${taskId}]\n`;
+        msg += `  📅 ${rec.schedule_type === "daily" ? "يومي" : rec.schedule_type === "weekly" ? "أسبوعي" : "شهري"}: ${rec.schedule_value}`;
+        if (rec.assigned_to) msg += `\n  👤 ${rec.assigned_to}`;
 
         const sendOpts = { parse_mode: "Markdown" };
         if (rec.thread_id) sendOpts.message_thread_id = rec.thread_id;
@@ -591,9 +728,9 @@ async function processRecurringTasks() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Feature 20: Google Sheets & Calendar Daily Sync ════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 11. Google Sheets & Calendar Sync ━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function syncToGoogle() {
   if (!googleSync.isConfigured()) return;
@@ -602,7 +739,6 @@ async function syncToGoogle() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  // Sync at 9:15 PM KSA (right after daily report at 9 PM)
   if (hour !== 18 || min < 15 || min >= 20) return;
 
   markSent("google_sync");
@@ -610,7 +746,6 @@ async function syncToGoogle() {
   try {
     console.log("[GoogleSync] Starting daily sync...");
 
-    // 1. Gather all data
     const allTasks = opsDb.getDb().prepare(
       "SELECT * FROM tasks WHERE chat_id = ? AND status != 'cancelled' ORDER BY id DESC"
     ).all(OPS_GROUP_ID);
@@ -620,7 +755,6 @@ async function syncToGoogle() {
     const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
     const taskStats = opsDb.getTaskStats(OPS_GROUP_ID);
 
-    // Build KPI row
     const kpiRow = {
       report_date: todayKSA(),
       period: "daily",
@@ -634,16 +768,13 @@ async function syncToGoogle() {
       top_assignee: weeklyStats.topAssignee || "",
     };
 
-    // Gather expenses (current month)
-    const expenses = opsDb.getMonthlyExpenses(OPS_GROUP_ID);
+    let expenses = [];
+    try { expenses = opsDb.getMonthlyExpenses(OPS_GROUP_ID); } catch (e) {}
+    let occupancy = [];
+    try { occupancy = opsDb.getOccupancy(OPS_GROUP_ID); } catch (e) {}
 
-    // Gather occupancy
-    const occupancy = opsDb.getOccupancy(OPS_GROUP_ID);
-
-    // Tasks with due dates for calendar
     const calendarTasks = allTasks.filter(t => t.due_date);
 
-    // 2. Send to Google Apps Script
     const result = await googleSync.syncAll({
       tasks: allTasks,
       kpis: [kpiRow],
@@ -662,9 +793,9 @@ async function syncToGoogle() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Feature 34: Priority Auto-Escalation ═══════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 12. Priority Auto-Escalation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function checkPriorityEscalation() {
   if (!bot) return;
@@ -677,12 +808,18 @@ async function checkPriorityEscalation() {
 
       const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
       const hours = Math.round((Date.now() - new Date(task.created_at).getTime()) / 3600000);
-      const msg = `🔺 *Priority Auto-Escalation*\n\n` +
-        `⬜ ${task.title}${assignee}\n` +
-        `⏱️ High priority task pending for ${hours}h\n` +
-        `📍 ${task.topic_name || "General"} → Escalated to CEO Update\n` +
-        `🔗 Task #${task.id}\n\n` +
-        `_High-priority task unresolved for 48+ hours. Requires attention._`;
+
+      let msg = `🔺 *Priority Escalation | تصعيد أولوية*\n`;
+      msg += `${DIV}\n\n`;
+      msg += `*EN:* High priority task pending ${hours}h+\n`;
+      msg += `  ⬜ ${task.title}${assignee}\n`;
+      msg += `  📍 ${task.topic_name || "General"} → CEO Update\n`;
+      msg += `  🔗 Task #${task.id}\n\n`;
+      msg += `${DIV}\n\n`;
+      msg += `*AR:* مهمة عالية الأولوية معلقة منذ ${hours}+ ساعة\n`;
+      msg += `  ⬜ ${task.title}${assignee}\n`;
+      msg += `  📍 ${task.topic_name || "عام"} → تحديث المدير\n`;
+      msg += `  🔗 مهمة #${task.id}`;
 
       try {
         await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
@@ -699,9 +836,9 @@ async function checkPriorityEscalation() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Feature 35: End-of-Day Check-in ════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 13. End-of-Day Check-in ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function sendCheckinReminder() {
   if (!bot) return;
@@ -710,22 +847,29 @@ async function sendCheckinReminder() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  // 5:00 PM KSA = 14:00 UTC
   if (hour !== 14 || min >= 5) return;
 
   markSent("checkin_reminder");
 
   const today = todayKSA();
-  const unchecked = v4Db.getUncheckedMembers(OPS_GROUP_ID, today);
+  let unchecked = [];
+  try { unchecked = v4Db.getUncheckedMembers(OPS_GROUP_ID, today); } catch (e) {}
 
   if (unchecked.length === 0) return;
 
-  let msg = `📋 *End-of-Day Check-in Reminder*\n\n`;
-  msg += `The following team members haven't posted any updates today:\n\n`;
+  let msg = `📋 *Check-in Reminder | تذكير بالتسجيل*\n`;
+  msg += `${DIV}\n\n`;
+  msg += `*EN:* The following team members haven't posted updates today:\n`;
   for (const m of unchecked) {
-    msg += `• ${m.username || m.display_name || "Unknown"}\n`;
+    msg += `  • ${m.username || m.display_name || "Unknown"}\n`;
   }
-  msg += `\n_Please post your end-of-day update in the relevant topics._`;
+  msg += `\n_Please post your end-of-day update._\n`;
+  msg += `\n${DIV}\n\n`;
+  msg += `*AR:* أعضاء الفريق التالية أسماؤهم لم يقدموا تحديثات اليوم:\n`;
+  for (const m of unchecked) {
+    msg += `  • ${m.username || m.display_name || "غير معروف"}\n`;
+  }
+  msg += `\n_يرجى نشر تحديث نهاية اليوم._`;
 
   try {
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
@@ -745,16 +889,16 @@ async function flagUncheckedMembers() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  // 6:00 PM KSA = 15:00 UTC
   if (hour !== 15 || min >= 5) return;
 
   markSent("checkin_flag");
 
   const today = todayKSA();
-  const unchecked = v4Db.getUncheckedMembers(OPS_GROUP_ID, today);
+  let unchecked = [];
+  try { unchecked = v4Db.getUncheckedMembers(OPS_GROUP_ID, today); } catch (e) {}
 
   for (const m of unchecked) {
-    v4Db.flagUnchecked(OPS_GROUP_ID, m.user_id, today);
+    try { v4Db.flagUnchecked(OPS_GROUP_ID, m.user_id, today); } catch (e) {}
   }
 
   if (unchecked.length > 0) {
@@ -762,9 +906,9 @@ async function flagUncheckedMembers() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Feature 36: Weekly Team Standup ════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 14. Weekly Team Standup ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function sendWeeklyStandup() {
   if (!bot) return;
@@ -773,8 +917,7 @@ async function sendWeeklyStandup() {
   const ksa = ksaNow();
   const hour = ksa.getUTCHours();
   const min = ksa.getUTCMinutes();
-  const dayOfWeek = ksa.getUTCDay(); // 0 = Sunday
-  // Sunday 9:00 AM KSA = Sunday 06:00 UTC
+  const dayOfWeek = ksa.getUTCDay();
   if (dayOfWeek !== 0 || hour !== 6 || min >= 5) return;
 
   markSent("weekly_standup");
@@ -782,54 +925,84 @@ async function sendWeeklyStandup() {
   try {
     const stats = opsDb.getWeeklyStats(OPS_GROUP_ID);
     const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
-    const leaderboard = v4Db.getLeaderboard(OPS_GROUP_ID);
+    let leaderboard = [];
+    try { leaderboard = v4Db.getLeaderboard(OPS_GROUP_ID); } catch (e) {}
 
-    let msg = `📊 *Weekly Team Standup — Week Summary*\n\n`;
+    // ── English Section ──
+    let msg = `📊 *Weekly Standup | الاجتماع الأسبوعي*\n`;
+    msg += `${DIV}\n\n`;
+
     msg += `📈 *This Week's Numbers:*\n`;
-    msg += `• Tasks Created: ${stats.created || 0}\n`;
-    msg += `• Tasks Completed: ${stats.completed || 0}\n`;
-    msg += `• Currently Overdue: ${overdue.length}\n`;
-    if (stats.avgResolutionHours) msg += `• Avg Resolution: ${stats.avgResolutionHours}h\n`;
-    msg += `\n`;
+    msg += `  • Tasks Created: ${stats.created || 0}\n`;
+    msg += `  • Tasks Completed: ${stats.completed || 0}\n`;
+    msg += `  • Currently Overdue: ${overdue.length}\n`;
+    if (stats.avgResolutionHours) msg += `  • Avg Resolution: ${stats.avgResolutionHours}h\n`;
+    msg += "\n";
 
     if (leaderboard.length > 0) {
       msg += `🏆 *Team Performance:*\n`;
       const medals = ["🥇", "🥈", "🥉"];
       leaderboard.slice(0, 5).forEach((entry, i) => {
-        const medal = medals[i] || `${i + 1}.`;
+        const medal = medals[i] || `  ${i + 1}.`;
         msg += `${medal} ${entry.assigned_to}: ${entry.completed}/${entry.total_tasks} (${entry.completion_rate || 0}%)\n`;
       });
-      msg += `\n`;
+      msg += "\n";
     }
 
     if (overdue.length > 0) {
-      msg += `🔴 *Overdue Tasks (${overdue.length}):*\n`;
+      msg += `🔴 *Overdue (${overdue.length}):*\n`;
       for (const t of overdue.slice(0, 5)) {
-        msg += `• #${t.id}: ${t.title}${t.assigned_to ? ` → ${t.assigned_to}` : ""}\n`;
+        msg += `  • #${t.id}: ${t.title}${t.assigned_to ? ` → ${t.assigned_to}` : ""}\n`;
       }
       if (overdue.length > 5) msg += `  _...and ${overdue.length - 5} more_\n`;
-      msg += `\n`;
+      msg += "\n";
     }
 
     msg += `📋 *This Week's Focus:*\n`;
-    msg += `Please reply in this thread with:\n`;
-    msg += `1. What you accomplished last week\n`;
-    msg += `2. What you're focusing on this week\n`;
-    msg += `3. Any blockers or help needed`;
+    msg += `Please reply with:\n`;
+    msg += `  1. What you accomplished last week\n`;
+    msg += `  2. What you're focusing on this week\n`;
+    msg += `  3. Any blockers or help needed\n`;
+
+    // ── Arabic Section ──
+    msg += `\n${DIV}\n\n`;
+
+    msg += `📈 *أرقام هذا الأسبوع:*\n`;
+    msg += `  • المهام المنشأة: ${stats.created || 0}\n`;
+    msg += `  • المهام المكتملة: ${stats.completed || 0}\n`;
+    msg += `  • المتأخرة حالياً: ${overdue.length}\n`;
+    if (stats.avgResolutionHours) msg += `  • متوسط وقت الحل: ${stats.avgResolutionHours} ساعة\n`;
+    msg += "\n";
+
+    if (leaderboard.length > 0) {
+      msg += `🏆 *أداء الفريق:*\n`;
+      const medals = ["🥇", "🥈", "🥉"];
+      leaderboard.slice(0, 5).forEach((entry, i) => {
+        const medal = medals[i] || `  ${i + 1}.`;
+        msg += `${medal} ${entry.assigned_to}: ${entry.completed}/${entry.total_tasks} (${entry.completion_rate || 0}%)\n`;
+      });
+      msg += "\n";
+    }
+
+    msg += `📋 *تركيز هذا الأسبوع:*\n`;
+    msg += `يرجى الرد بـ:\n`;
+    msg += `  1. ما أنجزته الأسبوع الماضي\n`;
+    msg += `  2. ما ستركز عليه هذا الأسبوع\n`;
+    msg += `  3. أي عوائق أو مساعدة مطلوبة`;
 
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
       parse_mode: "Markdown",
       message_thread_id: THREAD_CEO_UPDATE,
     });
-    console.log("[OpsScheduler] Weekly standup posted");
+    console.log("[OpsScheduler] Weekly standup posted (bilingual)");
   } catch (error) {
     console.error("[OpsScheduler] Weekly standup error:", error.message);
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Feature 39: Mention Alert Checker ══════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 15. Mention Alert Checker ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function checkMentionAlerts() {
   if (!bot) return;
@@ -838,14 +1011,26 @@ async function checkMentionAlerts() {
     for (const mention of unresponded) {
       v4Db.markMentionReminderSent(mention.id);
 
-      const topicName = mention.thread_id ? ({
-        4: "Daily CEO Update", 5: "Operations Follow-Up", 6: "Listings & Inventory",
-        7: "Bookings & Revenue", 8: "Customer Support", 9: "Website & Tech",
-        10: "Payments & Finance", 11: "Marketing & Content", 12: "Legal/Compliance",
-        13: "Blockers & Escalations", 14: "Completed Today", 15: "Tomorrow Priorities",
-      }[mention.thread_id] || "a topic") : "the group";
+      const topicNames = {
+        4: "CEO Update", 5: "Operations", 6: "Listings",
+        7: "Bookings", 8: "Support", 9: "Tech Issues",
+        10: "Payments", 11: "Marketing", 12: "Legal",
+        13: "Blockers", 14: "Completed", 15: "Priorities",
+        102: "Ideas", 103: "Photos",
+      };
+      const topicName = topicNames[mention.thread_id] || "the group";
 
-      const msg = `🔔 *Mention Reminder*\n\n${mention.mentioned_username}, you were mentioned ${mention.mentioned_by ? `by ${mention.mentioned_by} ` : ""}2+ hours ago in *${topicName}*.\n\nPlease check and respond.`;
+      let msg = `🔔 *Mention Alert | تنبيه إشارة*\n`;
+      msg += `${DIV}\n\n`;
+      msg += `${mention.mentioned_username}, you were mentioned`;
+      if (mention.mentioned_by) msg += ` by ${mention.mentioned_by}`;
+      msg += ` 2+ hours ago in *${topicName}*.\n`;
+      msg += `Please check and respond.\n\n`;
+      msg += `${DIV}\n\n`;
+      msg += `${mention.mentioned_username}، تمت الإشارة إليك`;
+      if (mention.mentioned_by) msg += ` بواسطة ${mention.mentioned_by}`;
+      msg += ` منذ أكثر من ساعتين في *${topicName}*.\n`;
+      msg += `يرجى المراجعة والرد.`;
 
       try {
         const sendOpts = { parse_mode: "Markdown" };
@@ -861,9 +1046,30 @@ async function checkMentionAlerts() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ Main Scheduler Tick ═════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ 16. Weather Check (7 AM KSA) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const weatherCheckDone = {};
+async function checkDailyWeather() {
+  if (!bot) return;
+  const now = new Date();
+  const ksaHour = ((now.getUTCHours() + 3) % 24);
+  const ksaMin = now.getUTCMinutes();
+  const todayKey = `weather_${now.toISOString().split("T")[0]}`;
+  if (ksaHour === 7 && ksaMin < 5 && !weatherCheckDone[todayKey]) {
+    weatherCheckDone[todayKey] = true;
+    try {
+      await v5Handlers.checkAndPostWeatherAlerts(bot);
+    } catch (e) {
+      console.error("[OpsScheduler] Weather check error:", e.message);
+    }
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ Main Tick ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 let tickCount = 0;
 
@@ -871,11 +1077,11 @@ async function tick() {
   try {
     tickCount++;
 
-    // Every tick (1 minute): check reminders and follow-ups
+    // Every tick (1 minute): reminders and follow-ups
     await checkFollowUps();
     await checkReminders();
 
-    // Every 5 minutes: check escalations, vendor follow-ups, SLA, recurring, mentions
+    // Every 5 minutes: escalations, vendor, SLA, recurring, mentions, priority
     if (tickCount % 5 === 0) {
       await checkEscalations();
       await checkVendorFollowUps();
@@ -885,7 +1091,7 @@ async function tick() {
       await checkPriorityEscalation();
     }
 
-    // Every 60 minutes: ping overdue tasks
+    // Every 60 minutes: overdue pings
     if (tickCount % 60 === 0) {
       await pingOverdueTasks();
     }
@@ -894,16 +1100,10 @@ async function tick() {
     await sendMorningBriefing();
     await sendDailyReport();
     await sendEveningReminder();
-
-    // Daily Google Sheets & Calendar sync (after daily report)
     await syncToGoogle();
-
-    // v4 daily scheduled jobs
     await sendCheckinReminder();
     await flagUncheckedMembers();
     await sendWeeklyStandup();
-
-    // v5: Weather alerts (7:00 AM KSA daily)
     await checkDailyWeather();
 
   } catch (error) {
@@ -911,30 +1111,9 @@ async function tick() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══ v5: Weather Check (7 AM KSA daily) ═════════════════════
-// ═══════════════════════════════════════════════════════════════
-
-const weatherCheckDone = {};
-async function checkDailyWeather() {
-  if (!bot) return;
-  const now = new Date();
-  const ksaHour = ((now.getUTCHours() + 3) % 24);
-  const ksaMin = now.getUTCMinutes();
-  const todayKey = `weather_${now.toISOString().split('T')[0]}`;
-  if (ksaHour === 7 && ksaMin < 5 && !weatherCheckDone[todayKey]) {
-    weatherCheckDone[todayKey] = true;
-    try {
-      await v5Handlers.checkAndPostWeatherAlerts(bot);
-    } catch (e) {
-      console.error('[OpsScheduler] Weather check error:', e.message);
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ═══ Start / Stop ════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ Start / Stop ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function startOpsScheduler(botInstance) {
   bot = botInstance;
@@ -960,14 +1139,14 @@ function startOpsScheduler(botInstance) {
 
   // Initialize default SLA configs
   try {
-    const defaultSla = { 8: 12, 13: 24, 9: 48 }; // support: 12h, blockers: 24h, tech: 48h
+    const defaultSla = { 8: 12, 13: 24, 9: 48 };
     for (const [threadId, hours] of Object.entries(defaultSla)) {
       const existing = opsDb.getSlaForThread(OPS_GROUP_ID, parseInt(threadId));
       if (!existing) {
         const topicNames = {
-          8: "05 — Customer Support & Complaints",
-          13: "10 — Blockers & Escalations",
-          9: "06 — Website & Tech Issues",
+          8: "05 — Support | دعم العملاء",
+          13: "10 — Blockers | العوائق والتصعيد",
+          9: "06 — Tech Issues | المشاكل التقنية",
         };
         opsDb.setSlaConfig(OPS_GROUP_ID, parseInt(threadId), topicNames[threadId], hours);
       }
@@ -979,33 +1158,27 @@ function startOpsScheduler(botInstance) {
   // Run every 60 seconds
   schedulerInterval = setInterval(tick, 60 * 1000);
 
-  // Run immediately on start (after a short delay to let bot connect)
+  // Run immediately on start (after a short delay)
   setTimeout(tick, 5000);
 
   // Log Google sync status
   if (googleSync.isConfigured()) {
     console.log("[OpsScheduler] Google Sync: ENABLED");
   } else {
-    console.log("[OpsScheduler] Google Sync: DISABLED (set GOOGLE_APPS_SCRIPT_URL to enable)");
+    console.log("[OpsScheduler] Google Sync: DISABLED (set GOOGLE_APPS_SCRIPT_URL)");
   }
 
-  console.log("[OpsScheduler] Started v4. Schedule:");
-  console.log("  • Morning Briefing: 9:00 AM KSA → CEO Update");
-  console.log("  • Evening Reminder: 6:00 PM KSA → General");
-  console.log("  • Daily Report: 9:00 PM KSA → CEO Update");
-  console.log("  • Escalation check: every 5 min");
-  console.log("  • Vendor follow-ups: every 5 min");
-  console.log("  • SLA check: every 5 min");
-  console.log("  • Recurring tasks: every 5 min");
-  console.log("  • Overdue pings: every 60 min");
-  console.log("  • Reminders/follow-ups: every 1 min");
-  console.log("  • Google Sheets/Calendar sync: 9:15 PM KSA daily");
-  console.log("  • Check-in reminder: 5:00 PM KSA daily");
-  console.log("  • Unchecked flag: 6:00 PM KSA daily");
-  console.log("  \u2022 Weekly standup: Sunday 9:00 AM KSA");
-  console.log("  \u2022 Mention alerts: every 5 min");
-  console.log("  \u2022 Priority auto-escalation: every 5 min");
-  console.log("  \u2022 Weather alerts: 7:00 AM KSA daily");
+  console.log("[OpsScheduler] Started v5 Bilingual. Schedule:");
+  console.log("  ☀️ Morning Briefing: 9:00 AM KSA → CEO Update");
+  console.log("  🌤️ Weather Alerts: 7:00 AM KSA → Operations");
+  console.log("  📋 Check-in Reminder: 5:00 PM KSA → CEO Update");
+  console.log("  🌆 Evening Reminder: 6:00 PM KSA → General");
+  console.log("  📊 Daily Report: 9:00 PM KSA → CEO Update");
+  console.log("  📊 Weekly Standup: Sunday 9:00 AM KSA");
+  console.log("  📊 Google Sync: 9:15 PM KSA daily");
+  console.log("  🚨 Escalation/SLA/Vendor/Mentions: every 5 min");
+  console.log("  ⏰ Overdue pings: every 60 min");
+  console.log("  🔔 Reminders/Follow-ups: every 1 min");
 }
 
 function stopOpsScheduler() {
