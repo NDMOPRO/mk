@@ -126,6 +126,8 @@ const {
 
 // v5 Database Init
 const { initV5Tables } = require("./services/ops-database-v5");
+// Admin Panel handler (topic 15, thread 235)
+const { handleOpsAdmin, guardAdminTopic, ADMIN_PANEL_THREAD } = require("./handlers/ops-admin");
 
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
@@ -212,8 +214,9 @@ bot.command("unsubscribe", (ctx) => {
 });
 
 // Phase 3: Admin commands (private only)
+// In the ops group, /admin routes to the Admin Panel topic handler (topic 15, thread 235)
 bot.command("admin", (ctx) => {
-  if (isOpsGroup(ctx)) return;
+  if (isOpsGroup(ctx)) return handleOpsAdmin(ctx);
   return handleAdminLogin(ctx);
 });
 bot.command("stats", (ctx) => {
@@ -493,6 +496,12 @@ bot.on("text", async (ctx) => {
     // Skip slash commands here — they are handled by bot.command() above.
     if (userMessage.startsWith("/")) return;
 
+    // Admin topic guard: block non-admins from posting in the Admin Panel topic (thread 235)
+    const msgThreadId = ctx.message?.message_thread_id;
+    if (msgThreadId === ADMIN_PANEL_THREAD) {
+      const blocked = await guardAdminTopic(ctx).catch(() => false);
+      if (blocked) return;
+    }
     // v4 passive monitoring: sensitive data, topic routing, mentions, check-in
     try {
       await handleV4Passive(ctx);
