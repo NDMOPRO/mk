@@ -138,6 +138,22 @@ const bot = new Telegraf(config.botToken);
 bot.use(session());
 db.getDb();
 
+// ─── Global Error Handler ─────────────────────────────────────
+// Without this, Telegraf silently drops all unhandled promise rejections
+// in command handlers, causing commands to appear unresponsive.
+bot.catch((err, ctx) => {
+  const cmd = ctx.message?.text?.split(" ")[0] || "unknown";
+  const chat = ctx.chat?.id || "unknown";
+  console.error(`[Bot] Unhandled error in command "${cmd}" (chat ${chat}):`, err.message);
+  // Attempt to notify the user
+  if (ctx.reply) {
+    const threadId = ctx.message?.message_thread_id || undefined;
+    ctx.reply(`❌ An error occurred. Please try again.\n\nError: ${err.message}`, {
+      message_thread_id: threadId
+    }).catch(() => {}); // Swallow reply errors
+  }
+});
+
 // ─── Command Handlers ─────────────────────────────────────────
 // Ops commands are registered globally but gated by isOpsGroup() inside.
 // Public commands are ignored in the ops group.
@@ -768,6 +784,23 @@ async function setupBot() {
 
 // ─── Start Bot ────────────────────────────────────────────────
 
+// Initialize ALL database tables BEFORE launching the bot.
+// This is critical: if init is deferred to .then(), a 409 conflict
+// or any launch error means tables are never created and ALL v4/v5
+// commands (roles, onboarding, ideas, etc.) crash with "no such table".
+try {
+  initV4();
+  console.log("[Bot] v4 tables initialized");
+} catch (e) {
+  console.error("[Bot] v4 init error:", e.message);
+}
+try {
+  initV5Tables();
+  console.log("[Bot] v5 tables initialized");
+} catch (e) {
+  console.error("[Bot] v5 init error:", e.message);
+}
+
 setupBot();
 
 bot
@@ -783,16 +816,6 @@ bot
     console.log("Phase 4: Ops Group v5 — 49 Features (Tasks, KPI, SLA, Roles, Audit, Polls, Ideas, Photos, etc.)");
     console.log("Languages: AR, EN, FR, UR, HI");
     console.log("-------------------------------------------");
-
-    // Initialize v4/v5 database tables
-    try {
-      initV4();
-      console.log("[Bot] v4 tables initialized");
-      initV5Tables();
-      console.log("[Bot] v5 tables initialized");
-    } catch (e) {
-      console.error("[Bot] v4/v5 init error:", e.message);
-    }
 
     // Start the ops scheduler after bot is connected
     startOpsScheduler(bot);
