@@ -91,6 +91,7 @@ const {
   handleOpsExpenses,
   handleOpsOccupancy,
   handleOpsMeeting,
+  handleOpsGsync,
   // AI & media handlers
   handleOpsMessage,
   handleOpsMedia,
@@ -293,6 +294,11 @@ bot.command("occupancy", (ctx) => {
 bot.command("meeting", (ctx) => {
   if (!isOpsGroup(ctx)) return;
   return handleOpsMeeting(ctx);
+});
+
+bot.command("gsync", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsGsync(ctx);
 });
 
 // ─── Text Message Handler ─────────────────────────────────────
@@ -534,6 +540,7 @@ async function setupBot() {
         { command: "approve",       description: "Approve request | موافقة" },
         { command: "reject",        description: "Reject request | رفض" },
         { command: "checklist",     description: "Create checklist | قائمة مهام" },
+        { command: "gsync",          description: "Google Sheets sync | مزامنة جوجل" },
       ],
       { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
     );

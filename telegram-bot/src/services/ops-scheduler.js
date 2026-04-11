@@ -18,6 +18,7 @@
  */
 
 const opsDb = require("./ops-database");
+const googleSync = require("./google-sync");
 
 let bot = null;
 let schedulerInterval = null;
@@ -589,6 +590,77 @@ async function processRecurringTasks() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ═══ Feature 20: Google Sheets & Calendar Daily Sync ════════
+// ═══════════════════════════════════════════════════════════════
+
+async function syncToGoogle() {
+  if (!googleSync.isConfigured()) return;
+  if (alreadySent("google_sync")) return;
+
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  // Sync at 9:15 PM KSA (right after daily report at 9 PM)
+  if (hour !== 18 || min < 15 || min >= 20) return;
+
+  markSent("google_sync");
+
+  try {
+    console.log("[GoogleSync] Starting daily sync...");
+
+    // 1. Gather all data
+    const allTasks = opsDb.getDb().prepare(
+      "SELECT * FROM tasks WHERE chat_id = ? AND status != 'cancelled' ORDER BY id DESC"
+    ).all(OPS_GROUP_ID);
+
+    const weeklyStats = opsDb.getWeeklyStats(OPS_GROUP_ID);
+    const monthlyStats = opsDb.getMonthlyStats(OPS_GROUP_ID);
+    const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
+    const taskStats = opsDb.getTaskStats(OPS_GROUP_ID);
+
+    // Build KPI row
+    const kpiRow = {
+      report_date: todayKSA(),
+      period: "daily",
+      tasks_created: weeklyStats.created || 0,
+      tasks_completed: weeklyStats.completed || 0,
+      tasks_pending: taskStats.pending || 0,
+      tasks_overdue: overdue.length,
+      avg_resolution_hours: weeklyStats.avgResolutionHours || 0,
+      completion_rate: taskStats.total > 0 ? Math.round((taskStats.done / taskStats.total) * 100) : 0,
+      top_topic: weeklyStats.topTopic || "",
+      top_assignee: weeklyStats.topAssignee || "",
+    };
+
+    // Gather expenses (current month)
+    const expenses = opsDb.getMonthlyExpenses(OPS_GROUP_ID);
+
+    // Gather occupancy
+    const occupancy = opsDb.getOccupancy(OPS_GROUP_ID);
+
+    // Tasks with due dates for calendar
+    const calendarTasks = allTasks.filter(t => t.due_date);
+
+    // 2. Send to Google Apps Script
+    const result = await googleSync.syncAll({
+      tasks: allTasks,
+      kpis: [kpiRow],
+      expenses: expenses,
+      occupancy: occupancy,
+      calendar_tasks: calendarTasks,
+    });
+
+    if (result.success) {
+      console.log("[GoogleSync] Daily sync completed:", JSON.stringify(result.results || {}));
+    } else {
+      console.error("[GoogleSync] Sync failed:", result.error);
+    }
+  } catch (error) {
+    console.error("[GoogleSync] Daily sync error:", error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ═══ Main Scheduler Tick ═════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
@@ -619,6 +691,9 @@ async function tick() {
     await sendMorningBriefing();
     await sendDailyReport();
     await sendEveningReminder();
+
+    // Daily Google Sheets & Calendar sync (after daily report)
+    await syncToGoogle();
 
   } catch (error) {
     console.error("[OpsScheduler] Tick error:", error.message);
@@ -659,6 +734,13 @@ function startOpsScheduler(botInstance) {
   // Run immediately on start (after a short delay to let bot connect)
   setTimeout(tick, 5000);
 
+  // Log Google sync status
+  if (googleSync.isConfigured()) {
+    console.log("[OpsScheduler] Google Sync: ENABLED");
+  } else {
+    console.log("[OpsScheduler] Google Sync: DISABLED (set GOOGLE_APPS_SCRIPT_URL to enable)");
+  }
+
   console.log("[OpsScheduler] Started v3. Schedule:");
   console.log("  • Morning Briefing: 9:00 AM KSA → CEO Update");
   console.log("  • Evening Reminder: 6:00 PM KSA → General");
@@ -669,6 +751,7 @@ function startOpsScheduler(botInstance) {
   console.log("  • Recurring tasks: every 5 min");
   console.log("  • Overdue pings: every 60 min");
   console.log("  • Reminders/follow-ups: every 1 min");
+  console.log("  • Google Sheets/Calendar sync: 9:15 PM KSA daily");
 }
 
 function stopOpsScheduler() {

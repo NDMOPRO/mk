@@ -1491,6 +1491,117 @@ function registerTopicName(threadId, name) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ═══ Feature 20/21: Google Sync Command ═════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+const googleSync = require("../services/google-sync");
+
+async function handleOpsGsync(ctx) {
+  const threadId = ctx.message?.message_thread_id || null;
+  const chatId = ctx.chat.id;
+  const args = (ctx.message?.text || "").replace(/^\/gsync(@\w+)?\s*/, "").trim();
+
+  if (!googleSync.isConfigured()) {
+    return ctx.reply(
+      "⚠️ *Google Sync not configured*\n\n" +
+      "Set the `GOOGLE_APPS_SCRIPT_URL` environment variable in Railway to enable Google Sheets \\& Calendar sync\\.",
+      { parse_mode: "MarkdownV2", message_thread_id: threadId }
+    );
+  }
+
+  if (args === "setup") {
+    await ctx.reply("⏳ Setting up Google Sheets & Calendar...", { message_thread_id: threadId });
+    try {
+      const result = await googleSync.setup();
+      if (result.success) {
+        return ctx.reply(
+          `✅ *Google Integration Ready*\n\n` +
+          `📊 Spreadsheet: ${result.spreadsheetUrl || "Created"}\n` +
+          `📅 Calendar: ${result.calendarName || "Created"}\n\n` +
+          `Data will auto-sync daily at 9:15 PM KSA.`,
+          { parse_mode: "Markdown", message_thread_id: threadId }
+        );
+      } else {
+        return ctx.reply(`❌ Setup failed: ${result.error}`, { message_thread_id: threadId });
+      }
+    } catch (e) {
+      return ctx.reply(`❌ Setup error: ${e.message}`, { message_thread_id: threadId });
+    }
+  }
+
+  if (args === "now" || args === "sync") {
+    await ctx.reply("⏳ Syncing all data to Google Sheets & Calendar...", { message_thread_id: threadId });
+    try {
+      const allTasks = opsDb.getDb().prepare(
+        "SELECT * FROM tasks WHERE chat_id = ? AND status != 'cancelled' ORDER BY id DESC"
+      ).all(chatId);
+      const overdue = opsDb.getOverdueTasks(chatId);
+      const taskStats = opsDb.getTaskStats(chatId);
+      const weeklyStats = opsDb.getWeeklyStats(chatId);
+      const expenses = opsDb.getMonthlyExpenses(chatId);
+      const occupancy = opsDb.getOccupancy(chatId);
+      const calendarTasks = allTasks.filter(t => t.due_date);
+
+      const kpiRow = {
+        report_date: new Date().toISOString().split("T")[0],
+        period: "manual_sync",
+        tasks_created: weeklyStats.created || 0,
+        tasks_completed: weeklyStats.completed || 0,
+        tasks_pending: taskStats.pending || 0,
+        tasks_overdue: overdue.length,
+        avg_resolution_hours: weeklyStats.avgResolutionHours || 0,
+        completion_rate: taskStats.total > 0 ? Math.round((taskStats.done / taskStats.total) * 100) : 0,
+        top_topic: weeklyStats.topTopic || "",
+        top_assignee: weeklyStats.topAssignee || "",
+      };
+
+      const result = await googleSync.syncAll({
+        tasks: allTasks,
+        kpis: [kpiRow],
+        expenses: expenses,
+        occupancy: occupancy,
+        calendar_tasks: calendarTasks,
+      });
+
+      if (result.success) {
+        const r = result.results || {};
+        let msg = `✅ *Google Sync Complete*\n\n`;
+        if (r.tasks) msg += `📊 Tasks: ${r.tasks.count || 0} synced\n`;
+        if (r.expenses) msg += `💰 Expenses: ${r.expenses.count || 0} synced\n`;
+        if (r.occupancy) msg += `🏠 Occupancy: ${r.occupancy.count || 0} synced\n`;
+        if (r.calendar) msg += `📅 Calendar: ${r.calendar.message || "synced"}\n`;
+        msg += `📈 KPIs: 1 row added`;
+        return ctx.reply(msg, { parse_mode: "Markdown", message_thread_id: threadId });
+      } else {
+        return ctx.reply(`❌ Sync failed: ${result.error}`, { message_thread_id: threadId });
+      }
+    } catch (e) {
+      return ctx.reply(`❌ Sync error: ${e.message}`, { message_thread_id: threadId });
+    }
+  }
+
+  if (args === "url" || args === "link") {
+    try {
+      const result = await googleSync.getSpreadsheetUrl();
+      if (result.success) {
+        return ctx.reply(`📊 *Google Sheet:*\n${result.url}`, { parse_mode: "Markdown", message_thread_id: threadId });
+      }
+    } catch (e) {}
+    return ctx.reply("⚠️ Could not retrieve spreadsheet URL. Try /gsync setup first.", { message_thread_id: threadId });
+  }
+
+  // Default: show help
+  return ctx.reply(
+    `📊 *Google Sync Commands*\n\n` +
+    `/gsync setup — Initialize spreadsheet & calendar\n` +
+    `/gsync now — Sync all data immediately\n` +
+    `/gsync url — Get spreadsheet link\n\n` +
+    `ℹ️ Auto-sync runs daily at 9:15 PM KSA.`,
+    { parse_mode: "Markdown", message_thread_id: threadId }
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ═══ Exports ═════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
@@ -1502,7 +1613,7 @@ module.exports = {
   handleOpsSla, handleOpsApprove, handleOpsReject,
   handleOpsRecurring, handleOpsDepends, handleOpsHandover,
   handleOpsMonthlyReport, handleOpsExpense, handleOpsExpenses,
-  handleOpsOccupancy, handleOpsMeeting,
+  handleOpsOccupancy, handleOpsMeeting, handleOpsGsync,
   // AI message handler
   handleOpsMessage,
   // Media handlers
