@@ -101,6 +101,25 @@ const {
 } = require("./handlers/ops");
 const { startOpsScheduler, stopOpsScheduler } = require("./services/ops-scheduler");
 
+// Phase 4 v4: 18 new features (Security, Onboarding, Team, Operations, Communication)
+const {
+  handleOpsSetRole, handleOpsRoles,
+  handleOpsAudit,
+  handleOpsVerify,
+  handleSensitiveDataCheck,
+  handleNewMember,
+  handleOpsOnboarding,
+  handleOpsTeam,
+  handleOpsPerformance, handleOpsLeaderboard,
+  handleOpsAway, handleOpsBack, handleOpsAvailability,
+  handleTopicRoutingSuggestion,
+  handleOpsPoll, handlePollCallback,
+  handleOpsPin,
+  trackMentions, markMentionResponse,
+  handleV4Passive,
+  initV4,
+} = require("./handlers/ops-v4");
+
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
 
@@ -301,6 +320,73 @@ bot.command("gsync", (ctx) => {
   return handleOpsGsync(ctx);
 });
 
+// ─── Phase 4 v4: New Ops Commands (18 features) ────────────
+
+bot.command("setrole", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsSetRole(ctx);
+});
+
+bot.command("roles", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsRoles(ctx);
+});
+
+bot.command("audit", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsAudit(ctx);
+});
+
+bot.command("verify", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsVerify(ctx);
+});
+
+bot.command("onboarding", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsOnboarding(ctx);
+});
+
+bot.command("team", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsTeam(ctx);
+});
+
+bot.command("performance", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsPerformance(ctx);
+});
+
+bot.command("leaderboard", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsLeaderboard(ctx);
+});
+
+bot.command("away", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsAway(ctx);
+});
+
+bot.command("back", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsBack(ctx);
+});
+
+bot.command("availability", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsAvailability(ctx);
+});
+
+bot.command("poll", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsPoll(ctx);
+});
+
+bot.command("pin", (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  return handleOpsPin(ctx);
+});
+
 // ─── Text Message Handler ─────────────────────────────────────
 
 /**
@@ -330,13 +416,16 @@ bot.on("text", async (ctx) => {
   // ── Phase 4: Ops Group ───────────────────────────────────────
   if (isOpsGroup(ctx)) {
     // Skip slash commands here — they are handled by bot.command() above.
-    // bot.command() in Telegraf fires BEFORE on("text"), so commands that
-    // matched will already have been handled. However, if a /command@botname
-    // message somehow reaches here (e.g., Telegraf didn’t match it), we
-    // still want to ignore it rather than send it to the AI.
     if (userMessage.startsWith("/")) return;
 
-    // Passive monitoring: detect follow-up promises in ALL messages
+    // v4 passive monitoring: sensitive data, topic routing, mentions, check-in
+    try {
+      await handleV4Passive(ctx);
+    } catch (e) {
+      console.error("[Bot] v4 passive error:", e.message);
+    }
+
+    // v3 passive monitoring: detect follow-up promises
     await handleOpsPassive(ctx);
 
     // Active AI response: only when @mentioned or replying to bot
@@ -491,6 +580,28 @@ bot.on(["voice", "audio"], async (ctx) => {
   }
 });
 
+// ─── Phase 4 v4: New Member Welcome ──────────────────────────
+bot.on("new_chat_members", async (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  try {
+    for (const member of ctx.message.new_chat_members) {
+      await handleNewMember(ctx, member);
+    }
+  } catch (e) {
+    console.error("[Bot] New member handler error:", e.message);
+  }
+});
+
+// ─── Phase 4 v4: Poll Callbacks ─────────────────────────────
+bot.action(/^poll_vote_/, async (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  try {
+    await handlePollCallback(ctx);
+  } catch (e) {
+    console.error("[Bot] Poll callback error:", e.message);
+  }
+});
+
 // ─── Inline Search & Callbacks ────────────────────────────────
 
 registerCallbacks(bot);
@@ -517,7 +628,7 @@ async function setupBot() {
       { command: "help",          description: "Show help | المساعدة" },
     ]);
 
-    // Set ops-specific commands for the ops group (v3 — 21-feature upgrade)
+    // Set ops-specific commands for the ops group (v4 — 39 features)
     await bot.telegram.setMyCommands(
       [
         { command: "task",          description: "Add task | إضافة مهمة" },
@@ -540,7 +651,20 @@ async function setupBot() {
         { command: "approve",       description: "Approve request | موافقة" },
         { command: "reject",        description: "Reject request | رفض" },
         { command: "checklist",     description: "Create checklist | قائمة مهام" },
-        { command: "gsync",          description: "Google Sheets sync | مزامنة جوجل" },
+        { command: "gsync",         description: "Google Sheets sync | مزامنة جوجل" },
+        { command: "setrole",       description: "Set user role | تعيين دور" },
+        { command: "roles",         description: "View roles | عرض الأدوار" },
+        { command: "audit",         description: "Audit log | سجل المراجعة" },
+        { command: "verify",        description: "Verify member | توثيق عضو" },
+        { command: "onboarding",    description: "Onboarding status | حالة التأهيل" },
+        { command: "team",          description: "Team directory | دليل الفريق" },
+        { command: "performance",   description: "Performance scores | درجات الأداء" },
+        { command: "leaderboard",   description: "Team leaderboard | لوحة المتصدرين" },
+        { command: "away",          description: "Mark as away | تعيين غياب" },
+        { command: "back",          description: "Mark as back | تعيين عودة" },
+        { command: "availability",  description: "Team availability | توفر الفريق" },
+        { command: "poll",          description: "Create poll | إنشاء استطلاع" },
+        { command: "pin",           description: "Pin summary | تثبيت ملخص" },
       ],
       { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
     );
@@ -581,9 +705,17 @@ bot
     console.log("Phase 1: Search, AI Chat, Notifications");
     console.log("Phase 2: Booking, Payments, Alerts");
     console.log("Phase 3: Admin, Channel, Multi-lang, Inline");
-    console.log("Phase 4: Ops Group v3 — 21 Features (Tasks, KPI, SLA, Approvals, Meetings, etc.)");
+    console.log("Phase 4: Ops Group v4 — 39 Features (Tasks, KPI, SLA, Roles, Audit, Polls, etc.)");
     console.log("Languages: AR, EN, FR, UR, HI");
     console.log("-------------------------------------------");
+
+    // Initialize v4 database tables
+    try {
+      initV4();
+      console.log("[Bot] v4 tables initialized");
+    } catch (e) {
+      console.error("[Bot] v4 init error:", e.message);
+    }
 
     // Start the ops scheduler after bot is connected
     startOpsScheduler(bot);

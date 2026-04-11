@@ -18,6 +18,7 @@
  */
 
 const opsDb = require("./ops-database");
+const v4Db = require("./ops-database-v4");
 const googleSync = require("./google-sync");
 
 let bot = null;
@@ -661,6 +662,205 @@ async function syncToGoogle() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ═══ Feature 34: Priority Auto-Escalation ═══════════════════
+// ═══════════════════════════════════════════════════════════════
+
+async function checkPriorityEscalation() {
+  if (!bot) return;
+  try {
+    const staleTasks = v4Db.getStaleHighPriorityTasks(OPS_GROUP_ID, 48);
+    for (const task of staleTasks) {
+      const key = `priority_esc_${task.id}`;
+      if (alreadySent(key)) continue;
+      markSent(key);
+
+      const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
+      const hours = Math.round((Date.now() - new Date(task.created_at).getTime()) / 3600000);
+      const msg = `🔺 *Priority Auto-Escalation*\n\n` +
+        `⬜ ${task.title}${assignee}\n` +
+        `⏱️ High priority task pending for ${hours}h\n` +
+        `📍 ${task.topic_name || "General"} → Escalated to CEO Update\n` +
+        `🔗 Task #${task.id}\n\n` +
+        `_High-priority task unresolved for 48+ hours. Requires attention._`;
+
+      try {
+        await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
+          parse_mode: "Markdown",
+          message_thread_id: THREAD_CEO_UPDATE,
+        });
+        console.log(`[OpsScheduler] Priority escalation for task #${task.id}`);
+      } catch (err) {
+        console.error(`[OpsScheduler] Priority escalation error #${task.id}:`, err.message);
+      }
+    }
+  } catch (error) {
+    console.error("[OpsScheduler] Priority escalation check error:", error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ Feature 35: End-of-Day Check-in ════════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+async function sendCheckinReminder() {
+  if (!bot) return;
+  if (alreadySent("checkin_reminder")) return;
+
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  // 5:00 PM KSA = 14:00 UTC
+  if (hour !== 14 || min >= 5) return;
+
+  markSent("checkin_reminder");
+
+  const today = todayKSA();
+  const unchecked = v4Db.getUncheckedMembers(OPS_GROUP_ID, today);
+
+  if (unchecked.length === 0) return;
+
+  let msg = `📋 *End-of-Day Check-in Reminder*\n\n`;
+  msg += `The following team members haven't posted any updates today:\n\n`;
+  for (const m of unchecked) {
+    msg += `• ${m.username || m.display_name || "Unknown"}\n`;
+  }
+  msg += `\n_Please post your end-of-day update in the relevant topics._`;
+
+  try {
+    await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
+      parse_mode: "Markdown",
+      message_thread_id: THREAD_CEO_UPDATE,
+    });
+    console.log(`[OpsScheduler] Check-in reminder sent for ${unchecked.length} members`);
+  } catch (err) {
+    console.error("[OpsScheduler] Check-in reminder error:", err.message);
+  }
+}
+
+async function flagUncheckedMembers() {
+  if (!bot) return;
+  if (alreadySent("checkin_flag")) return;
+
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  // 6:00 PM KSA = 15:00 UTC
+  if (hour !== 15 || min >= 5) return;
+
+  markSent("checkin_flag");
+
+  const today = todayKSA();
+  const unchecked = v4Db.getUncheckedMembers(OPS_GROUP_ID, today);
+
+  for (const m of unchecked) {
+    v4Db.flagUnchecked(OPS_GROUP_ID, m.user_id, today);
+  }
+
+  if (unchecked.length > 0) {
+    console.log(`[OpsScheduler] Flagged ${unchecked.length} unchecked members`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ Feature 36: Weekly Team Standup ════════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+async function sendWeeklyStandup() {
+  if (!bot) return;
+  if (alreadySent("weekly_standup")) return;
+
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  const dayOfWeek = ksa.getUTCDay(); // 0 = Sunday
+  // Sunday 9:00 AM KSA = Sunday 06:00 UTC
+  if (dayOfWeek !== 0 || hour !== 6 || min >= 5) return;
+
+  markSent("weekly_standup");
+
+  try {
+    const stats = opsDb.getWeeklyStats(OPS_GROUP_ID);
+    const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
+    const leaderboard = v4Db.getLeaderboard(OPS_GROUP_ID);
+
+    let msg = `📊 *Weekly Team Standup — Week Summary*\n\n`;
+    msg += `📈 *This Week's Numbers:*\n`;
+    msg += `• Tasks Created: ${stats.created || 0}\n`;
+    msg += `• Tasks Completed: ${stats.completed || 0}\n`;
+    msg += `• Currently Overdue: ${overdue.length}\n`;
+    if (stats.avgResolutionHours) msg += `• Avg Resolution: ${stats.avgResolutionHours}h\n`;
+    msg += `\n`;
+
+    if (leaderboard.length > 0) {
+      msg += `🏆 *Team Performance:*\n`;
+      const medals = ["🥇", "🥈", "🥉"];
+      leaderboard.slice(0, 5).forEach((entry, i) => {
+        const medal = medals[i] || `${i + 1}.`;
+        msg += `${medal} ${entry.assigned_to}: ${entry.completed}/${entry.total_tasks} (${entry.completion_rate || 0}%)\n`;
+      });
+      msg += `\n`;
+    }
+
+    if (overdue.length > 0) {
+      msg += `🔴 *Overdue Tasks (${overdue.length}):*\n`;
+      for (const t of overdue.slice(0, 5)) {
+        msg += `• #${t.id}: ${t.title}${t.assigned_to ? ` → ${t.assigned_to}` : ""}\n`;
+      }
+      if (overdue.length > 5) msg += `  _...and ${overdue.length - 5} more_\n`;
+      msg += `\n`;
+    }
+
+    msg += `📋 *This Week's Focus:*\n`;
+    msg += `Please reply in this thread with:\n`;
+    msg += `1. What you accomplished last week\n`;
+    msg += `2. What you're focusing on this week\n`;
+    msg += `3. Any blockers or help needed`;
+
+    await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
+      parse_mode: "Markdown",
+      message_thread_id: THREAD_CEO_UPDATE,
+    });
+    console.log("[OpsScheduler] Weekly standup posted");
+  } catch (error) {
+    console.error("[OpsScheduler] Weekly standup error:", error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ Feature 39: Mention Alert Checker ══════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+async function checkMentionAlerts() {
+  if (!bot) return;
+  try {
+    const unresponded = v4Db.getUnrespondedMentions(OPS_GROUP_ID, 2);
+    for (const mention of unresponded) {
+      v4Db.markMentionReminderSent(mention.id);
+
+      const topicName = mention.thread_id ? ({
+        4: "Daily CEO Update", 5: "Operations Follow-Up", 6: "Listings & Inventory",
+        7: "Bookings & Revenue", 8: "Customer Support", 9: "Website & Tech",
+        10: "Payments & Finance", 11: "Marketing & Content", 12: "Legal/Compliance",
+        13: "Blockers & Escalations", 14: "Completed Today", 15: "Tomorrow Priorities",
+      }[mention.thread_id] || "a topic") : "the group";
+
+      const msg = `🔔 *Mention Reminder*\n\n${mention.mentioned_username}, you were mentioned ${mention.mentioned_by ? `by ${mention.mentioned_by} ` : ""}2+ hours ago in *${topicName}*.\n\nPlease check and respond.`;
+
+      try {
+        const sendOpts = { parse_mode: "Markdown" };
+        if (mention.thread_id) sendOpts.message_thread_id = mention.thread_id;
+        await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
+        console.log(`[OpsScheduler] Mention reminder sent for ${mention.mentioned_username}`);
+      } catch (err) {
+        console.error(`[OpsScheduler] Mention reminder error:`, err.message);
+      }
+    }
+  } catch (error) {
+    console.error("[OpsScheduler] Mention alert check error:", error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ═══ Main Scheduler Tick ═════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
@@ -674,12 +874,14 @@ async function tick() {
     await checkFollowUps();
     await checkReminders();
 
-    // Every 5 minutes: check escalations, vendor follow-ups, SLA, recurring
+    // Every 5 minutes: check escalations, vendor follow-ups, SLA, recurring, mentions
     if (tickCount % 5 === 0) {
       await checkEscalations();
       await checkVendorFollowUps();
       await checkSlaBreaches();
       await processRecurringTasks();
+      await checkMentionAlerts();
+      await checkPriorityEscalation();
     }
 
     // Every 60 minutes: ping overdue tasks
@@ -695,6 +897,11 @@ async function tick() {
     // Daily Google Sheets & Calendar sync (after daily report)
     await syncToGoogle();
 
+    // v4 daily scheduled jobs
+    await sendCheckinReminder();
+    await flagUncheckedMembers();
+    await sendWeeklyStandup();
+
   } catch (error) {
     console.error("[OpsScheduler] Tick error:", error.message);
   }
@@ -709,6 +916,14 @@ function startOpsScheduler(botInstance) {
 
   // Initialize the ops database
   opsDb.getDb();
+
+  // Initialize v4 tables
+  try {
+    v4Db.initV4Tables();
+    console.log("[OpsScheduler] v4 tables initialized");
+  } catch (e) {
+    console.error("[OpsScheduler] v4 init error:", e.message);
+  }
 
   // Initialize default SLA configs
   try {
@@ -741,7 +956,7 @@ function startOpsScheduler(botInstance) {
     console.log("[OpsScheduler] Google Sync: DISABLED (set GOOGLE_APPS_SCRIPT_URL to enable)");
   }
 
-  console.log("[OpsScheduler] Started v3. Schedule:");
+  console.log("[OpsScheduler] Started v4. Schedule:");
   console.log("  • Morning Briefing: 9:00 AM KSA → CEO Update");
   console.log("  • Evening Reminder: 6:00 PM KSA → General");
   console.log("  • Daily Report: 9:00 PM KSA → CEO Update");
@@ -752,6 +967,11 @@ function startOpsScheduler(botInstance) {
   console.log("  • Overdue pings: every 60 min");
   console.log("  • Reminders/follow-ups: every 1 min");
   console.log("  • Google Sheets/Calendar sync: 9:15 PM KSA daily");
+  console.log("  • Check-in reminder: 5:00 PM KSA daily");
+  console.log("  • Unchecked flag: 6:00 PM KSA daily");
+  console.log("  • Weekly standup: Sunday 9:00 AM KSA");
+  console.log("  • Mention alerts: every 5 min");
+  console.log("  • Priority auto-escalation: every 5 min");
 }
 
 function stopOpsScheduler() {
