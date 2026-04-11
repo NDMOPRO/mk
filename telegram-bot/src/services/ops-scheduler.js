@@ -1103,6 +1103,7 @@ async function tick() {
     await syncToGoogle();
     await sendCheckinReminder();
     await flagUncheckedMembers();
+    await sendWeeklyCeoMessage();
     await sendWeeklyStandup();
     await checkDailyWeather();
 
@@ -1174,6 +1175,7 @@ function startOpsScheduler(botInstance) {
   console.log("  📋 Check-in Reminder: 5:00 PM KSA → CEO Update");
   console.log("  🌆 Evening Reminder: 6:00 PM KSA → General");
   console.log("  📊 Daily Report: 9:00 PM KSA → CEO Update");
+  console.log("  👑 Weekly CEO Message: Sunday 9:00 AM KSA");
   console.log("  📊 Weekly Standup: Sunday 9:00 AM KSA");
   console.log("  📊 Google Sync: 9:15 PM KSA daily");
   console.log("  🚨 Escalation/SLA/Vendor/Mentions: every 5 min");
