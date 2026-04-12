@@ -1148,8 +1148,10 @@ async function tick() {
 
     // Daily scheduled messages (checked every tick, deduped)
     await sendMorningBriefing();
+    await sendPerEmployeeTaskBriefing();
     await sendDailyReport();
     await sendEveningReminder();
+    await sendAfternoonTaskFollowUp();
     await syncToGoogle();
     await sendCheckinReminder();
     await flagUncheckedMembers();
@@ -1159,6 +1161,154 @@ async function tick() {
 
   } catch (error) {
     console.error("[OpsScheduler] Tick error:", error.message);
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ Per-Employee Morning Task Briefing (9:05 AM KSA) ━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async function sendPerEmployeeTaskBriefing() {
+  if (!bot) return;
+  if (alreadySent("per_employee_briefing")) return;
+
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  if (hour !== 9 || min < 5 || min >= 10) return;  // 9:05 AM KSA
+
+  markSent("per_employee_briefing");
+
+  try {
+    const allPending = opsDb.getAllPendingTasks(OPS_GROUP_ID);
+    if (allPending.length === 0) return;
+
+    // Group tasks by assignee
+    const byAssignee = {};
+    for (const t of allPending) {
+      const key = t.assigned_to || null;
+      if (!key) continue;
+      if (!byAssignee[key]) byAssignee[key] = [];
+      byAssignee[key].push(t);
+    }
+
+    const priorityEmoji = { urgent: "🔴", high: "🟠", normal: "🟡" };
+    const DIV2 = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+
+    for (const [assignee, tasks] of Object.entries(byAssignee)) {
+      let msg = `👤 <b>Daily Task Assignment | توزيع المهام اليومي</b>\n`;
+      msg += `<b>${assignee}</b>\n`;
+      msg += `${DIV2}\n\n`;
+      msg += `You have <b>${tasks.length} active task${tasks.length > 1 ? 's' : ''}</b> today:\n\n`;
+
+      tasks.forEach((t, i) => {
+        const due = t.due_date ? `\n     📅 Deadline: <b>${t.due_date}</b>` : "";
+        const topic = t.topic_name ? `\n     📁 ${t.topic_name}` : "";
+        const desc = t.description ? `\n     💬 ${t.description.substring(0, 80)}${t.description.length > 80 ? '...' : ''}` : "";
+        msg += `${i + 1}. ${priorityEmoji[t.priority] || '🟡'} <b>[#${t.id}] ${t.title}</b>${due}${topic}${desc}\n\n`;
+      });
+
+      msg += `${DIV2}\n\n`;
+      msg += `لديك <b>${tasks.length} مهمة نشطة</b> اليوم:\n\n`;
+
+      tasks.forEach((t, i) => {
+        const due = t.due_date ? `\n     📅 الموعد: <b>${t.due_date}</b>` : "";
+        msg += `${i + 1}. ${priorityEmoji[t.priority] || '🟡'} <b>[#${t.id}] ${t.title}</b>${due}\n\n`;
+      });
+
+      msg += `💡 /done #ID  /update #ID  /remind #ID`;
+
+      // Send to the most relevant topic for this assignee
+      const threadId = tasks[0].thread_id || THREAD_CEO_UPDATE;
+      await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
+        parse_mode: "HTML",
+        message_thread_id: threadId,
+        disable_notification: false,
+      });
+
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    console.log(`[OpsScheduler] Per-employee briefing sent for ${Object.keys(byAssignee).length} team members.`);
+  } catch (error) {
+    console.error("[OpsScheduler] Per-employee briefing error:", error.message);
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ Afternoon Task Status Follow-Up (5:00 PM KSA) ━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async function sendAfternoonTaskFollowUp() {
+  if (!bot) return;
+  if (alreadySent("afternoon_task_followup")) return;
+
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  if (hour !== 17 || min >= 5) return;  // 5 PM KSA
+
+  markSent("afternoon_task_followup");
+
+  try {
+    const allPending = opsDb.getAllPendingTasks(OPS_GROUP_ID);
+    const overdue = opsDb.getOverdueTasks(OPS_GROUP_ID);
+    if (allPending.length === 0 && overdue.length === 0) return;
+
+    const DIV2 = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+    let msg = `🕔 <b>Afternoon Status Check | متابعة المهام المسائية</b>\n`;
+    msg += `${DIV2}\n\n`;
+    msg += `⏰ It's 5:00 PM — time to update your task progress.\n\n`;
+
+    if (overdue.length > 0) {
+      msg += `🔴 <b>OVERDUE — Needs Immediate Update (${overdue.length}):</b>\n`;
+      overdue.slice(0, 6).forEach(t => {
+        const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
+        msg += `  🔴 [#${t.id}] ${t.title}${assignee} | Was due: ${t.due_date}\n`;
+      });
+      msg += "\n";
+    }
+
+    if (allPending.length > 0) {
+      msg += `⏳ <b>Still Pending (${allPending.length}) — Please update status:</b>\n`;
+      allPending.slice(0, 8).forEach(t => {
+        const assignee = t.assigned_to ? ` → ${t.assigned_to}` : "";
+        msg += `  🟡 [#${t.id}] ${t.title}${assignee}\n`;
+      });
+      msg += "\n";
+    }
+
+    msg += `📲 <b>Update commands:</b>\n`;
+    msg += `  /done #ID — Mark as completed\n`;
+    msg += `  /update #ID [status] — Update progress\n`;
+    msg += `  /block #ID [reason] — Flag a blocker\n\n`;
+
+    msg += `${DIV2}\n\n`;
+    msg += `🕔 الساعة 5:00 مساءً — حان وقت تحديث تقدم مهامك.\n\n`;
+
+    if (overdue.length > 0) {
+      msg += `🔴 <b>متأخرة — تحتاج تحديثاً فورياً (${overdue.length}):</b>\n`;
+      overdue.slice(0, 6).forEach(t => {
+        const assignee = t.assigned_to ? ` ← ${t.assigned_to}` : "";
+        msg += `  🔴 [#${t.id}] ${t.title}${assignee} | كان مستحقاً: ${t.due_date}\n`;
+      });
+      msg += "\n";
+    }
+
+    msg += `📲 <b>أوامر التحديث:</b>\n`;
+    msg += `  /done #ID — إتمام المهمة\n`;
+    msg += `  /update #ID — تحديث الحالة\n`;
+    msg += `  /block #ID — الإبلاغ عن عائق`;
+
+    await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
+      parse_mode: "HTML",
+      message_thread_id: THREAD_CEO_UPDATE,
+      disable_notification: false,
+    });
+
+    console.log("[OpsScheduler] Afternoon task follow-up sent.");
+  } catch (error) {
+    console.error("[OpsScheduler] Afternoon follow-up error:", error.message);
   }
 }
 
