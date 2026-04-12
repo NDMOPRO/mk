@@ -24,13 +24,32 @@
 const Database = require("better-sqlite3");
 const path = require("path");
 
-const DB_PATH = path.join(__dirname, "..", "..", "data", "ops.db");
+// Use persistent volume on Railway (/app/data) if available, else local
+const VOLUME_PATH = "/app/data/ops.db";
+const LOCAL_PATH = path.join(__dirname, "..", "..", "data", "ops.db");
+const fs = require("fs");
+
+function resolveDbPath() {
+  // If /app/data exists (Railway volume), use it
+  if (fs.existsSync("/app/data")) {
+    // If the volume DB doesn't exist yet, copy the seed from the repo
+    if (!fs.existsSync(VOLUME_PATH) && fs.existsSync(LOCAL_PATH)) {
+      console.log("[OpsDB] Copying seed database to persistent volume...");
+      fs.copyFileSync(LOCAL_PATH, VOLUME_PATH);
+    }
+    console.log("[OpsDB] Using persistent volume:", VOLUME_PATH);
+    return VOLUME_PATH;
+  }
+  console.log("[OpsDB] Using local path:", LOCAL_PATH);
+  return LOCAL_PATH;
+}
+
+const DB_PATH = resolveDbPath();
 
 let db;
 
 function getDb() {
   if (!db) {
-    const fs = require("fs");
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     db = new Database(DB_PATH);
