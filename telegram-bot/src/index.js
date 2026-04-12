@@ -7,14 +7,19 @@
  * Phase 3: Admin Dashboard, Channel Auto-Posting, Multi-language, Enhanced Inline
  * Phase 4: Operations Group — Tasks, Checklists, Follow-ups, Daily Reminders
  *
+ * ─── Transport: WEBHOOK MODE ─────────────────────────────────
+ * Uses Express + Telegraf webhook for permanent stability on Railway.
+ * Polling mode would exit when the long-poll resolves; webhook mode
+ * keeps the Express HTTP server alive indefinitely.
+ *
  * ─── Context Routing ─────────────────────────────────────────
  * OPS_GROUP_ID (-1003967447285) → Operations management mode
  * All other chats                → Public bot mode (property search, AI, etc.)
  */
 const { Telegraf, session } = require("telegraf");
+const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const http = require("http");
 
 // ─── Heartbeat (for keep-alive monitor) ──────────────────────
 const HEARTBEAT_FILE = path.join(__dirname, "../.heartbeat");
@@ -143,23 +148,14 @@ bot.use(session());
 db.getDb();
 
 // ─── Global Error Handler ─────────────────────────────────────
-// Without this, Telegraf silently drops all unhandled promise rejections
-// in command handlers, causing commands to appear unresponsive.
 bot.catch((err, ctx) => {
   const cmd = ctx.message?.text?.split(" ")[0] || "unknown";
   const chat = ctx.chat?.id || "unknown";
   console.error(`[Bot] Unhandled error in command "${cmd}" (chat ${chat}):`, err.message);
-  // Do NOT send error replies for 409 (conflict) or 401 (unauthorized) — these are polling-level
-  // errors, not user-facing command errors. Sending a reply would spam the group.
-  const errCode = err.code || err.response?.error_code;
-  if (errCode === 409 || errCode === 401) return;
-  // Only send error replies in private chats — never spam the ops group with raw error messages
+  // Never send error replies in the ops group — only in private chats
   const isPrivate = ctx.chat?.type === 'private';
   if (isPrivate && ctx.reply) {
-    const threadId = ctx.message?.message_thread_id || undefined;
-    ctx.reply(`❌ An error occurred. Please try again.`, {
-      message_thread_id: threadId
-    }).catch(() => {}); // Swallow reply errors
+    ctx.reply(`❌ An error occurred. Please try again.`).catch(() => {});
   }
 });
 
@@ -169,7 +165,7 @@ bot.catch((err, ctx) => {
 
 // /start — only in private chats
 bot.start((ctx) => {
-  if (isOpsGroup(ctx)) return; // Ignore /start in ops group
+  if (isOpsGroup(ctx)) return;
   return handleStart(ctx);
 });
 
@@ -219,8 +215,7 @@ bot.command("unsubscribe", (ctx) => {
   return handleUnsubscribe(ctx);
 });
 
-// Phase 3: Admin commands (private only)
-// In the ops group, /admin routes to the Admin Panel topic handler (topic 15, thread 235)
+// Phase 3: Admin commands
 bot.command("admin", (ctx) => {
   if (isOpsGroup(ctx)) return handleOpsAdmin(ctx);
   return handleAdminLogin(ctx);
@@ -243,233 +238,57 @@ bot.command("manage_listings", (ctx) => {
 });
 
 // ─── Phase 4: Ops Group Commands ─────────────────────────────
-// These commands ONLY work in the ops group.
 
-bot.command("task", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsTask(ctx);
-});
+bot.command("task",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTask(ctx); });
+bot.command("checklist",     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsChecklist(ctx); });
+bot.command("tasks",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTasks(ctx); });
+bot.command("done",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsDone(ctx); });
+bot.command("remind",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRemind(ctx); });
+bot.command("summary",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSummary(ctx); });
+bot.command("kpi",           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsKpi(ctx); });
+bot.command("property",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsProperty(ctx); });
+bot.command("move",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMove(ctx); });
 
-bot.command("checklist", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsChecklist(ctx);
-});
+// Phase 4 v3
+bot.command("sla",           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSla(ctx); });
+bot.command("approve",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsApprove(ctx); });
+bot.command("reject",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsReject(ctx); });
+bot.command("recurring",     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRecurring(ctx); });
+bot.command("depends",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsDepends(ctx); });
+bot.command("handover",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsHandover(ctx); });
+bot.command("monthlyreport", (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMonthlyReport(ctx); });
+bot.command("expense",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsExpense(ctx); });
+bot.command("expenses",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsExpenses(ctx); });
+bot.command("occupancy",     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsOccupancy(ctx); });
+bot.command("meeting",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMeeting(ctx); });
+bot.command("gsync",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsGsync(ctx); });
 
-bot.command("tasks", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsTasks(ctx);
-});
+// Phase 4 v4
+bot.command("setrole",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSetRole(ctx); });
+bot.command("roles",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRoles(ctx); });
+bot.command("audit",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAudit(ctx); });
+bot.command("verify",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsVerify(ctx); });
+bot.command("onboarding",    (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsOnboarding(ctx); });
+bot.command("team",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTeam(ctx); });
+bot.command("performance",   (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPerformance(ctx); });
+bot.command("leaderboard",   (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsLeaderboard(ctx); });
+bot.command("away",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAway(ctx); });
+bot.command("back",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsBack(ctx); });
+bot.command("availability",  (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAvailability(ctx); });
+bot.command("poll",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPoll(ctx); });
+bot.command("pin",           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPin(ctx); });
 
-bot.command("done", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsDone(ctx);
-});
-
-bot.command("remind", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsRemind(ctx);
-});
-
-bot.command("summary", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsSummary(ctx);
-});
-
-bot.command("kpi", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsKpi(ctx);
-});
-
-bot.command("property", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsProperty(ctx);
-});
-
-bot.command("move", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsMove(ctx);
-});
-
-// ─── Phase 4 v3: New Ops Commands ───────────────────────────
-
-bot.command("sla", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsSla(ctx);
-});
-
-bot.command("approve", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsApprove(ctx);
-});
-
-bot.command("reject", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsReject(ctx);
-});
-
-bot.command("recurring", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsRecurring(ctx);
-});
-
-bot.command("depends", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsDepends(ctx);
-});
-
-bot.command("handover", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsHandover(ctx);
-});
-
-bot.command("monthlyreport", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsMonthlyReport(ctx);
-});
-
-bot.command("expense", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsExpense(ctx);
-});
-
-bot.command("expenses", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsExpenses(ctx);
-});
-
-bot.command("occupancy", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsOccupancy(ctx);
-});
-
-bot.command("meeting", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsMeeting(ctx);
-});
-
-bot.command("gsync", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsGsync(ctx);
-});
-
-// ─── Phase 4 v4: New Ops Commands (18 features) ────────────
-
-bot.command("setrole", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsSetRole(ctx);
-});
-
-bot.command("roles", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsRoles(ctx);
-});
-
-bot.command("audit", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsAudit(ctx);
-});
-
-bot.command("verify", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsVerify(ctx);
-});
-
-bot.command("onboarding", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsOnboarding(ctx);
-});
-
-bot.command("team", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsTeam(ctx);
-});
-
-bot.command("performance", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsPerformance(ctx);
-});
-
-bot.command("leaderboard", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsLeaderboard(ctx);
-});
-
-bot.command("away", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsAway(ctx);
-});
-
-bot.command("back", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsBack(ctx);
-});
-
-bot.command("availability", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsAvailability(ctx);
-});
-
-bot.command("poll", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsPoll(ctx);
-});
-
-bot.command("pin", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsPin(ctx);
-});
-
-// ─── Phase 4 v5: New Ops Commands (8 features) ─────────────────────────────
-
-bot.command("mlog", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsMlog(ctx);
-});
-
-bot.command("workflow", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsWorkflow(ctx);
-});
-
-bot.command("template", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsTemplate(ctx);
-});
-
-bot.command("trends", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsTrends(ctx);
-});
-
-bot.command("weather", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsWeather(ctx);
-});
-
-bot.command("clean", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsClean(ctx);
-});
-
-bot.command("idea", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsIdea(ctx);
-});
-
-bot.command("ideas", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsIdeas(ctx);
-});
-
-bot.command("brainstorm", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsBrainstorm(ctx);
-});
-
-bot.command("photos", (ctx) => {
-  if (!isOpsGroup(ctx)) return;
-  return handleOpsPhotos(ctx);
-});
+// Phase 4 v5
+bot.command("mlog",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMlog(ctx); });
+bot.command("workflow",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsWorkflow(ctx); });
+bot.command("template",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTemplate(ctx); });
+bot.command("trends",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTrends(ctx); });
+bot.command("weather",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsWeather(ctx); });
+bot.command("clean",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsClean(ctx); });
+bot.command("idea",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsIdea(ctx); });
+bot.command("ideas",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsIdeas(ctx); });
+bot.command("brainstorm",    (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsBrainstorm(ctx); });
+bot.command("photos",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPhotos(ctx); });
 
 // ─── Text Message Handler ─────────────────────────────────────
 
@@ -766,7 +585,7 @@ async function setupBot() {
         { command: "roles",         description: "View roles | عرض الأدوار" },
         { command: "audit",         description: "Audit log | سجل المراجعة" },
         { command: "verify",        description: "Verify member | توثيق عضو" },
-        { command: "onboarding",    description: "Onboarding status | حالة التأهيل" },
+        { command: "onboarding",    description: "Onboarding guide | دليل الانضمام" },
         { command: "team",          description: "Team directory | دليل الفريق" },
         { command: "performance",   description: "Performance scores | درجات الأداء" },
         { command: "leaderboard",   description: "Team leaderboard | لوحة المتصدرين" },
@@ -774,18 +593,19 @@ async function setupBot() {
         { command: "back",          description: "Mark as back | تعيين عودة" },
         { command: "availability",  description: "Team availability | توفر الفريق" },
         { command: "poll",          description: "Create poll | إنشاء استطلاع" },
-        { command: "pin",          description: "Pin a summary in topic" },
-        { command: "mlog",         description: "Log maintenance" },
-        { command: "workflow",     description: "Manage workflows" },
-        { command: "template",     description: "Message templates" },
-        { command: "trends",       description: "View trends" },
-        { command: "weather",      description: "Check weather" },
-        { command: "clean",        description: "Cleaning log" },
-        { command: "idea",         description: "Submit idea" },
-        { command: "ideas",        description: "Idea board" },
-        { command: "brainstorm",   description: "Start brainstorm" },
-        { command: "photos",       description: "Property photos" },
-    ], { scope: { type: "chat", chat_id: OPS_GROUP_ID } });
+        { command: "pin",           description: "Pin a summary in topic" },
+        { command: "mlog",          description: "Log maintenance" },
+        { command: "workflow",      description: "Manage workflows" },
+        { command: "template",      description: "Message templates" },
+        { command: "trends",        description: "View trends" },
+        { command: "weather",       description: "Check weather" },
+        { command: "clean",         description: "Cleaning log" },
+        { command: "idea",          description: "Submit idea" },
+        { command: "ideas",         description: "Idea board" },
+        { command: "brainstorm",    description: "Start brainstorm" },
+        { command: "photos",        description: "Property photos" },
+      ], { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
+    );
 
     await bot.telegram.setChatMenuButton({
       menuButton: {
@@ -809,12 +629,8 @@ async function setupBot() {
   }
 }
 
-// ─── Start Bot ────────────────────────────────────────────────
-
-// Initialize ALL database tables BEFORE launching the bot.
-// This is critical: if init is deferred to .then(), a 409 conflict
-// or any launch error means tables are never created and ALL v4/v5
-// commands (roles, onboarding, ideas, etc.) crash with "no such table".
+// ─── Initialize DB Tables ─────────────────────────────────────
+// Must happen BEFORE the bot starts handling updates.
 try {
   initV4();
   console.log("[Bot] v4 tables initialized");
@@ -828,94 +644,102 @@ try {
   console.error("[Bot] v5 init error:", e.message);
 }
 
-setupBot();
+// ─── WEBHOOK MODE ─────────────────────────────────────────────
+// Railway keeps Express web servers alive permanently.
+// Telegram pushes updates to our HTTPS endpoint — no polling needed.
+// This eliminates the "polling process exits" problem entirely.
 
-// ─── Simple Bot Launch ──────────────────────────────────────
-// 1. deleteWebhook to clear any stale session
-// 2. Wait 5s
-// 3. bot.launch()
-// 4. On ANY error, wait 30s and retry forever
-let schedulerStarted = false;
+const PORT = process.env.PORT || 3000;
+const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN || "telegram-bot-production-87a1.up.railway.app";
+const WEBHOOK_PATH   = `/webhook/${config.botToken}`;
+const WEBHOOK_URL    = `https://${WEBHOOK_DOMAIN}${WEBHOOK_PATH}`;
 
-async function startBot() {
-  // Clean slate
+const app = express();
+app.use(express.json());
+
+// Health check endpoint — Railway uses this to confirm the service is up
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    mode: "webhook",
+    bot: bot.botInfo ? "@" + bot.botInfo.username : "starting",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    mode: "webhook",
+    bot: bot.botInfo ? "@" + bot.botInfo.username : "starting",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Telegram sends all updates to this endpoint
+app.post(WEBHOOK_PATH, (req, res) => {
+  bot.handleUpdate(req.body, res);
+});
+
+// ─── Start Express + Register Webhook ────────────────────────
+async function startWebhook() {
+  // 1. Fetch bot info first (needed by handlers that reference bot.botInfo)
   try {
-    console.log('[Bot] deleteWebhook...');
-    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-    console.log('[Bot] Webhook cleared.');
+    bot.botInfo = await bot.telegram.getMe();
+    console.log(`[Bot] Connected as @${bot.botInfo.username}`);
   } catch (e) {
-    console.warn('[Bot] deleteWebhook warning:', e.message);
+    console.error("[Bot] getMe failed:", e.message);
   }
 
-  console.log('[Bot] Waiting 5s before launch...');
-  await new Promise(r => setTimeout(r, 5000));
-
-  console.log('[Bot] Launching polling...');
+  // 2. Register webhook with Telegram
   try {
-    await bot.launch({ dropPendingUpdates: true });
-  } catch (err) {
-    const errCode = err.code || err.response?.error_code;
-    if (errCode === 409) {
-      // 409 Conflict: another instance is polling. Wait longer before retrying.
-      console.warn('[Bot] 409 Conflict — another instance may be running. Retrying in 60s...');
-      setTimeout(startBot, 60000);
-    } else {
-      console.error('[Bot] Launch failed:', err.message, '— will retry in 30s');
-      setTimeout(startBot, 30000);
-    }
+    await bot.telegram.setWebhook(WEBHOOK_URL, {
+      drop_pending_updates: true,
+      allowed_updates: [
+        "message", "edited_message", "callback_query",
+        "inline_query", "chosen_inline_result",
+        "chat_member", "my_chat_member",
+      ],
+    });
+    console.log(`[Bot] Webhook registered: ${WEBHOOK_URL}`);
+  } catch (e) {
+    console.error("[Bot] setWebhook failed:", e.message);
   }
+
+  // 3. Start Express server
+  app.listen(PORT, () => {
+    console.log("-------------------------------------------");
+    console.log("Monthly Key Telegram Bot is RUNNING (WEBHOOK)");
+    console.log(`Bot Username: @${bot.botInfo?.username || "unknown"}`);
+    console.log(`Webhook URL: ${WEBHOOK_URL}`);
+    console.log(`HTTP Port: ${PORT}`);
+    console.log("Phase 4: Ops Group v5 — 49 Features");
+    console.log("-------------------------------------------");
+  });
+
+  // 4. Run one-time setup (commands, menu button, channel posting)
+  await setupBot();
+
+  // 5. Start the ops scheduler (cron jobs: morning briefing, check-ins, daily report)
+  startOpsScheduler(bot);
+  writeHeartbeat();
 }
 
-// Start scheduler once bot is connected
-function waitForBotAndStartScheduler() {
-  if (bot.botInfo && !schedulerStarted) {
-    schedulerStarted = true;
-    writeHeartbeat();
-    console.log('-------------------------------------------');
-    console.log('Monthly Key Telegram Bot is RUNNING');
-    console.log('Bot Username: @' + bot.botInfo.username);
-    console.log('Phase 4: Ops Group v5 — 49 Features');
-    console.log('-------------------------------------------');
-    startOpsScheduler(bot);
-  } else if (!schedulerStarted) {
-    setTimeout(waitForBotAndStartScheduler, 1000);
-  }
-}
-
-startBot();
-waitForBotAndStartScheduler();
+startWebhook().catch((err) => {
+  console.error("[Bot] Fatal startup error:", err);
+  process.exit(1);
+});
 
 // Enable graceful stop
 process.once("SIGINT", () => {
   stopChannelPosting();
   stopOpsScheduler();
-  bot.stop("SIGINT");
+  process.exit(0);
 });
 process.once("SIGTERM", () => {
   stopChannelPosting();
   stopOpsScheduler();
-  bot.stop("SIGTERM");
-});
-
-// ─── HTTP Keepalive Server ────────────────────────────────────
-// Railway requires a process to either bind to PORT (web service)
-// or run indefinitely (worker). Without this, Node.js exits after
-// bot.launch() resolves, killing the bot. This minimal HTTP server
-// keeps the process alive and satisfies Railway health checks.
-const PORT = process.env.PORT || 3001;
-http.createServer((req, res) => {
-  if (req.url === '/health' || req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: 'ok',
-      bot: bot.botInfo ? '@' + bot.botInfo.username : 'starting',
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString()
-    }));
-  } else {
-    res.writeHead(404);
-    res.end();
-  }
-}).listen(PORT, () => {
-  console.log('[Bot] HTTP keepalive server listening on port', PORT);
+  process.exit(0);
 });
