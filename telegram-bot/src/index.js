@@ -577,7 +577,7 @@ bot.on("text", async (ctx) => {
         }
       } catch (error) {
         try { await ctx.deleteMessage(searchingMsg.message_id); } catch (e) {}
-        await ctx.reply(t(lang, "error"));
+        await ctx.reply(t(lang, "error"), { message_thread_id: ctx.message?.message_thread_id || undefined });
       }
       return;
     }
@@ -592,7 +592,7 @@ bot.on("text", async (ctx) => {
       const appBtn = Markup.inlineKeyboard([
         [Markup.button.webApp(t(lang, "btnOpenApp"), config.webappUrl)],
       ]);
-      return ctx.reply(appMsg, { ...appBtn });
+      return ctx.reply(appMsg, { ...appBtn, message_thread_id: ctx.message?.message_thread_id || undefined });
     }
     if (buttonAction === "action_website") {
       const { Markup } = require("telegraf");
@@ -600,7 +600,7 @@ bot.on("text", async (ctx) => {
       const webBtn = Markup.inlineKeyboard([
         [Markup.button.url(t(lang, "btnWebsite"), config.websiteUrl)],
       ]);
-      return ctx.reply(webMsg, { ...webBtn });
+      return ctx.reply(webMsg, { ...webBtn, message_thread_id: ctx.message?.message_thread_id || undefined });
     }
     return;
   }
@@ -638,7 +638,7 @@ bot.on("text", async (ctx) => {
   } catch (error) {
     console.error("[Bot] Error in text handler:", error.message);
     try {
-      await ctx.reply(t(lang, "error"));
+      await ctx.reply(t(lang, "error"), { message_thread_id: ctx.message?.message_thread_id || undefined });
     } catch (e) {
       console.error("[Bot] Could not send error reply:", e.message);
     }

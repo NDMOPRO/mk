@@ -36,7 +36,7 @@ async function handleOpsRoles(ctx) {
     if (roles.length === 0) {
       const en = `👥 *Team Roles*\n\nNo roles defined. Use \`/setrole @user CEO\``;
       const ar = `👥 *أدوار الفريق*\n\nلم يتم تحديد أدوار. استخدم \`/setrole @user CEO\``;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     let en = `👥 *Team Roles*\n\n`;
@@ -49,10 +49,10 @@ async function handleOpsRoles(ctx) {
       en += line; ar += line;
     });
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsRoles] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -108,7 +108,7 @@ async function handleOpsSetRole(ctx) {
     if (!match) {
       const en = `👥 *Set Team Role*\n\nUsage: \`/setrole @user [CEO|Manager|Staff]\`\nExample: \`/setrole @SAQ198 Manager\``;
       const ar = `👥 *تعيين دور الفريق*\n\nالاستخدام: \`/setrole @user [CEO|Manager|Staff]\`\nمثال: \`/setrole @SAQ198 Manager\``;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     const targetUsername = match[1].replace(/^@/, "");
@@ -118,7 +118,7 @@ async function handleOpsSetRole(ctx) {
     if (!role) {
       const en = `❌ *Unknown role:* \`${rawRole}\`\n\nValid roles: *CEO*, *Manager*, *Staff*`;
       const ar = `❌ *دور غير معروف:* \`${rawRole}\`\n\nالأدوار الصحيحة: *CEO*، *Manager*، *Staff*`;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     // Try to find user ID from team members or fall back to 0
@@ -130,10 +130,10 @@ async function handleOpsSetRole(ctx) {
     const en = `✅ *Role updated*\n\n👤 @${escMd(targetUsername)} is now *${role}*`;
     const ar = `✅ *تم تحديث الدور*\n\n👤 @${escMd(targetUsername)} الآن هو *${role}*`;
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsSetRole] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -150,7 +150,7 @@ async function handleOpsAudit(ctx) {
     if (logs.length === 0) {
       const en = `📜 *Audit Log*\n\nNo actions recorded${username ? ` for ${username}` : ""}.`;
       const ar = `📜 *سجل العمليات*\n\nلا توجد عمليات مسجلة${username ? ` لـ ${username}` : ""}.`;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     let en = `📜 *Audit Log${username ? ` — ${username}` : ""}*\n\n`;
@@ -163,10 +163,10 @@ async function handleOpsAudit(ctx) {
       en += line; ar += line;
     });
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsAudit] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -183,7 +183,7 @@ async function handleOpsVerify(ctx) {
       if (unverified.length === 0) {
         const en = "✅ *All members are verified.*";
         const ar = "✅ *جميع الأعضاء موثقون.*";
-        return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+        return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
       }
       let en = "🔐 *Unverified Members*\n\n";
       let ar = "🔐 *الأعضاء غير الموثقين*\n\n";
@@ -193,7 +193,7 @@ async function handleOpsVerify(ctx) {
       });
       en += `\nUse \`/verify @username\` to verify.`;
       ar += `\nاستخدم \`/verify @username\` للتوثيق.`;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     v4Db.verifyMember(chatId, 0, `@${targetUsername}`, ctx.from.username || ctx.from.first_name);
@@ -201,10 +201,10 @@ async function handleOpsVerify(ctx) {
     const en = `✅ *Member Verified*\n\n👤 @${escMd(targetUsername)} has been verified and granted full access.`;
     const ar = `✅ *تم توثيق العضو*\n\n👤 @${escMd(targetUsername)} تم توثيقه ومنحه صلاحية كاملة.`;
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsVerify] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -219,14 +219,14 @@ async function handleOpsOnboarding(ctx) {
     const targetUsername = args.startsWith("@") ? args : (ctx.from.username ? `@${ctx.from.username}` : null);
 
     if (!targetUsername) {
-      return ctx.reply("❌ Please specify @user or send without args to view your own checklist.\n\nيرجى تحديد المستخدم أو أرسل بدون وسيطات لعرض قائمتك.", { message_thread_id: threadId });
+      return ctx.reply("❌ Please specify @user or send without args to view your own checklist.\n\nيرجى تحديد المستخدم أو أرسل بدون وسيطات لعرض قائمتك.", { message_thread_id: threadId || 4 });
     }
 
     const checklist = v4Db.getOnboardingProgress(chatId, targetUsername);
     if (checklist.length === 0) {
       const en = `📋 *Onboarding Checklist — ${targetUsername}*\n\nNo tasks yet. Tasks are assigned by admins.`;
       const ar = `📋 *قائمة التهيئة — ${targetUsername}*\n\nلا توجد مهام بعد. يتم تعيين المهام من قبل المسؤولين.`;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     let en = `📋 *Onboarding — ${targetUsername}*\n\n`;
@@ -237,10 +237,10 @@ async function handleOpsOnboarding(ctx) {
       en += line; ar += line;
     });
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsOnboarding] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -255,7 +255,7 @@ async function handleOpsTeam(ctx) {
     if (team.length === 0) {
       const en = `👥 *Team Directory*\n\nNo members registered.`;
       const ar = `👥 *دليل الفريق*\n\nلا يوجد أعضاء مسجلون.`;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     let en = `👥 *Team Directory*\n\n`;
@@ -266,10 +266,10 @@ async function handleOpsTeam(ctx) {
       en += line; ar += line;
     });
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsTeam] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -282,7 +282,7 @@ async function handleOpsPerformance(ctx) {
     if (scores.length === 0) {
       const en = `🏆 *Team Performance Leaderboard*\n\nNo scores recorded yet.`;
       const ar = `🏆 *لوحة أداء الفريق*\n\nلا توجد نقاط مسجلة بعد.`;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     let en = `🏆 *Team Leaderboard*\n\n`;
@@ -294,10 +294,10 @@ async function handleOpsPerformance(ctx) {
       en += line; ar += line;
     });
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsPerformance] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -311,11 +311,11 @@ async function handleOpsLeave(ctx) {
     if (!args) {
       const en = `📅 *Leave Tracker*\n\nUsage: \`/leave [start_date] [end_date] [reason]\`\nExample: \`/leave 2026-05-01 2026-05-05 Vacation\``;
       const ar = `📅 *متتبع الإجازات*\n\nالاستخدام: \`/leave [تاريخ_البداية] [تاريخ_النهاية] [السبب]\`\nمثال: \`/leave 2026-05-01 2026-05-05 إجازة\``;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     const match = args.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})\s+(.+)$/);
-    if (!match) return ctx.reply("❌ Format: `/leave 2026-05-01 2026-05-05 Vacation`", { message_thread_id: threadId });
+    if (!match) return ctx.reply("❌ Format: `/leave 2026-05-01 2026-05-05 Vacation`", { message_thread_id: threadId || 4 });
 
     const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
     v4Db.setAway(chatId, ctx.from.id, username, username, match[3], match[2]);
@@ -323,10 +323,10 @@ async function handleOpsLeave(ctx) {
     const en = `📅 *Leave recorded*\n\n👤 ${username}\n🗓 ${match[1]} to ${match[2]}\n📝 Reason: ${match[3]}`;
     const ar = `📅 *تم تسجيل الإجازة*\n\n👤 ${username}\n🗓 من ${match[1]} إلى ${match[2]}\n📝 السبب: ${match[3]}`;
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsLeave] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -343,7 +343,7 @@ async function handleOpsPoll(ctx) {
     if (!match) {
       const en = `📊 *Quick Poll*\n\nUsage: \`/poll "Question" "Opt1" "Opt2" "Opt3"\``;
       const ar = `📊 *تصويت سريع*\n\nالاستخدام: \`/poll "السؤال" "الخيار1" "الخيار2" "الخيار3"\``;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     const question = match[1];
@@ -356,10 +356,10 @@ async function handleOpsPoll(ctx) {
     const en = `📊 *POLL: ${question}*\n\nAsked by: ${fromUser}`;
     const ar = `📊 *تصويت: ${question}*\n\nبواسطة: ${fromUser}`;
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId, reply_markup: { inline_keyboard: inlineKeyboard } });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4, reply_markup: { inline_keyboard: inlineKeyboard } });
   } catch (e) {
     console.error("[handleOpsPoll] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -373,17 +373,17 @@ async function handleOpsPin(ctx) {
     if (!args) {
       const en = `📌 *Pin Summary*\n\nUsage: \`/pin [summary text]\``;
       const ar = `📌 *تثبيت ملخص*\n\nالاستخدام: \`/pin [نص الملخص]\``;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     }
 
     const en = `📌 *SUMMARY / DECISION*\n\n${args}\n\n👤 Posted by: ${ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name}`;
     const ar = `📌 *ملخص / قرار*\n\n${args}\n\n👤 بواسطة: ${ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name}`;
 
-    const msg = await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    const msg = await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
     try { await ctx.telegram.pinChatMessage(chatId, msg.message_id, { disable_notification: true }); } catch (e) {}
   } catch (e) {
     console.error("[handleOpsPin] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -415,7 +415,7 @@ async function handleSensitiveDataCheck(ctx) {
   for (const p of patterns) {
     if (p.test(text)) {
       try {
-        await ctx.reply("⚠️ *Security Notice* | This message may contain sensitive data. Please be careful sharing personal info in group chats.\n━━━━━━━━━━━━━━\n⚠️ *تنبيه أمني* | قد تحتوي هذه الرسالة على بيانات حساسة.", { parse_mode: "Markdown", message_thread_id: ctx.message?.message_thread_id || null });
+        await ctx.reply("⚠️ *Security Notice* | This message may contain sensitive data. Please be careful sharing personal info in group chats.\n━━━━━━━━━━━━━━\n⚠️ *تنبيه أمني* | قد تحتوي هذه الرسالة على بيانات حساسة.", { parse_mode: "Markdown", message_thread_id: ctx.message?.message_thread_id || 4 });
       } catch (e) {}
       break;
     }
@@ -434,7 +434,7 @@ async function handleNewMember(ctx, member) {
   const en = `👋 *Welcome to Monthly Key Operations!*\n\n🆕 ${username} has joined the team.\n\nPlease use /onboarding to get started.`;
   const ar = `👋 *مرحباً بك في عمليات المفتاح الشهري!*\n\n🆕 ${username} انضم للفريق.\n\nاستخدم /onboarding للبدء.`;
   try {
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {}
 }
 
@@ -454,10 +454,10 @@ async function handleOpsAway(ctx) {
     v4Db.setAway(chatId, ctx.from.id, username, username, reason, null);
     const en = `🔴 *${username} is now away*\n📝 Reason: ${reason}`;
     const ar = `🔴 *${username} الآن غائب*\n📝 السبب: ${reason}`;
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsAway] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -469,10 +469,10 @@ async function handleOpsBack(ctx) {
     v4Db.setBack(chatId, ctx.from.id);
     const en = `🟢 *${username} is back!*`;
     const ar = `🟢 *${username} عاد!*`;
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsBack] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -495,10 +495,10 @@ async function handleOpsAvailability(ctx) {
     if (available.length === 0 && away.length === 0) {
       en += "No team data yet."; ar += "لا توجد بيانات فريق بعد.";
     }
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsAvailability] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 

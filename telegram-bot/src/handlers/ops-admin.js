@@ -45,7 +45,7 @@ const SCHEDULED_JOBS = [
   { name: "weather_alerts",     label: "☀️ Weather Alerts",         schedule: "7:00 AM KSA daily" },
   { name: "morning_briefing",   label: "🌅 Morning Briefing",       schedule: "9:00 AM KSA daily → CEO Update" },
   { name: "checkin_reminder",   label: "📋 Check-in Reminder",      schedule: "5:00 PM KSA daily → CEO Update" },
-  { name: "evening_reminder",   label: "🌆 Evening Reminder",       schedule: "6:00 PM KSA daily → General" },
+  { name: "evening_reminder",   label: "🌆 Evening Reminder",       schedule: "6:00 PM KSA daily → CEO Update" },
   { name: "unchecked_flag",     label: "🚩 Unchecked Flag",         schedule: "6:00 PM KSA daily" },
   { name: "daily_report",       label: "📊 Daily Report",           schedule: "9:00 PM KSA daily → CEO Update" },
   { name: "google_sync",        label: "🔄 Google Sync",            schedule: "9:15 PM KSA daily" },

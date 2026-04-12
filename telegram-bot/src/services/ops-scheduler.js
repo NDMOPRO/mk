@@ -446,7 +446,7 @@ async function checkVendorFollowUps() {
       msg += `  📍 ${v.topic_name || "العمليات"}`;
 
       const sendOpts = { parse_mode: "Markdown" };
-      if (v.thread_id) sendOpts.message_thread_id = v.thread_id;
+      sendOpts.message_thread_id = v.thread_id || THREAD_CEO_UPDATE;
 
       try {
         await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
@@ -492,7 +492,7 @@ async function pingOverdueTasks() {
       msg += `  📍 ${task.topic_name || "عام"}`;
 
       const sendOpts = { parse_mode: "Markdown" };
-      if (task.thread_id) sendOpts.message_thread_id = task.thread_id;
+      sendOpts.message_thread_id = task.thread_id || THREAD_CEO_UPDATE;
 
       try {
         await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
@@ -525,7 +525,7 @@ async function checkFollowUps() {
       if (fu.task_id) msg += `🔗 مهمة #${fu.task_id}`;
 
       const sendOpts = { parse_mode: "Markdown" };
-      if (fu.thread_id) sendOpts.message_thread_id = fu.thread_id;
+      sendOpts.message_thread_id = fu.thread_id || THREAD_CEO_UPDATE;
 
       try {
         await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
@@ -557,7 +557,7 @@ async function checkReminders() {
       msg += `📋 ${r.message}`;
 
       const sendOpts = { parse_mode: "Markdown" };
-      if (r.thread_id) sendOpts.message_thread_id = r.thread_id;
+      sendOpts.message_thread_id = r.thread_id || THREAD_CEO_UPDATE;
 
       try {
         await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
@@ -612,7 +612,7 @@ async function checkSlaBreaches() {
           msg += `  🔗 مهمة #${task.id}`;
 
           const sendOpts = { parse_mode: "Markdown" };
-          if (task.thread_id) sendOpts.message_thread_id = task.thread_id;
+          sendOpts.message_thread_id = task.thread_id || THREAD_CEO_UPDATE;
           try {
             await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
           } catch (err) {
@@ -642,7 +642,7 @@ async function checkSlaBreaches() {
 
           // Post to the task's topic
           const sendOpts = { parse_mode: "Markdown" };
-          if (task.thread_id) sendOpts.message_thread_id = task.thread_id;
+          sendOpts.message_thread_id = task.thread_id || THREAD_CEO_UPDATE;
           try {
             await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
           } catch (err) {
@@ -717,7 +717,7 @@ async function processRecurringTasks() {
         if (rec.assigned_to) msg += `\n  👤 ${rec.assigned_to}`;
 
         const sendOpts = { parse_mode: "Markdown" };
-        if (rec.thread_id) sendOpts.message_thread_id = rec.thread_id;
+        sendOpts.message_thread_id = rec.thread_id || THREAD_CEO_UPDATE;
 
         await bot.telegram.sendMessage(rec.chat_id, msg, sendOpts);
         console.log(`[OpsScheduler] Recurring task created: "${rec.title}" → #${taskId}`);
@@ -1084,7 +1084,7 @@ async function checkMentionAlerts() {
 
       try {
         const sendOpts = { parse_mode: "Markdown" };
-        if (mention.thread_id) sendOpts.message_thread_id = mention.thread_id;
+        sendOpts.message_thread_id = mention.thread_id || THREAD_CEO_UPDATE;
         await bot.telegram.sendMessage(OPS_GROUP_ID, msg, sendOpts);
         console.log(`[OpsScheduler] Mention reminder sent for ${mention.mentioned_username}`);
       } catch (err) {
