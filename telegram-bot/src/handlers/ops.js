@@ -17,6 +17,10 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 
+// Team members registry & deduplication
+const { resolveTeamMember, getDisplayName, getDisplayNameAr, normalizeAssignee, getTeamDirectory } = require("../team-members");
+const { findDuplicateTask } = require("../dedup");
+
 // v5 handlers
 const {
   handleOpsMlog, handleOpsWorkflow, handleOpsTemplate, handleOpsTrends, handleOpsWeather, handleOpsClean,
@@ -173,15 +177,30 @@ async function handleOpsTask(ctx) {
     return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
   }
 
-  const createdBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
-  const assignedTo = extractAssignee(argsText);
+  const rawCreatedBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  const createdBy = getDisplayName(rawCreatedBy) !== rawCreatedBy ? `${getDisplayName(rawCreatedBy)} (${rawCreatedBy})` : rawCreatedBy;
+  const rawAssignee = extractAssignee(argsText);
+  const assignedTo = normalizeAssignee(rawAssignee);
   const propertyTag = extractPropertyTag(argsText);
   const cleanTitle = argsText.replace(/@[a-zA-Z0-9_]+/g, "").replace(/#[a-zA-Z0-9_]+/g, "").trim();
 
+  // ─── Deduplication Check ─────────────────────────────────
+  const pendingTasks = opsDb.getAllPendingTasks(chatId);
+  const duplicate = findDuplicateTask(pendingTasks, cleanTitle, assignedTo || rawAssignee);
+
+  if (duplicate) {
+    const dupAssignee = duplicate.assigned_to || "Unassigned";
+    const en = `⚠️ *Similar task already exists*\n\n📋 Task #${duplicate.id}: ${duplicate.title}\n👤 Assigned to: ${dupAssignee}\n📊 Status: ${duplicate.status}\n\n💡 Use \`/done ${duplicate.id}\` to complete it, or create with a different description if this is truly a separate task.`;
+    const ar = `⚠️ *توجد مهمة مشابهة بالفعل*\n\n📋 المهمة #${duplicate.id}: ${duplicate.title}\n👤 المسؤول: ${dupAssignee}\n📊 الحالة: ${duplicate.status}\n\n💡 استخدم \`/done ${duplicate.id}\` لإكمالها، أو أنشئ بوصف مختلف إذا كانت مهمة مختلفة فعلاً.`;
+    return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+  }
+
   const taskId = opsDb.addTask(chatId, threadId, topicInfo.name, cleanTitle, { createdBy, assignedTo, propertyTag });
 
-  const en = `✅ *Task #${taskId} created*\n\n📝 ${cleanTitle}\n👤 Created by: ${createdBy}${assignedTo ? `\n👤 Assigned to: ${assignedTo}` : ""}${propertyTag ? `\n🏠 Property: #${propertyTag}` : ""}`;
-  const ar = `✅ *تم إنشاء المهمة #${taskId}*\n\n📝 ${cleanTitle}\n👤 بواسطة: ${createdBy}${assignedTo ? `\n👤 المسؤول: ${assignedTo}` : ""}${propertyTag ? `\n🏠 العقار: #${propertyTag}` : ""}`;
+  const displayAssignee = assignedTo || rawAssignee;
+  const displayAssigneeAr = rawAssignee ? getDisplayNameAr(rawAssignee) : null;
+  const en = `✅ *Task #${taskId} created*\n\n📝 ${cleanTitle}\n👤 Created by: ${createdBy}${displayAssignee ? `\n👤 Assigned to: ${displayAssignee}` : ""}${propertyTag ? `\n🏠 Property: #${propertyTag}` : ""}`;
+  const ar = `✅ *تم إنشاء المهمة #${taskId}*\n\n📝 ${cleanTitle}\n👤 بواسطة: ${createdBy}${displayAssigneeAr ? `\n👤 المسؤول: ${displayAssigneeAr}` : (displayAssignee ? `\n👤 المسؤول: ${displayAssignee}` : "")}${propertyTag ? `\n🏠 العقار: #${propertyTag}` : ""}`;
   
   await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
 }
@@ -202,11 +221,25 @@ async function handleOpsChecklist(ctx) {
   const items = argsText.split(/\||\n/).map(s => s.trim()).filter(s => s.length > 0);
   if (items.length === 0) return ctx.reply("❌ No tasks found / لم يتم العثور على مهام", { message_thread_id: threadId });
 
-  const createdBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  const rawCreatedBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  const createdBy = normalizeAssignee(rawCreatedBy) || rawCreatedBy;
+  const pendingTasks = opsDb.getAllPendingTasks(chatId);
   const taskIds = [];
+  const skippedDuplicates = [];
   for (const item of items) {
-    const id = opsDb.addTask(chatId, threadId, topicInfo.name, item, { createdBy, assignedTo: extractAssignee(item), propertyTag: extractPropertyTag(item) });
-    taskIds.push({ id, title: item });
+    const rawAssignee = extractAssignee(item);
+    const assignedTo = normalizeAssignee(rawAssignee);
+    const cleanItem = item.replace(/@[a-zA-Z0-9_]+/g, "").replace(/#[a-zA-Z0-9_]+/g, "").trim();
+    // Dedup check
+    const duplicate = findDuplicateTask(pendingTasks, cleanItem, assignedTo || rawAssignee);
+    if (duplicate) {
+      skippedDuplicates.push({ title: cleanItem, existingId: duplicate.id, existingTitle: duplicate.title });
+    } else {
+      const id = opsDb.addTask(chatId, threadId, topicInfo.name, cleanItem, { createdBy, assignedTo, propertyTag: extractPropertyTag(item) });
+      taskIds.push({ id, title: cleanItem });
+      // Add to pending list for subsequent dedup checks within this batch
+      pendingTasks.push({ id, title: cleanItem, assigned_to: assignedTo, status: "pending" });
+    }
   }
 
   let en = `📋 *${taskIds.length} tasks created — ${topicInfo.name}*\n\n`;
@@ -216,6 +249,15 @@ async function handleOpsChecklist(ctx) {
     en += `${i + 1}. ⬜ ${title} [#${id}]\n`; 
     ar += `${i + 1}. ⬜ ${title} [#${id}]\n`;
   });
+
+  if (skippedDuplicates.length > 0) {
+    en += `\n⚠️ *${skippedDuplicates.length} duplicate(s) skipped:*\n`;
+    ar += `\n⚠️ *تم تخطي ${skippedDuplicates.length} مهمة مكررة:*\n`;
+    skippedDuplicates.forEach(d => {
+      en += `• "${d.title}" → already exists as #${d.existingId}: ${d.existingTitle}\n`;
+      ar += `• "${d.title}" → موجودة كـ #${d.existingId}: ${d.existingTitle}\n`;
+    });
+  }
 
   const enFooter = `\nUse \`/done [number]\` to complete`;
   const arFooter = `\nاستخدم \`/done [الرقم]\` للإتمام`;
@@ -920,8 +962,11 @@ async function handleOpsPassive(ctx) {
 
   const chatId = ctx.chat.id;
   const threadId = ctx.message?.message_thread_id || null;
-  const fromUser = ctx.from?.first_name || ctx.from?.username || "Unknown";
-  const username = ctx.from?.username ? `@${ctx.from.username}` : fromUser;
+  const rawFromUser = ctx.from?.first_name || ctx.from?.username || "Unknown";
+  const rawUsername = ctx.from?.username ? `@${ctx.from.username}` : rawFromUser;
+  // Resolve to real name if known team member
+  const fromUser = getDisplayName(rawUsername) !== rawUsername ? getDisplayName(rawUsername) : rawFromUser;
+  const username = rawUsername;
 
   try {
     const ai = require("../services/ai");
@@ -942,20 +987,36 @@ async function handleOpsPassive(ctx) {
     let resultText = "";
 
     if (analysis.category === "new_task") {
-      const taskId = opsDb.addTask(
-        chatId, 
-        threadId, 
-        getTopicInfo(threadId).name, 
-        data.title || userMessage.substring(0, 50),
-        {
-          description: data.description || userMessage,
-          priority: data.priority || "normal",
-          assignedTo: data.assignee || fromUser,
-          dueDate: data.due_date || null,
-          createdBy: username
-        }
-      );
-      resultText = `${analysis.reply_en} [#${taskId}]\n${analysis.reply_ar} [#${taskId}]`;
+      const taskTitle = data.title || userMessage.substring(0, 50);
+      const rawAssignee = data.assignee || fromUser;
+      const assignedTo = normalizeAssignee(rawAssignee);
+      const createdByNorm = normalizeAssignee(username) || username;
+
+      // ─── Deduplication Check ─────────────────────────────
+      const pendingTasks = opsDb.getAllPendingTasks(chatId);
+      const duplicate = findDuplicateTask(pendingTasks, taskTitle, assignedTo || rawAssignee);
+
+      if (duplicate) {
+        const dupAssignee = duplicate.assigned_to || "Unassigned";
+        const enDup = `\u26a0\ufe0f *Similar task already exists*\n\n\ud83d\udccb Task #${duplicate.id}: ${duplicate.title}\n\ud83d\udc64 Assigned to: ${dupAssignee}\n\ud83d\udcca Status: ${duplicate.status}`;
+        const arDup = `\u26a0\ufe0f *\u062a\u0648\u062c\u062f \u0645\u0647\u0645\u0629 \u0645\u0634\u0627\u0628\u0647\u0629 \u0628\u0627\u0644\u0641\u0639\u0644*\n\n\ud83d\udccb \u0627\u0644\u0645\u0647\u0645\u0629 #${duplicate.id}: ${duplicate.title}\n\ud83d\udc64 \u0627\u0644\u0645\u0633\u0624\u0648\u0644: ${dupAssignee}\n\ud83d\udcca \u0627\u0644\u062d\u0627\u0644\u0629: ${duplicate.status}`;
+        resultText = getBilingualText(enDup, arDup);
+      } else {
+        const taskId = opsDb.addTask(
+          chatId, 
+          threadId, 
+          getTopicInfo(threadId).name, 
+          taskTitle,
+          {
+            description: data.description || userMessage,
+            priority: data.priority || "normal",
+            assignedTo: assignedTo,
+            dueDate: data.due_date || null,
+            createdBy: createdByNorm
+          }
+        );
+        resultText = `${analysis.reply_en} [#${taskId}]\n${analysis.reply_ar} [#${taskId}]`;
+      }
     } 
     else if (analysis.category === "status_update" || analysis.category === "completion") {
       const taskId = data.task_id;
@@ -1014,7 +1075,8 @@ async function handleOpsVoice(ctx, openaiClient) {
   const threadId = ctx.message?.message_thread_id || null;
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
-  const fromUser = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  const rawFromUser = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  const fromUser = getDisplayName(rawFromUser) !== rawFromUser ? `${getDisplayName(rawFromUser)} (${rawFromUser})` : rawFromUser;
   const voice = ctx.message.voice || ctx.message.audio;
   if (!voice) return;
 
@@ -1084,7 +1146,9 @@ async function handleOpsMessage(ctx, openaiClient) {
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
   const text = ctx.message.text || "";
-  const fromUser = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  const rawFromUser = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  // Resolve to real name if known team member
+  const fromUser = getDisplayName(rawFromUser) !== rawFromUser ? `${getDisplayName(rawFromUser)} (${rawFromUser})` : rawFromUser;
   const isReplyToBot = ctx.message.reply_to_message?.from?.id === ctx.botInfo.id;
   const msgLang = detectMessageLanguage(text);
 
@@ -1157,12 +1221,34 @@ const OPS_TOOLS = [
 function executeTool(name, args, chatId, threadId, topicInfo, fromUser) {
   try {
     if (name === "create_task") {
-      const id = opsDb.addTask(chatId, threadId, topicInfo.name, args.title, { createdBy: "AI", assignedTo: args.assigned_to, priority: args.priority, propertyTag: args.property_tag, dueDate: args.due_date });
+      const resolvedAssignee = normalizeAssignee(args.assigned_to);
+      // Deduplication check
+      const pendingTasks = opsDb.getAllPendingTasks(chatId);
+      const duplicate = findDuplicateTask(pendingTasks, args.title, resolvedAssignee || args.assigned_to);
+      if (duplicate) {
+        return { status: "duplicate", existing_task_id: duplicate.id, existing_title: duplicate.title, message: `Similar task #${duplicate.id} already exists: ${duplicate.title}` };
+      }
+      const id = opsDb.addTask(chatId, threadId, topicInfo.name, args.title, { createdBy: normalizeAssignee(fromUser) || "AI", assignedTo: resolvedAssignee, priority: args.priority, propertyTag: args.property_tag, dueDate: args.due_date });
       return { status: "success", task_id: id, title: args.title };
     }
     if (name === "create_tasks_batch") {
-      const ids = args.tasks.map(t => opsDb.addTask(chatId, threadId, topicInfo.name, t.title, { createdBy: "AI", assignedTo: t.assigned_to, priority: t.priority, propertyTag: t.property_tag, dueDate: t.due_date }));
-      return { status: "success", count: ids.length, task_ids: ids };
+      const pendingTasks = opsDb.getAllPendingTasks(chatId);
+      const results = [];
+      for (const t of args.tasks) {
+        const resolvedAssignee = normalizeAssignee(t.assigned_to);
+        const duplicate = findDuplicateTask(pendingTasks, t.title, resolvedAssignee || t.assigned_to);
+        if (duplicate) {
+          results.push({ status: "duplicate", existing_task_id: duplicate.id, title: t.title });
+        } else {
+          const id = opsDb.addTask(chatId, threadId, topicInfo.name, t.title, { createdBy: normalizeAssignee(fromUser) || "AI", assignedTo: resolvedAssignee, priority: t.priority, propertyTag: t.property_tag, dueDate: t.due_date });
+          results.push({ status: "created", task_id: id, title: t.title });
+          // Add to pending list so subsequent tasks in the batch also check against it
+          pendingTasks.push({ id, title: t.title, assigned_to: resolvedAssignee, status: "pending" });
+        }
+      }
+      const created = results.filter(r => r.status === "created");
+      const duplicates = results.filter(r => r.status === "duplicate");
+      return { status: "success", count: created.length, task_ids: created.map(r => r.task_id), duplicates_skipped: duplicates.length, details: results };
     }
     if (name === "create_reminder") {
       const remindAt = parseReminderTime(args.time);
@@ -1202,8 +1288,20 @@ function buildToolResultsSummary(results, lang) {
   let en = `✅ *AI Action Summary*\n\n`;
   let ar = `✅ *ملخص إجراءات الذكاء الاصطناعي*\n\n`;
   results.forEach(r => {
-    if (r.tool === "create_task") { en += `• Task #${r.result.task_id} created\n`; ar += `• تم إنشاء المهمة #${r.result.task_id}\n`; }
-    if (r.tool === "create_tasks_batch") { en += `• ${r.result.count} tasks created\n`; ar += `• تم إنشاء ${r.result.count} مهام\n`; }
+    if (r.tool === "create_task") {
+      if (r.result.status === "duplicate") {
+        en += `• ⚠️ Similar task already exists: #${r.result.existing_task_id} — ${r.result.existing_title}\n`;
+        ar += `• ⚠️ مهمة مشابهة موجودة: #${r.result.existing_task_id} — ${r.result.existing_title}\n`;
+      } else {
+        en += `• Task #${r.result.task_id} created\n`; ar += `• تم إنشاء المهمة #${r.result.task_id}\n`;
+      }
+    }
+    if (r.tool === "create_tasks_batch") {
+      en += `• ${r.result.count} tasks created\n`; ar += `• تم إنشاء ${r.result.count} مهام\n`;
+      if (r.result.duplicates_skipped > 0) {
+        en += `• ⚠️ ${r.result.duplicates_skipped} duplicate(s) skipped\n`; ar += `• ⚠️ تم تخطي ${r.result.duplicates_skipped} مهمة مكررة\n`;
+      }
+    }
     if (r.tool === "create_reminder") { en += `• Reminder set for ${r.result.time}\n`; ar += `• تم ضبط تذكير في ${r.result.time}\n`; }
     if (r.tool === "mark_task_done") { en += `• Task #${r.result.task_id} completed\n`; ar += `• تم إكمال المهمة #${r.result.task_id}\n`; }
     if (r.tool === "log_maintenance") { en += `• Maintenance logged for #${r.result.unit}\n`; ar += `• تم تسجيل صيانة للعقار #${r.result.unit}\n`; }
@@ -1214,6 +1312,7 @@ function buildToolResultsSummary(results, lang) {
 
 function buildSystemPrompt(topicInfo, lang) {
   const time = new Date(Date.now() + 3 * 3600000).toLocaleString("en-US", { timeZone: "Asia/Riyadh" });
+  const teamDir = getTeamDirectory();
   const prompt = `You are the **Monthly Key Operations Intelligence (MKOI)**, an elite AI assistant managing the HQ Operations for Monthly Key in Riyadh.
 
 ### CURRENT CONTEXT
@@ -1221,12 +1320,23 @@ function buildSystemPrompt(topicInfo, lang) {
 - **Current Topic:** ${topicInfo.name} (${topicInfo.emoji})
 - **Your Role in this Topic:** ${topicInfo.role}
 
+### TEAM DIRECTORY
+Always use real names when addressing team members. Map usernames to names:
+${teamDir}
+
+When a team member sends a message, address them by their real name. For example, if @SAQ198 sends a message, address them as "Saad Al Qasem". If @Mushtaq sends a message, address them as "Mushtaq".
+
 ### YOUR CAPABILITIES & CORE DIRECTIVES
 1. **Full Context Awareness:** You remember everything discussed in this thread. Use the conversation history to provide continuity.
 2. **Proactive Management:** DO NOT wait for permission. If you detect a need for a task, reminder, maintenance log, or cleaning session, **USE YOUR TOOLS IMMEDIATELY**.
-3. **Task Intelligence:** When creating tasks, automatically infer priority (low/medium/high/urgent), property tags (#unit5), and assignees (@username) from context.
+3. **Task Intelligence:** When creating tasks, automatically infer priority (low/medium/high/urgent), property tags (#unit5), and assignees from context. ALWAYS use real names for assignees (e.g., "Mushtaq" not "@Mushtaq", "Saad Al Qasem" not "@SAQ198").
 4. **Bilingual Excellence:** Respond **entirely** in ${lang === "ar" ? "Arabic" : "English"} as detected.
 5. **Tone:** Professional, high-efficiency, executive-level assistant.
+
+### DUPLICATE PREVENTION
+- Before creating a task, the system will automatically check for similar existing tasks.
+- If the create_task tool returns status "duplicate", inform the user about the existing task instead of creating a new one.
+- Do NOT create tasks that are semantically identical to existing pending tasks (e.g., "Visit uniform shop for staff uniforms" and "Visit uniform shop to prepare staff uniforms" are the SAME task).
 
 ### OPERATIONS ARCHITECTURE (All 49 Features)
 You have full authority over:
@@ -1241,8 +1351,9 @@ You have full authority over:
 - If a user mentions a problem in a unit, log maintenance and create a follow-up task.
 - If a user mentions a cleaning is done, log the cleaning session.
 - Always confirm your actions briefly with IDs where applicable.
+- When responding to Top Management or CEO, be extra respectful and prioritize their requests.
 
-⚠️ **STRICT:** Use the provided tools for all operational actions. Your goal is to keep the operation running perfectly without manual intervention.`;
+\u26a0\ufe0f **STRICT:** Use the provided tools for all operational actions. Your goal is to keep the operation running perfectly without manual intervention.`;
   return prompt;
 }
 
@@ -1326,7 +1437,8 @@ async function handleOpsMedia(ctx, openaiClient) {
   const threadId = ctx.message?.message_thread_id || null;
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
-  const fromUser = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  const rawFromUser = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
+  const fromUser = getDisplayName(rawFromUser) !== rawFromUser ? `${getDisplayName(rawFromUser)} (${rawFromUser})` : rawFromUser;
   const photo = ctx.message.photo;
   if (!photo) return;
 

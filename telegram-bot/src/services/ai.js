@@ -204,6 +204,10 @@ module.exports = {
  */
 async function analyzeOpsMessage(userMessage, senderName, conversationHistory = []) {
   try {
+    // Import team members for AI awareness
+    const { getTeamDirectory } = require("../team-members");
+    const teamDir = getTeamDirectory();
+
     // Build conversation context string from history
     let historyContext = "";
     if (conversationHistory.length > 0) {
@@ -217,6 +221,12 @@ Your job is to analyze messages from team members in the operations group and de
 
 You have a HIGH confidence threshold — when in doubt, return "general" with actionable: false.
 The default action is IGNORE. Only respond when you are CERTAIN there is a clear task, update, or completion.
+
+TEAM DIRECTORY (use real names, not usernames):
+${teamDir}
+
+When assigning tasks, ALWAYS use the person's real name (e.g., "Saad Al Qasem" not "SAQ198", "Mushtaq" not "@Mushtaq").
+Messages from Top Management or CEO should be treated with higher priority.
 
 CATEGORIES:
 1. "new_task": The user is clearly assigning a new task, requesting something to be done, or reporting a new issue that needs fixing. Must be specific and actionable.
@@ -232,13 +242,13 @@ OUTPUT FORMAT (JSON ONLY):
   "data": {
     "title": "Brief title of the task/update",
     "description": "Full details if provided",
-    "assignee": "Name of person assigned (default to sender if not specified)",
+    "assignee": "Real name of person assigned (default to sender if not specified)",
     "priority": "urgent" | "high" | "normal",
     "due_date": "YYYY-MM-DD (if mentioned, otherwise null)",
     "task_id": "ID number if mentioned (e.g. #123 -> 123), otherwise null"
   },
-  "reply_en": "Professional English acknowledgment (only if actionable)",
-  "reply_ar": "Professional Arabic acknowledgment (only if actionable)"
+  "reply_en": "Professional English acknowledgment using real names (only if actionable)",
+  "reply_ar": "Professional Arabic acknowledgment using real names (only if actionable)"
 }
 
 STRICT RULES:
@@ -249,15 +259,15 @@ STRICT RULES:
 - Vague messages without a clear subject are "general".
 - If you are not sure what the task is, it is "general".
 - Priority: default to "normal" unless words like "urgent", "immediately", "عاجل", "فورا" are used.
-- Assignee: default to "${senderName}" if it's a report about their own work.
+- Assignee: default to "${senderName}" if it's a report about their own work. Always use real names.
 - Dates: today is ${new Date().toISOString().split('T')[0]}.
-- Replies should be brief and professional, starting with an emoji.
+- Replies should be brief and professional, starting with an emoji. Use real names.
   Examples:
-  - "✅ Task logged: [Title] — assigned to [Name]"
-  - "📝 Update noted: [Details]"
+  - "✅ Task logged: [Title] — assigned to Mushtaq"
+  - "📝 Update noted from Saad Al Qasem: [Details]"
   - "🎉 Task marked complete: [Title]"
-  - "✅ تم تسجيل المهمة: [Title] — مسندة إلى [Name]"
-  - "📝 تم تسجيل التحديث: [Details]"
+  - "✅ تم تسجيل المهمة: [Title] — مسندة إلى مشتاق"
+  - "📝 تم تسجيل التحديث من سعد القاسم: [Details]"
   - "🎉 تم إنجاز المهمة: [Title]"${historyContext}`;
 
     const completion = await openai.chat.completions.create({
