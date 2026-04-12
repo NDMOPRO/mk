@@ -997,6 +997,13 @@ module.exports = {
   setOccupancy, getOccupancy, getOccupancyByUnit, getOccupancySummary,
   // Meetings (Feature 9)
   startMeeting, getActiveMeeting, endMeeting, addMeetingMessage, getMeetingMessages, getMeetingById,
-  // Conversation Memory
+   // Conversation Memory
   storeConversationMessage, getConversationHistory,
+  // Google Sync
+  getAllTasksForSync,
 };
+
+function getAllTasksForSync(chatId) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM tasks WHERE chat_id = ? AND status != 'cancelled' ORDER BY updated_at DESC`).all(chatId);
+}

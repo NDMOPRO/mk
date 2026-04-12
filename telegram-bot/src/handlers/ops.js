@@ -932,8 +932,108 @@ async function handleOpsMeeting(ctx) {
 
 async function handleOpsGsync(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
-  ctx.reply("🔄 Syncing to Google Sheets...", { message_thread_id: threadId });
-  // Logic to trigger manual sync
+  const chatId = ctx.chat.id;
+
+  try {
+    // 1. Send initial status message
+    const statusMsg = await ctx.reply("🔄 *Syncing to Google Sheets...*\nGathering data from local database...", { 
+      parse_mode: "Markdown",
+      message_thread_id: threadId 
+    });
+
+    // 2. Check if Google Sync is configured
+    if (!googleSync.isConfigured()) {
+      const en = "❌ *Google Sync Not Configured*\n\nThe `GOOGLE_APPS_SCRIPT_URL` environment variable is missing. Please set it in Railway to enable this feature.";
+      const ar = "❌ *مزامنة جوجل غير مفعلة*\n\nمتغير البيئة `GOOGLE_APPS_SCRIPT_URL` مفقود. يرجى ضبطه في Railway لتفعيل هذه الميزة.";
+      return ctx.telegram.editMessageText(chatId, statusMsg.message_id, null, getBilingualText(en, ar), { parse_mode: "Markdown" });
+    }
+
+    // 3. Gather data for sync
+    const tasks = opsDb.getAllTasksForSync(chatId);
+    const expenses = opsDb.getMonthlyExpenses(chatId);
+    const occupancy = opsDb.getOccupancy(chatId);
+
+    // 4. Perform the sync
+    const result = await googleSync.syncAll({
+      tasks,
+      expenses,
+      occupancy,
+      timestamp: new Date().toISOString()
+    });
+
+    if (result && result.success) {
+      // 5. Calculate summary statistics
+      const taskCounts = tasks.reduce((acc, t) => {
+        acc[t.status] = (acc[t.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const assigneeCounts = tasks.reduce((acc, t) => {
+        const a = t.assigned_to || "Unassigned";
+        acc[a] = (acc[a] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Sort assignees by count
+      const topAssignees = Object.entries(assigneeCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      // 6. Build bilingual summary
+      const enSummary = [
+        "✅ *Google Sheets Sync Complete*",
+        "",
+        "📊 *Export Summary:*",
+        `• *Tasks:* ${tasks.length} total`,
+        `  - Pending: ${taskCounts.pending || 0}`,
+        `  - Done: ${taskCounts.done || 0}`,
+        `• *Expenses:* ${expenses.length} records this month`,
+        `• *Occupancy:* ${occupancy.length} units updated`,
+        "",
+        "👤 *Top Assignees:*",
+        ...topAssignees.map(([name, count]) => `• ${name}: ${count} tasks`),
+        "",
+        `🔗 [Open Spreadsheet](${result.url || "https://docs.google.com/spreadsheets"})`
+      ].join("\n");
+
+      const arSummary = [
+        "✅ *اكتملت المزامنة مع جداول بيانات جوجل*",
+        "",
+        "📊 *ملخص التصدير:*",
+        `• *المهام:* ${tasks.length} إجمالي`,
+        `  - قيد التنفيذ: ${taskCounts.pending || 0}`,
+        `  - مكتملة: ${taskCounts.done || 0}`,
+        `• *المصاريف:* ${expenses.length} سجلات هذا الشهر`,
+        `• *الإشغال:* تم تحديث ${occupancy.length} وحدات`,
+        "",
+        "👤 *أبرز المسؤولين:*",
+        ...topAssignees.map(([name, count]) => `• ${name}: ${count} مهام`),
+        "",
+        `🔗 [افتح جدول البيانات](${result.url || "https://docs.google.com/spreadsheets"})`
+      ].join("\n");
+
+      await ctx.telegram.editMessageText(chatId, statusMsg.message_id, null, getBilingualText(enSummary, arSummary), { 
+        parse_mode: "Markdown",
+        disable_web_page_preview: true
+      });
+    } else {
+      // Handle sync failure
+      const errorDetail = result?.error || "Unknown service error";
+      const enErr = `❌ *Sync Failed*\n\nGoogle service returned an error: \`${errorDetail}\`\n\nPlease check if the Apps Script is correctly published and accessible.`;
+      const arErr = `❌ *فشلت المزامنة*\n\nأبلغت خدمة جوجل عن خطأ: \`${errorDetail}\`\n\nيرجى التأكد من نشر Apps Script بشكل صحيح وإمكانية الوصول إليه.`;
+      
+      await ctx.telegram.editMessageText(chatId, statusMsg.message_id, null, getBilingualText(enErr, arErr), { parse_mode: "Markdown" });
+    }
+
+  } catch (e) {
+    console.error("[handleOpsGsync] Error:", e.message);
+    const enErr = `❌ *System Error during Sync*\n\nError: \`${e.message}\``;
+    const arErr = `❌ *خطأ في النظام أثناء المزامنة*\n\nالخطأ: \`${e.message}\``;
+    await ctx.reply(getBilingualText(enErr, arErr), { 
+      parse_mode: "Markdown",
+      message_thread_id: threadId 
+    }).catch(() => {});
+  }
 }
 
 // Pre-filter patterns — messages matching these are NEVER sent to AI
