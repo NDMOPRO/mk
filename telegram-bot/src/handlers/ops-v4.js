@@ -380,7 +380,7 @@ async function handleOpsPin(ctx) {
     const ar = `📌 *ملخص / قرار*\n\n${args}\n\n👤 بواسطة: ${ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name}`;
 
     const msg = await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
-    try { await ctx.telegram.pinChatMessage(chatId, msg.message_id); } catch (e) {}
+    try { await ctx.telegram.pinChatMessage(chatId, msg.message_id, { disable_notification: true }); } catch (e) {}
   } catch (e) {
     console.error("[handleOpsPin] Error:", e.message);
     await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});

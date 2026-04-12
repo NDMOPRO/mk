@@ -8,7 +8,7 @@
  *  1. Weather Alerts — 7:00 AM KSA
  *  2. Morning Briefing — 9:00 AM KSA → CEO Update (thread 4)
  *  3. Check-in Reminder — 5:00 PM KSA → CEO Update
- *  4. Evening Reminder — 6:00 PM KSA → General
+ *  4. Evening Reminder — 6:00 PM KSA → CEO Update (thread 4)
  *  5. Unchecked Flag — 6:00 PM KSA
  *  6. Daily Report — 9:00 PM KSA → CEO Update (thread 4)
  *  7. Google Sync — 9:15 PM KSA
@@ -365,9 +365,11 @@ async function sendEveningReminder() {
 
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
       parse_mode: "Markdown",
+      message_thread_id: THREAD_CEO_UPDATE,
+      disable_notification: true,
     });
 
-    console.log("[OpsScheduler] Evening reminder sent (bilingual).");
+    console.log("[OpsScheduler] Evening reminder sent (bilingual) → CEO Update thread.");
   } catch (error) {
     console.error("[OpsScheduler] Evening reminder error:", error.message);
   }
@@ -1221,7 +1223,7 @@ function startOpsScheduler(botInstance) {
   console.log("  ☀️ Morning Briefing: 9:00 AM KSA → CEO Update");
   console.log("  🌤️ Weather Alerts: 7:00 AM KSA → Operations");
   console.log("  📋 Check-in Reminder: 5:00 PM KSA → CEO Update");
-  console.log("  🌆 Evening Reminder: 6:00 PM KSA → General");
+  console.log("  🌆 Evening Reminder: 6:00 PM KSA → CEO Update");
   console.log("  📊 Daily Report: 9:00 PM KSA → CEO Update");
   console.log("  👑 Weekly CEO Message: Sunday 9:00 AM KSA");
   console.log("  📊 Weekly Standup: Sunday 9:00 AM KSA");
