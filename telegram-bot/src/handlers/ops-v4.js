@@ -171,37 +171,54 @@ async function handleOpsSetRole(ctx) {
     const text = ctx.message.text || "";
     const args = extractCommandArgs(text, "setrole");
 
-    // Accept any two-token input: @user role  (role is fuzzy-matched)
-    const match = args.match(/^@?(\S+)\s+(\S+)$/);
+    // Improved regex to handle @user role, @user "role", or user role
+    // Supports multi-word roles in quotes
+    const match = args.match(/^@?(\S+)\s+(.+)$/);
     if (!match) {
-      const en = `👥 *Set Team Role*\n\nUsage: \`/setrole @user [CEO|Manager|Staff]\`\nExample: \`/setrole @SAQ198 Manager\``;
-      const ar = `👥 *تعيين دور الفريق*\n\nالاستخدام: \`/setrole @user [CEO|Manager|Staff]\`\nمثال: \`/setrole @SAQ198 Manager\``;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
+      const en = `👥 *Set Team Role*\n\nUsage: \`/setrole @user [Role]\`\nExample: \`/setrole @SAQ198 Operational Manager\``;
+      const ar = `👥 *تعيين دور الفريق*\n\nالاستخدام: \`/setrole @user [الدور]\`\nمثال: \`/setrole @SAQ198 مدير العمليات\``;
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || undefined });
     }
 
     const targetUsername = match[1].replace(/^@/, "");
-    const rawRole = match[2];
-    const role = normalizeRole(rawRole);
+    let role = match[2].trim().replace(/^["']|["']$/g, ""); // Strip quotes if present
 
-    if (!role) {
-      const en = `❌ *Unknown role:* \`${rawRole}\`\n\nValid roles: *CEO*, *Manager*, *Staff*`;
-      const ar = `❌ *دور غير معروف:* \`${rawRole}\`\n\nالأدوار الصحيحة: *CEO*، *Manager*، *Staff*`;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
-    }
+    // 1. Try to find the user in the static team-members.js registry first
+    const { resolveTeamMember } = require("../team-members");
+    const member = resolveTeamMember(targetUsername);
+    
+    // If they are in the registry, we can use their real name for the display
+    const displayName = member ? member.name : targetUsername;
+    const userId = 0; // We don't have the internal Telegram ID, using 0 as placeholder
 
-    // Try to find user ID from team members or fall back to 0
-    const teamMember = v4Db.getTeamMemberByUsername(chatId, `@${targetUsername}`);
-    const targetUserId = teamMember ? teamMember.user_id : 0;
+    // 2. Save to database
+    // We use the normalized role name provided by the user
+    v4Db.setRole(
+      chatId, 
+      userId, 
+      `@${targetUsername}`, 
+      displayName, 
+      role, 
+      ctx.from.username || ctx.from.first_name || "System"
+    );
 
-    v4Db.setRole(chatId, targetUserId, `@${targetUsername}`, targetUsername, role.toLowerCase(), ctx.from.username || ctx.from.first_name);
+    // 3. Bilingual success response
+    const en = `✅ *Role updated*\n\n👤 *${escMd(displayName)}* (@${escMd(targetUsername)}) is now *${escMd(role)}*`;
+    const ar = `✅ *تم تحديث الدور*\n\n👤 *${escMd(displayName)}* (@${escMd(targetUsername)}) الآن هو *${escMd(role)}*`;
+    
+    await ctx.reply(getBilingualText(en, ar), { 
+      parse_mode: "Markdown", 
+      message_thread_id: threadId || undefined 
+    });
 
-    const en = `✅ *Role updated*\n\n👤 @${escMd(targetUsername)} is now *${role}*`;
-    const ar = `✅ *تم تحديث الدور*\n\n👤 @${escMd(targetUsername)} الآن هو *${role}*`;
-
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsSetRole] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    const enErr = `❌ *Error setting role*\n\nDetails: \`${e.message}\``;
+    const arErr = `❌ *خطأ في تعيين الدور*\n\nالتفاصيل: \`${e.message}\``;
+    await ctx.reply(getBilingualText(enErr, arErr), { 
+      parse_mode: "Markdown", 
+      message_thread_id: threadId || undefined 
+    }).catch(() => {});
   }
 }
 
