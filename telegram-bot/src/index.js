@@ -825,69 +825,36 @@ try {
 
 setupBot();
 
-// ─── Launch with Robust 409-Conflict Recovery ──────────────
-// Strategy:
-// 1. Call /close to kill any ghost polling session on Telegram's side
-// 2. Delete webhook + drop pending updates
-// 3. Wait 10s for Telegram to fully release the polling lock
-// 4. Then launch with dropPendingUpdates:true
-// 5. Retry INDEFINITELY — NEVER call process.exit()
+// ─── Simple Bot Launch ──────────────────────────────────────
+// 1. deleteWebhook to clear any stale session
+// 2. Wait 5s
+// 3. bot.launch()
+// 4. On ANY error, wait 30s and retry forever
 let schedulerStarted = false;
-let launchLock = false;
 
-async function killGhostAndLaunch() {
-  if (launchLock) return;
-  launchLock = true;
-
-  // Step 1: Force-close any existing bot session on Telegram's servers
-  console.log('[Bot] Killing any ghost polling session...');
+async function startBot() {
+  // Clean slate
   try {
-    const https = require('https');
-    const TOKEN = process.env.BOT_TOKEN || config.botToken;
-    await new Promise((resolve) => {
-      https.get('https://api.telegram.org/bot' + TOKEN + '/close', (res) => {
-        let d = ''; res.on('data', c => d += c); res.on('end', () => { console.log('[Bot] /close response:', d.substring(0, 80)); resolve(); });
-      }).on('error', (e) => { console.warn('[Bot] /close error:', e.message); resolve(); });
-    });
-  } catch(e) { console.warn('[Bot] /close warning:', e.message); }
-
-  // Step 2: Delete webhook
-  try {
+    console.log('[Bot] deleteWebhook...');
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-    console.log('[Bot] Webhook deleted, pending updates dropped.');
-  } catch(e) { console.warn('[Bot] deleteWebhook warning:', e.message); }
+    console.log('[Bot] Webhook cleared.');
+  } catch (e) {
+    console.warn('[Bot] deleteWebhook warning:', e.message);
+  }
 
-  // Step 3: Wait 10s for Telegram to release the polling lock
-  console.log('[Bot] Waiting 10s for Telegram to release polling lock...');
-  await new Promise(r => setTimeout(r, 10000));
+  console.log('[Bot] Waiting 5s before launch...');
+  await new Promise(r => setTimeout(r, 5000));
 
-  // Step 4: Launch with retry
-  launchWithRetry(1);
-}
-
-async function launchWithRetry(attempt) {
-  const maxDelay = 60000;
+  console.log('[Bot] Launching polling...');
   try {
-    console.log('[Bot] Launch attempt ' + attempt + '...');
     await bot.launch({ dropPendingUpdates: true });
-    console.log('[Bot] Polling stopped gracefully.');
   } catch (err) {
-    const msg = (err && err.message) ? err.message : String(err);
-    const is409 = (err && err.error_code === 409) || msg.includes('409');
-    const delay = is409 ? Math.min(5000 * attempt, maxDelay) : Math.min(10000 * attempt, maxDelay);
-    if (is409) {
-      console.warn('[Bot] 409 Conflict — retrying in ' + (delay/1000) + 's (attempt ' + attempt + ')...');
-      // Force-close the ghost again before retrying
-      try { await bot.telegram.deleteWebhook({ drop_pending_updates: true }); } catch(e) {}
-    } else {
-      console.error('[Bot] Launch error (attempt ' + attempt + '):', msg, '— retrying in ' + (delay/1000) + 's');
-    }
-    // NEVER exit — always retry
-    setTimeout(function() { launchLock = false; launchWithRetry(attempt + 1); }, delay);
+    console.error('[Bot] Launch failed:', err.message, '— will retry in 30s');
+    setTimeout(startBot, 30000);
   }
 }
 
-// Start scheduler once bot is connected (poll for botInfo)
+// Start scheduler once bot is connected
 function waitForBotAndStartScheduler() {
   if (bot.botInfo && !schedulerStarted) {
     schedulerStarted = true;
@@ -903,7 +870,7 @@ function waitForBotAndStartScheduler() {
   }
 }
 
-killGhostAndLaunch();
+startBot();
 waitForBotAndStartScheduler();
 
 // Enable graceful stop
