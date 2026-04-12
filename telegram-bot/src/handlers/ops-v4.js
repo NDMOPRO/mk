@@ -339,27 +339,109 @@ async function handleOpsPoll(ctx) {
     const text = ctx.message.text || "";
     const args = extractCommandArgs(text, "poll");
 
-    const match = args.match(/"(.+?)"\s+"(.+?)"\s+"(.+?)"(?:\s+"(.+?)")?(?:\s+"(.+?)")?/);
-    if (!match) {
-      const en = `📊 *Quick Poll*\n\nUsage: \`/poll "Question" "Opt1" "Opt2" "Opt3"\``;
-      const ar = `📊 *تصويت سريع*\n\nالاستخدام: \`/poll "السؤال" "الخيار1" "الخيار2" "الخيار3"\``;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
+    // ── Normalise curly/smart quotes (common on mobile keyboards) ──
+    const normalised = args
+      .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')  // curly double quotes
+      .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'"); // curly single quotes
+
+    // ── Extract all "quoted tokens" (options, and optionally the question) ──
+    const quotedTokens = [];
+    const tokenRe = /"([^"]+)"/g;
+    let m;
+    while ((m = tokenRe.exec(normalised)) !== null) {
+      const val = m[1].trim();
+      if (val) quotedTokens.push(val);
     }
 
-    const question = match[1];
-    const options = match.slice(2).filter(Boolean);
+    // ── Determine question and options ────────────────────────
+    // Strategy:
+    //   1. If there is text BEFORE the first quote, that is the question
+    //      and all quoted tokens are options.
+    //      e.g.  Is this easier? "Yes" "No"  →  Q="Is this easier?"  Opts=["Yes","No"]
+    //   2. Otherwise the first quoted token is the question and the rest are options.
+    //      e.g.  "Is this easier?" "Yes" "No"  →  Q="Is this easier?"  Opts=["Yes","No"]
+    let question = "";
+    let options  = [];
+
+    const firstQuoteIdx = normalised.indexOf('"');
+    const textBeforeFirstQuote = firstQuoteIdx > 0
+      ? normalised.substring(0, firstQuoteIdx).trim()
+      : "";
+
+    if (textBeforeFirstQuote.length > 0) {
+      // Unquoted question + quoted options
+      question = textBeforeFirstQuote.substring(0, 300);
+      options  = quotedTokens.slice(0, 10);
+    } else {
+      // Fully quoted: first token = question, rest = options
+      question = (quotedTokens[0] || "").substring(0, 300);
+      options  = quotedTokens.slice(1, 11);
+    }
+
+    // ── Validate ──────────────────────────────────────────────
+    if (!question || options.length < 2) {
+      const en = [
+        "📊 *Quick Poll — Usage*",
+        "",
+        "`/poll \"Question\" \"Option 1\" \"Option 2\" ...`",
+        "",
+        "• You can also write the question without quotes:",
+        "`/poll Is this easier? \"Yes\" \"Somewhat\" \"No\"`",
+        "",
+        "• Minimum 2 options, maximum 10",
+        "",
+        "*Example:*",
+        "`/poll \"Is the workflow easier?\" \"Yes\" \"Somewhat\" \"No\"`",
+      ].join("\n");
+      const ar = [
+        "📊 *تصويت سريع — طريقة الاستخدام*",
+        "",
+        "`/poll \"السؤال\" \"الخيار 1\" \"الخيار 2\" ...`",
+        "",
+        "• يمكن كتابة السؤال بدون اقتباسات:",
+        "`/poll هل العمل أسهل؟ \"نعم\" \"نوعاً ما\" \"لا\"`",
+        "",
+        "• الحد الأدنى خياران، الحد الأقصى 10",
+        "",
+        "*مثال:*",
+        "`/poll \"هل أصبح سير العمل أسهل؟\" \"نعم\" \"نوعاً ما\" \"لا\"`",
+      ].join("\n");
+      return ctx.reply(getBilingualText(en, ar), {
+        parse_mode: "Markdown",
+        message_thread_id: threadId || undefined,
+      });
+    }
+
+    // ── Send a NATIVE Telegram poll ───────────────────────────
+    // ctx.telegram.sendPoll() creates a real interactive poll card —
+    // NOT a text message. Users tap an option to vote directly in the chat.
+    await ctx.telegram.sendPoll(
+      chatId,
+      question,
+      options.map(o => ({ text: o.substring(0, 100) })), // Telegram: max 100 chars/option
+      {
+        is_anonymous: false,           // show who voted
+        allows_multiple_answers: false,
+        ...(threadId ? { message_thread_id: threadId } : {}),
+      }
+    );
+
+    // ── Persist in our DB for /poll results tracking ──────────
     const fromUser = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+    try {
+      v4Db.createPoll(chatId, threadId, question, options, fromUser);
+    } catch (dbErr) {
+      // DB persistence is non-critical — the poll was already sent successfully
+      console.error("[handleOpsPoll] DB persist error (non-fatal):", dbErr.message);
+    }
 
-    const pollId = v4Db.createPoll(chatId, threadId, question, options, fromUser);
-    const inlineKeyboard = options.map((opt, i) => ([{ text: opt, callback_data: `poll_vote_${pollId}_${i}` }]));
-
-    const en = `📊 *POLL: ${question}*\n\nAsked by: ${fromUser}`;
-    const ar = `📊 *تصويت: ${question}*\n\nبواسطة: ${fromUser}`;
-
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4, reply_markup: { inline_keyboard: inlineKeyboard } });
   } catch (e) {
     console.error("[handleOpsPoll] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    const errMsg = getBilingualText(
+      `❌ Failed to create poll: ${e.message}`,
+      `❌ فشل إنشاء التصويت: ${e.message}`
+    );
+    await ctx.reply(errMsg, { message_thread_id: threadId || undefined }).catch(() => {});
   }
 }
 
