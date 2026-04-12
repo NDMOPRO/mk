@@ -894,9 +894,29 @@ async function handleOpsGsync(ctx) {
   // Logic to trigger manual sync
 }
 
+// Pre-filter patterns — messages matching these are NEVER sent to AI
+const IGNORE_PATTERNS = [
+  /^(ok|okay|noted|sure|yes|no|done|تم|نعم|لا|شكراً|شكرا|ثانكس|thanks|thank you|👍|👌|✅|🙏|حسناً|حسنا|موافق|تمام|ماشي|ايوه|ايوا|يسلمو|يعطيك العافية|عافية|جيد|good|great|perfect|nice|cool|wow|هلا|هلو|hi|hello|السلام عليكم|وعليكم السلام|صباح الخير|مساء الخير|صباح النور|مساء النور|كيف الحال|بخير|الحمد لله)$/i,
+];
+
 async function handleOpsPassive(ctx) {
   const userMessage = ctx.message?.text;
   if (!userMessage || userMessage.startsWith("/")) return;
+
+  // Hard pre-filters — skip before even calling AI
+  const trimmed = userMessage.trim();
+
+  // 1. Ignore very short messages (less than 15 chars)
+  if (trimmed.length < 15) return;
+
+  // 2. Ignore simple acknowledgments, greetings, reactions
+  for (const pattern of IGNORE_PATTERNS) {
+    if (pattern.test(trimmed)) return;
+  }
+
+  // 3. Ignore messages that are only emojis or punctuation
+  const textOnly = trimmed.replace(/[\u{1F300}-\u{1FFFF}\u{2600}-\u{27BF}\s.,!?،؟]/gu, "");
+  if (textOnly.length < 5) return;
 
   const chatId = ctx.chat.id;
   const threadId = ctx.message?.message_thread_id || null;
@@ -905,7 +925,14 @@ async function handleOpsPassive(ctx) {
 
   try {
     const ai = require("../services/ai");
-    const analysis = await ai.analyzeOpsMessage(userMessage, fromUser);
+    
+    // Store this message in conversation memory (before AI analysis)
+    opsDb.storeConversationMessage(chatId, threadId, fromUser, userMessage);
+    
+    // Retrieve recent conversation history for context (last 20 messages)
+    const history = opsDb.getConversationHistory(chatId, threadId, 20);
+    
+    const analysis = await ai.analyzeOpsMessage(userMessage, fromUser, history);
 
     if (!analysis || !analysis.actionable) return;
 

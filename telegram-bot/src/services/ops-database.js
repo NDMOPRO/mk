@@ -854,6 +854,56 @@ function getMeetingById(id) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ═══ Conversation Memory (per topic, last 30 messages) ══════
+// ═══════════════════════════════════════════════════════════════
+
+function ensureConversationMemoryTable() {
+  const d = getDb();
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS conversation_memory (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id     INTEGER NOT NULL,
+      thread_id   INTEGER,
+      from_user   TEXT NOT NULL,
+      message     TEXT NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  // Create index for fast retrieval
+  d.exec(`CREATE INDEX IF NOT EXISTS idx_conv_mem_thread ON conversation_memory (chat_id, thread_id, created_at DESC)`);
+}
+
+function storeConversationMessage(chatId, threadId, fromUser, message) {
+  ensureConversationMemoryTable();
+  const d = getDb();
+  // Insert the new message
+  d.prepare(`INSERT INTO conversation_memory (chat_id, thread_id, from_user, message) VALUES (?, ?, ?, ?)`)
+    .run(chatId, threadId ?? null, fromUser, message);
+  // Keep only the last 30 messages per topic to avoid unbounded growth
+  d.prepare(`
+    DELETE FROM conversation_memory
+    WHERE chat_id = ? AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL))
+    AND id NOT IN (
+      SELECT id FROM conversation_memory
+      WHERE chat_id = ? AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL))
+      ORDER BY id DESC LIMIT 30
+    )
+  `).run(chatId, threadId ?? null, threadId ?? null, chatId, threadId ?? null, threadId ?? null);
+}
+
+function getConversationHistory(chatId, threadId, limit = 20) {
+  ensureConversationMemoryTable();
+  const d = getDb();
+  const rows = d.prepare(`
+    SELECT from_user, message, created_at FROM conversation_memory
+    WHERE chat_id = ? AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL))
+    ORDER BY id DESC LIMIT ?
+  `).all(chatId, threadId ?? null, threadId ?? null, limit);
+  // Return in chronological order (oldest first)
+  return rows.reverse();
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ═══ Exports ═════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 
@@ -897,4 +947,6 @@ module.exports = {
   setOccupancy, getOccupancy, getOccupancyByUnit, getOccupancySummary,
   // Meetings (Feature 9)
   startMeeting, getActiveMeeting, endMeeting, addMeetingMessage, getMeetingMessages, getMeetingById,
+  // Conversation Memory
+  storeConversationMessage, getConversationHistory,
 };

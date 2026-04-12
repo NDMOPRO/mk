@@ -198,22 +198,37 @@ module.exports = {
 /**
  * Analyze an operations group message to detect tasks, updates, or completions.
  * Returns a structured object with the detected action and data.
+ * @param {string} userMessage - The message text to analyze
+ * @param {string} senderName - The name of the sender
+ * @param {Array} conversationHistory - Recent messages [{from_user, message, created_at}]
  */
-async function analyzeOpsMessage(userMessage, senderName) {
+async function analyzeOpsMessage(userMessage, senderName, conversationHistory = []) {
   try {
+    // Build conversation context string from history
+    let historyContext = "";
+    if (conversationHistory.length > 0) {
+      historyContext = "\n\nRECENT CONVERSATION HISTORY (oldest first):\n" +
+        conversationHistory.map(m => `[${m.from_user}]: ${m.message}`).join("\n") +
+        "\n\nUse this history to understand references like 'I finished that', 'the thing we discussed', 'نفس الموضوع', 'خلصت', etc.";
+    }
+
     const systemPrompt = `You are the AI Operations Manager for Monthly Key (المفتاح الشهري).
 Your job is to analyze messages from team members in the operations group and detect actionable items.
 
+You have a HIGH confidence threshold — when in doubt, return "general" with actionable: false.
+The default action is IGNORE. Only respond when you are CERTAIN there is a clear task, update, or completion.
+
 CATEGORIES:
-1. "new_task": The user is assigning a new task, requesting something to be done, or reporting a new issue that needs fixing.
-2. "status_update": The user is providing an update on an existing task or reporting progress.
-3. "completion": The user is reporting that a task is finished or resolved.
-4. "general": Just a general comment, acknowledgment ("noted", "ok"), or conversation with no specific action.
+1. "new_task": The user is clearly assigning a new task, requesting something to be done, or reporting a new issue that needs fixing. Must be specific and actionable.
+2. "status_update": The user is clearly providing a progress update on an existing task.
+3. "completion": The user is clearly reporting that a task is finished or resolved.
+4. "general": Anything else — greetings, acknowledgments, casual chat, vague comments, reactions, short replies. DEFAULT to this.
 
 OUTPUT FORMAT (JSON ONLY):
 {
   "category": "new_task" | "status_update" | "completion" | "general",
   "actionable": true | false,
+  "confidence": "high" | "medium" | "low",
   "data": {
     "title": "Brief title of the task/update",
     "description": "Full details if provided",
@@ -222,26 +237,28 @@ OUTPUT FORMAT (JSON ONLY):
     "due_date": "YYYY-MM-DD (if mentioned, otherwise null)",
     "task_id": "ID number if mentioned (e.g. #123 -> 123), otherwise null"
   },
-  "reply_en": "Professional English acknowledgment",
-  "reply_ar": "Professional Arabic acknowledgment"
+  "reply_en": "Professional English acknowledgment (only if actionable)",
+  "reply_ar": "Professional Arabic acknowledgment (only if actionable)"
 }
 
-RULES:
-- Understand both English and Arabic (and mixed).
-- If "general", set actionable to false.
-- If "new_task", "status_update", or "completion", set actionable to true.
-- Be precise. Only mark as actionable if there is a clear task, update, or completion.
+STRICT RULES:
+- ONLY mark actionable: true for categories new_task, status_update, or completion.
+- ONLY mark actionable: true when confidence is "high".
+- If confidence is "medium" or "low", set actionable: false and category: "general".
+- Short messages, single words, greetings, "ok", "noted", "شكراً", "تم", "ماشي", "👍" are ALWAYS "general".
+- Vague messages without a clear subject are "general".
+- If you are not sure what the task is, it is "general".
 - Priority: default to "normal" unless words like "urgent", "immediately", "عاجل", "فورا" are used.
 - Assignee: default to "${senderName}" if it's a report about their own work.
 - Dates: today is ${new Date().toISOString().split('T')[0]}.
 - Replies should be brief and professional, starting with an emoji.
-  Examples: 
+  Examples:
   - "✅ Task logged: [Title] — assigned to [Name]"
   - "📝 Update noted: [Details]"
   - "🎉 Task marked complete: [Title]"
   - "✅ تم تسجيل المهمة: [Title] — مسندة إلى [Name]"
   - "📝 تم تسجيل التحديث: [Details]"
-  - "🎉 تم إنجاز المهمة: [Title]"`;
+  - "🎉 تم إنجاز المهمة: [Title]"${historyContext}`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
@@ -254,6 +271,12 @@ RULES:
     });
 
     const result = JSON.parse(completion.choices[0]?.message?.content || "{}");
+    
+    // Extra safety: if confidence is not high, force to non-actionable
+    if (result.confidence !== "high") {
+      result.actionable = false;
+    }
+    
     return result;
   } catch (error) {
     console.error("[AI] Error analyzing ops message:", error.message);
