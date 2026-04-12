@@ -31,28 +31,96 @@ async function handleOpsRoles(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   try {
     const chatId = ctx.chat.id;
-    const roles = v4Db.getAllRoles(chatId);
 
-    if (roles.length === 0) {
-      const en = `👥 *Team Roles*\n\nNo roles defined. Use \`/setrole @user CEO\``;
-      const ar = `👥 *أدوار الفريق*\n\nلم يتم تحديد أدوار. استخدم \`/setrole @user CEO\``;
-      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
+    // ── 1. Load the static team registry from team-members.js ──
+    // This is the authoritative source — always populated, no setup needed.
+    const { getAllTeamMembers } = require("../team-members");
+    const staticMembers = getAllTeamMembers();
+
+    // Deduplicate: some usernames appear twice (e.g. monthlykey + hobart2007
+    // both map to "Monthly Key / CEO"). Show each unique name+role once.
+    const seen = new Set();
+    const uniqueStatic = [];
+    for (const m of staticMembers) {
+      const key = `${m.name}|${m.role}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueStatic.push(m);
+      }
     }
 
-    let en = `👥 *Team Roles*\n\n`;
-    let ar = `👥 *أدوار الفريق*\n\n`;
-    const roleEmoji = { ceo: "👑", manager: "📋", staff: "👤" };
-
-    roles.forEach(r => {
-      const emoji = roleEmoji[r.role?.toLowerCase()] || "👤";
-      const line = `${emoji} *${r.role.toUpperCase()}* — ${r.username || r.display_name || "Unknown"}\n`;
-      en += line; ar += line;
+    // ── 2. Load any additional roles set via /setrole (DB) ─────
+    // These are people added manually who aren't in team-members.js.
+    const dbRoles = v4Db.getAllRoles(chatId);
+    const dbExtras = dbRoles.filter(r => {
+      // Only include DB roles that don't already exist in the static registry
+      const uname = (r.username || "").replace(/^@/, "").toLowerCase();
+      return !staticMembers.some(m => m.username.toLowerCase() === uname);
     });
 
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
+    // ── 3. Build role-grouped display ─────────────────────────
+    // Priority order: CEO → Top Management → Operational Manager → Staff → Others
+    const PRIORITY_ORDER = ["top", "high", "normal", "low"];
+    const sorted = [...uniqueStatic].sort((a, b) => {
+      const pa = PRIORITY_ORDER.indexOf(a.priority);
+      const pb = PRIORITY_ORDER.indexOf(b.priority);
+      return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb);
+    });
+
+    // Role-to-emoji mapping
+    function roleEmoji(role) {
+      const r = (role || "").toLowerCase();
+      if (r.includes("ceo") || r.includes("executive")) return "👑";
+      if (r.includes("top") || r.includes("management")) return "🏆";
+      if (r.includes("operational") || r.includes("manager")) return "📋";
+      if (r.includes("staff") || r.includes("team")) return "👤";
+      return "🔹";
+    }
+
+    // ── 4. Build English section ──────────────────────────────
+    const enLines = ["👥 *Team Roster*", ""];
+    for (const m of sorted) {
+      const emoji = roleEmoji(m.role);
+      enLines.push(`${emoji} *${m.name}* (@${m.username}) — ${m.role}`);
+    }
+    // Append any DB-only extras
+    if (dbExtras.length > 0) {
+      enLines.push("");
+      enLines.push("📌 *Additional Members (manually set):*");
+      for (const r of dbExtras) {
+        enLines.push(`🔹 *${r.display_name || r.username}* — ${r.role}`);
+      }
+    }
+    enLines.push("");
+    enLines.push(`_${sorted.length + dbExtras.length} members total_`);
+
+    // ── 5. Build Arabic section ───────────────────────────────
+    const arLines = ["👥 *قائمة الفريق*", ""];
+    for (const m of sorted) {
+      const emoji = roleEmoji(m.role);
+      arLines.push(`${emoji} *${m.nameAr}* (@${m.username}) — ${m.roleAr}`);
+    }
+    if (dbExtras.length > 0) {
+      arLines.push("");
+      arLines.push("📌 *أعضاء إضافيون (تم تعيينهم يدوياً):*");
+      for (const r of dbExtras) {
+        arLines.push(`🔹 *${r.display_name || r.username}* — ${r.role}`);
+      }
+    }
+    arLines.push("");
+    arLines.push(`_إجمالي ${sorted.length + dbExtras.length} أعضاء_`);
+
+    const message = getBilingualText(enLines.join("\n"), arLines.join("\n"));
+    await ctx.reply(message, {
+      parse_mode: "Markdown",
+      message_thread_id: threadId || undefined,
+    });
+
   } catch (e) {
     console.error("[handleOpsRoles] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, {
+      message_thread_id: threadId || undefined,
+    }).catch(() => {});
   }
 }
 
