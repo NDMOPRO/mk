@@ -149,10 +149,15 @@ bot.catch((err, ctx) => {
   const cmd = ctx.message?.text?.split(" ")[0] || "unknown";
   const chat = ctx.chat?.id || "unknown";
   console.error(`[Bot] Unhandled error in command "${cmd}" (chat ${chat}):`, err.message);
-  // Attempt to notify the user
-  if (ctx.reply) {
+  // Do NOT send error replies for 409 (conflict) or 401 (unauthorized) — these are polling-level
+  // errors, not user-facing command errors. Sending a reply would spam the group.
+  const errCode = err.code || err.response?.error_code;
+  if (errCode === 409 || errCode === 401) return;
+  // Only send error replies in private chats — never spam the ops group with raw error messages
+  const isPrivate = ctx.chat?.type === 'private';
+  if (isPrivate && ctx.reply) {
     const threadId = ctx.message?.message_thread_id || undefined;
-    ctx.reply(`❌ An error occurred. Please try again.\n\nError: ${err.message}`, {
+    ctx.reply(`❌ An error occurred. Please try again.`, {
       message_thread_id: threadId
     }).catch(() => {}); // Swallow reply errors
   }
@@ -849,8 +854,15 @@ async function startBot() {
   try {
     await bot.launch({ dropPendingUpdates: true });
   } catch (err) {
-    console.error('[Bot] Launch failed:', err.message, '— will retry in 30s');
-    setTimeout(startBot, 30000);
+    const errCode = err.code || err.response?.error_code;
+    if (errCode === 409) {
+      // 409 Conflict: another instance is polling. Wait longer before retrying.
+      console.warn('[Bot] 409 Conflict — another instance may be running. Retrying in 60s...');
+      setTimeout(startBot, 60000);
+    } else {
+      console.error('[Bot] Launch failed:', err.message, '— will retry in 30s');
+      setTimeout(startBot, 30000);
+    }
   }
 }
 

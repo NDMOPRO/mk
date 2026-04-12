@@ -568,6 +568,30 @@ function getPendingVendorFollowUps(chatId) {
   return d.prepare(`SELECT * FROM vendor_followups WHERE chat_id = ? AND status = 'pending' ORDER BY deadline_at ASC`).all(chatId);
 }
 
+// Alias used by ops-scheduler.js — filters by chat_id and maps column names
+// to what the scheduler template expects (description → promise_text, expected_date → deadline_at)
+function getOverdueVendorFollowUps(chatId) {
+  const d = getDb();
+  const rows = d.prepare(
+    `SELECT * FROM vendor_followups
+     WHERE chat_id = ? AND sent = 0 AND status = 'pending'
+     AND deadline_at <= datetime('now')
+     ORDER BY deadline_at ASC`
+  ).all(chatId);
+  // Map column names to what the scheduler template expects
+  return rows.map(r => ({
+    ...r,
+    description: r.promise_text,
+    expected_date: r.deadline_at ? r.deadline_at.substring(0, 10) : r.deadline_at,
+  }));
+}
+
+// Alias used by ops-scheduler.js — marks vendor follow-up as notified (sent = 1)
+function markVendorFollowUpNotified(id) {
+  const d = getDb();
+  d.prepare("UPDATE vendor_followups SET sent = 1 WHERE id = ?").run(id);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ═══ Daily Report Log ════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
@@ -930,6 +954,7 @@ module.exports = {
   addMediaLog, getMediaByProperty, getMediaByTask, getMediaByThread,
   // Vendor Follow-ups
   addVendorFollowUp, getDueVendorFollowUps, markVendorFollowUpSent, resolveVendorFollowUp, getPendingVendorFollowUps,
+  getOverdueVendorFollowUps, markVendorFollowUpNotified,
   // Daily Reports
   hasReportBeenSent, markReportSent,
   // SLA (Feature 1)

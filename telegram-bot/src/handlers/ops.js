@@ -984,10 +984,22 @@ async function handleOpsPassive(ctx) {
     }
 
     if (resultText) {
-      await ctx.reply(resultText, {
+      // Reply to the original message so the response is clearly attributed
+      const replyOpts = {
         message_thread_id: threadId,
-        parse_mode: "HTML"
-      });
+        reply_to_message_id: ctx.message.message_id,
+        parse_mode: "Markdown",
+      };
+      try {
+        await ctx.reply(resultText, replyOpts);
+      } catch (mdErr) {
+        // Markdown parse failed (e.g. special chars in task title) — fall back to plain text
+        console.warn("[AI-Ops] Markdown reply failed, retrying as plain text:", mdErr.message);
+        const plainOpts = { message_thread_id: threadId, reply_to_message_id: ctx.message.message_id };
+        await ctx.reply(resultText.replace(/[_*`\[\]]/g, ""), plainOpts).catch(e2 => {
+          console.error("[AI-Ops] Plain text reply also failed:", e2.message);
+        });
+      }
     }
   } catch (error) {
     console.error("[AI-Ops] Error in handleOpsPassive:", error.message);
