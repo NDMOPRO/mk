@@ -825,38 +825,64 @@ try {
 
 setupBot();
 
-// ─── Launch with 409-Conflict Retry ──────────────────────────
-// During Railway rolling deployments, the old container keeps polling
-// for ~60s while the new one starts. Telegraf crashes on 409 Conflict.
-// This wrapper retries with exponential backoff so the new instance
-// takes over cleanly once the old container shuts down.
+// ─── Launch with Robust 409-Conflict Recovery ──────────────
+// Strategy:
+// 1. Delete any stale webhook first (clears Telegram session)
+// 2. Use dropPendingUpdates to avoid processing old messages
+// 3. Retry INDEFINITELY with exponential backoff (never process.exit)
+// 4. Prevent duplicate retry chains with a lock flag
+let launchInProgress = false;
+let schedulerStarted = false;
+
 async function launchWithRetry(attempt) {
+  if (launchInProgress) {
+    console.log('[Bot] Launch already in progress, skipping duplicate call');
+    return;
+  }
+  launchInProgress = true;
   attempt = attempt || 1;
-  const maxAttempts = 12;
-  const baseDelay = 5000;
+  const maxDelay = 60000; // cap at 60s between retries
+
+  // Step 1: Clear any stale webhook/session before polling
+  if (attempt === 1) {
+    try {
+      console.log('[Bot] Clearing stale webhook/session...');
+      await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+      console.log('[Bot] Webhook cleared, pending updates dropped.');
+      // Wait 2s for Telegram to release the polling lock
+      await new Promise(r => setTimeout(r, 2000));
+    } catch (e) {
+      console.warn('[Bot] deleteWebhook warning:', e.message);
+    }
+  }
+
   try {
-    console.log('[Bot] Launch attempt ' + attempt + '/' + maxAttempts + '...');
-    await bot.launch({ dropPendingUpdates: false });
+    console.log('[Bot] Launch attempt ' + attempt + '...');
+    await bot.launch({ dropPendingUpdates: true });
     // bot.launch() never resolves during normal long-polling
-    // This block only runs on graceful stop
     console.log('[Bot] Polling stopped gracefully.');
   } catch (err) {
+    launchInProgress = false;
     const msg = (err && err.message) ? err.message : String(err);
     const is409 = (err && err.error_code === 409) || msg.includes('409');
-    if (is409 && attempt < maxAttempts) {
-      const delay = baseDelay * attempt;
-      console.warn('[Bot] 409 Conflict — old instance still running. Retrying in ' + (delay/1000) + 's (attempt ' + attempt + '/' + maxAttempts + ')...');
+    if (is409) {
+      const delay = Math.min(5000 * attempt, maxDelay);
+      console.warn('[Bot] 409 Conflict — old session active. Retrying in ' + (delay/1000) + 's (attempt ' + attempt + ')...');
+      // Try to force-clear the session again
+      try { await bot.telegram.deleteWebhook({ drop_pending_updates: true }); } catch(e) {}
       setTimeout(function() { launchWithRetry(attempt + 1); }, delay);
     } else {
-      console.error('[Bot] Fatal launch error after ' + attempt + ' attempts:', msg);
-      process.exit(1);
+      const delay = Math.min(10000 * attempt, maxDelay);
+      console.error('[Bot] Launch error (attempt ' + attempt + '):', msg, '— retrying in ' + (delay/1000) + 's');
+      setTimeout(function() { launchWithRetry(attempt + 1); }, delay);
     }
   }
 }
 
 // Start scheduler once bot is connected (poll for botInfo)
 function waitForBotAndStartScheduler() {
-  if (bot.botInfo) {
+  if (bot.botInfo && !schedulerStarted) {
+    schedulerStarted = true;
     writeHeartbeat();
     console.log('-------------------------------------------');
     console.log('Monthly Key Telegram Bot is RUNNING');
@@ -864,7 +890,7 @@ function waitForBotAndStartScheduler() {
     console.log('Phase 4: Ops Group v5 — 49 Features');
     console.log('-------------------------------------------');
     startOpsScheduler(bot);
-  } else {
+  } else if (!schedulerStarted) {
     setTimeout(waitForBotAndStartScheduler, 1000);
   }
 }
