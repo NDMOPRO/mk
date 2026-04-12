@@ -895,7 +895,76 @@ async function handleOpsGsync(ctx) {
 }
 
 async function handleOpsPassive(ctx) {
-  // Passive monitoring logic
+  const userMessage = ctx.message?.text;
+  if (!userMessage || userMessage.startsWith("/")) return;
+
+  const chatId = ctx.chat.id;
+  const threadId = ctx.message?.message_thread_id || null;
+  const fromUser = ctx.from?.first_name || ctx.from?.username || "Unknown";
+  const username = ctx.from?.username ? `@${ctx.from.username}` : fromUser;
+
+  try {
+    const ai = require("../services/ai");
+    const analysis = await ai.analyzeOpsMessage(userMessage, fromUser);
+
+    if (!analysis || !analysis.actionable) return;
+
+    console.log(`[AI-Ops] Actionable message from ${fromUser}:`, analysis.category);
+
+    const data = analysis.data || {};
+    let resultText = "";
+
+    if (analysis.category === "new_task") {
+      const taskId = opsDb.addTask(
+        chatId, 
+        threadId, 
+        getTopicInfo(threadId).name, 
+        data.title || userMessage.substring(0, 50),
+        {
+          description: data.description || userMessage,
+          priority: data.priority || "normal",
+          assignedTo: data.assignee || fromUser,
+          dueDate: data.due_date || null,
+          createdBy: username
+        }
+      );
+      resultText = `${analysis.reply_en} [#${taskId}]\n${analysis.reply_ar} [#${taskId}]`;
+    } 
+    else if (analysis.category === "status_update" || analysis.category === "completion") {
+      const taskId = data.task_id;
+      const isDone = analysis.category === "completion";
+      
+      if (taskId) {
+        if (isDone) opsDb.markTaskDone(taskId);
+        // Status updates (in progress) are just acknowledged as there is no specific 'update' field in the schema
+        resultText = `${analysis.reply_en}\n${analysis.reply_ar}`;
+      } else {
+        // Try to find task by title if no ID
+        const pending = opsDb.getAllPendingTasks(chatId);
+        const bestMatch = pending.find(t => 
+          t.title.toLowerCase().includes((data.title || "").toLowerCase()) || 
+          (data.title || "").toLowerCase().includes(t.title.toLowerCase())
+        );
+        
+        if (bestMatch) {
+          if (isDone) opsDb.markTaskDone(bestMatch.id);
+          resultText = `${analysis.reply_en} [#${bestMatch.id}]\n${analysis.reply_ar} [#${bestMatch.id}]`;
+        } else {
+          // Just acknowledge if no specific task found
+          resultText = `${analysis.reply_en}\n${analysis.reply_ar}`;
+        }
+      }
+    }
+
+    if (resultText) {
+      await ctx.reply(resultText, {
+        message_thread_id: threadId,
+        parse_mode: "HTML"
+      });
+    }
+  } catch (error) {
+    console.error("[AI-Ops] Error in handleOpsPassive:", error.message);
+  }
 }
 
 async function registerTopicName(ctx) {

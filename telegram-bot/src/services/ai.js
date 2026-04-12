@@ -194,3 +194,72 @@ module.exports = {
   detectLanguage,
   getOpenAIClient,
 };
+
+/**
+ * Analyze an operations group message to detect tasks, updates, or completions.
+ * Returns a structured object with the detected action and data.
+ */
+async function analyzeOpsMessage(userMessage, senderName) {
+  try {
+    const systemPrompt = `You are the AI Operations Manager for Monthly Key (المفتاح الشهري).
+Your job is to analyze messages from team members in the operations group and detect actionable items.
+
+CATEGORIES:
+1. "new_task": The user is assigning a new task, requesting something to be done, or reporting a new issue that needs fixing.
+2. "status_update": The user is providing an update on an existing task or reporting progress.
+3. "completion": The user is reporting that a task is finished or resolved.
+4. "general": Just a general comment, acknowledgment ("noted", "ok"), or conversation with no specific action.
+
+OUTPUT FORMAT (JSON ONLY):
+{
+  "category": "new_task" | "status_update" | "completion" | "general",
+  "actionable": true | false,
+  "data": {
+    "title": "Brief title of the task/update",
+    "description": "Full details if provided",
+    "assignee": "Name of person assigned (default to sender if not specified)",
+    "priority": "urgent" | "high" | "normal",
+    "due_date": "YYYY-MM-DD (if mentioned, otherwise null)",
+    "task_id": "ID number if mentioned (e.g. #123 -> 123), otherwise null"
+  },
+  "reply_en": "Professional English acknowledgment",
+  "reply_ar": "Professional Arabic acknowledgment"
+}
+
+RULES:
+- Understand both English and Arabic (and mixed).
+- If "general", set actionable to false.
+- If "new_task", "status_update", or "completion", set actionable to true.
+- Be precise. Only mark as actionable if there is a clear task, update, or completion.
+- Priority: default to "normal" unless words like "urgent", "immediately", "عاجل", "فورا" are used.
+- Assignee: default to "${senderName}" if it's a report about their own work.
+- Dates: today is ${new Date().toISOString().split('T')[0]}.
+- Replies should be brief and professional, starting with an emoji.
+  Examples: 
+  - "✅ Task logged: [Title] — assigned to [Name]"
+  - "📝 Update noted: [Details]"
+  - "🎉 Task marked complete: [Title]"
+  - "✅ تم تسجيل المهمة: [Title] — مسندة إلى [Name]"
+  - "📝 تم تسجيل التحديث: [Details]"
+  - "🎉 تم إنجاز المهمة: [Title]"`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Sender: ${senderName}\nMessage: ${userMessage}` }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+    });
+
+    const result = JSON.parse(completion.choices[0]?.message?.content || "{}");
+    return result;
+  } catch (error) {
+    console.error("[AI] Error analyzing ops message:", error.message);
+    return { category: "general", actionable: false };
+  }
+}
+
+// Add to exports
+module.exports.analyzeOpsMessage = analyzeOpsMessage;
