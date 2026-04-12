@@ -5,6 +5,7 @@
  */
 const Database = require("better-sqlite3");
 const path = require("path");
+const log = require("../utils/logger");
 
 const DB_PATH = path.join(__dirname, "..", "..", "data", "bot.db");
 
@@ -17,11 +18,34 @@ function getDb() {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
-    initTables();
+    try {
+      db = new Database(DB_PATH);
+      db.pragma("journal_mode = WAL");
+      db.pragma("busy_timeout = 5000");
+      initTables();
+      log.info('PublicDB', 'Database opened', { path: DB_PATH });
+    } catch (err) {
+      log.error('PublicDB', 'Failed to open database', { path: DB_PATH, error: err.message });
+      throw err;
+    }
   }
   return db;
+}
+
+/**
+ * Close the database connection cleanly.
+ * Used during graceful shutdown.
+ */
+function closeDb() {
+  if (db) {
+    try {
+      db.close();
+      db = null;
+      log.info('PublicDB', 'Database closed');
+    } catch (e) {
+      log.warn('PublicDB', 'Error closing database', { error: e.message });
+    }
+  }
 }
 
 function initTables() {
@@ -428,6 +452,7 @@ function isPropertyPosted(propertyId) {
 
 module.exports = {
   getDb,
+  closeDb,
   upsertUser,
   getUser,
   getUserLanguage,

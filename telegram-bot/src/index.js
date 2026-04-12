@@ -15,11 +15,53 @@
  * ─── Context Routing ─────────────────────────────────────────
  * OPS_GROUP_ID (-1003967447285) → Operations management mode
  * All other chats                → Public bot mode (property search, AI, etc.)
+ *
+ * ─── Stability Layer (v6) ────────────────────────────────────
+ * - Global uncaught exception / unhandled rejection handlers
+ * - All handlers wrapped in safeHandler / safeCallback
+ * - Health monitoring with self-ping and webhook verification
+ * - Graceful shutdown with DB cleanup
+ * - Structured logging with timestamps
  */
+
+// ─── Global Process Error Handlers ──────────────────────────
+// These MUST be registered before anything else to catch startup errors.
+// They log errors but do NOT crash the process.
+process.on('uncaughtException', (err) => {
+  try {
+    const log = require('./utils/logger');
+    log.error('Process', 'UNCAUGHT EXCEPTION (process kept alive)', {
+      error: err.message,
+      stack: (err.stack || '').split('\n').slice(0, 5).join(' → '),
+    });
+  } catch (_) {
+    console.error('[FATAL] Uncaught Exception:', err);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  try {
+    const log = require('./utils/logger');
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? (reason.stack || '').split('\n').slice(0, 5).join(' → ') : '';
+    log.error('Process', 'UNHANDLED REJECTION (process kept alive)', {
+      error: msg,
+      stack,
+    });
+  } catch (_) {
+    console.error('[FATAL] Unhandled Rejection:', reason);
+  }
+});
+
 const { Telegraf, session } = require("telegraf");
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+
+// ─── Utilities ──────────────────────────────────────────────
+const log = require("./utils/logger");
+const { safeHandler, safeCallback, getLastMessageTime } = require("./utils/resilience");
+const healthMonitor = require("./utils/health");
 
 // ─── Heartbeat (for keep-alive monitor) ──────────────────────
 const HEARTBEAT_FILE = path.join(__dirname, "../.heartbeat");
@@ -145,13 +187,26 @@ function isOpsGroup(ctx) {
 // ─── Initialize Bot ───────────────────────────────────────────
 const bot = new Telegraf(config.botToken);
 bot.use(session());
-db.getDb();
 
-// ─── Global Error Handler ─────────────────────────────────────
+// Initialize public database
+try {
+  db.getDb();
+  log.info('Boot', 'Public database initialized');
+} catch (e) {
+  log.error('Boot', 'Public database init failed (non-fatal)', { error: e.message });
+}
+
+// ─── Global Error Handler (Telegraf) ─────────────────────────
 bot.catch((err, ctx) => {
   const cmd = ctx.message?.text?.split(" ")[0] || "unknown";
   const chat = ctx.chat?.id || "unknown";
-  console.error(`[Bot] Unhandled error in command "${cmd}" (chat ${chat}):`, err.message);
+  const userId = ctx.from?.id || "unknown";
+  log.error('Bot', `Unhandled error in command "${cmd}"`, {
+    chatId: chat,
+    userId,
+    error: err.message,
+    stack: (err.stack || '').split('\n').slice(0, 3).join(' → '),
+  });
   // Never send error replies in the ops group — only in private chats
   const isPrivate = ctx.chat?.type === 'private';
   if (isPrivate && ctx.reply) {
@@ -164,131 +219,131 @@ bot.catch((err, ctx) => {
 // Public commands are ignored in the ops group.
 
 // /start — only in private chats
-bot.start((ctx) => {
+bot.start(safeHandler('cmd:start', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleStart(ctx);
-});
+}));
 
 // /help — only in private chats
-bot.help((ctx) => {
+bot.help(safeHandler('cmd:help', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleHelp(ctx);
-});
+}));
 
 // /search — only in private chats
-bot.command("search", (ctx) => {
+bot.command("search", safeHandler('cmd:search', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleSearch(ctx);
-});
+}));
 
-bot.command("language", (ctx) => {
+bot.command("language", safeHandler('cmd:language', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleLanguage(ctx);
-});
+}));
 
-bot.command("notifications", (ctx) => {
+bot.command("notifications", safeHandler('cmd:notifications', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleNotifications(ctx);
-});
+}));
 
 // Phase 2: Booking commands (private only)
-bot.command("book", (ctx) => {
+bot.command("book", safeHandler('cmd:book', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleBook(ctx);
-});
-bot.command("mybookings", (ctx) => {
+}));
+bot.command("mybookings", safeHandler('cmd:mybookings', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleMyBookings(ctx);
-});
+}));
 
 // Phase 2: Alert commands (private only)
-bot.command("alerts", (ctx) => {
+bot.command("alerts", safeHandler('cmd:alerts', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleAlerts(ctx);
-});
-bot.command("subscribe", (ctx) => {
+}));
+bot.command("subscribe", safeHandler('cmd:subscribe', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleSubscribe(ctx);
-});
-bot.command("unsubscribe", (ctx) => {
+}));
+bot.command("unsubscribe", safeHandler('cmd:unsubscribe', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleUnsubscribe(ctx);
-});
+}));
 
 // Phase 3: Admin commands
-bot.command("admin", (ctx) => {
+bot.command("admin", safeHandler('cmd:admin', (ctx) => {
   if (isOpsGroup(ctx)) return handleOpsAdmin(ctx);
   return handleAdminLogin(ctx);
-});
-bot.command("stats", (ctx) => {
+}));
+bot.command("stats", safeHandler('cmd:stats', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleStats(ctx);
-});
-bot.command("broadcast", (ctx) => {
+}));
+bot.command("broadcast", safeHandler('cmd:broadcast', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleBroadcast(ctx);
-});
-bot.command("manage_bookings", (ctx) => {
+}));
+bot.command("manage_bookings", safeHandler('cmd:manage_bookings', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleManageBookings(ctx);
-});
-bot.command("manage_listings", (ctx) => {
+}));
+bot.command("manage_listings", safeHandler('cmd:manage_listings', (ctx) => {
   if (isOpsGroup(ctx)) return;
   return handleManageListings(ctx);
-});
+}));
 
 // ─── Phase 4: Ops Group Commands ─────────────────────────────
 
-bot.command("task",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTask(ctx); });
-bot.command("checklist",     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsChecklist(ctx); });
-bot.command("tasks",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTasks(ctx); });
-bot.command("done",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsDone(ctx); });
-bot.command("remind",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRemind(ctx); });
-bot.command("summary",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSummary(ctx); });
-bot.command("kpi",           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsKpi(ctx); });
-bot.command("property",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsProperty(ctx); });
-bot.command("move",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMove(ctx); });
+bot.command("task",          safeHandler('ops:task',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTask(ctx); }));
+bot.command("checklist",     safeHandler('ops:checklist',     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsChecklist(ctx); }));
+bot.command("tasks",         safeHandler('ops:tasks',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTasks(ctx); }));
+bot.command("done",          safeHandler('ops:done',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsDone(ctx); }));
+bot.command("remind",        safeHandler('ops:remind',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRemind(ctx); }));
+bot.command("summary",       safeHandler('ops:summary',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSummary(ctx); }));
+bot.command("kpi",           safeHandler('ops:kpi',           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsKpi(ctx); }));
+bot.command("property",      safeHandler('ops:property',      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsProperty(ctx); }));
+bot.command("move",          safeHandler('ops:move',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMove(ctx); }));
 
 // Phase 4 v3
-bot.command("sla",           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSla(ctx); });
-bot.command("approve",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsApprove(ctx); });
-bot.command("reject",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsReject(ctx); });
-bot.command("recurring",     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRecurring(ctx); });
-bot.command("depends",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsDepends(ctx); });
-bot.command("handover",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsHandover(ctx); });
-bot.command("monthlyreport", (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMonthlyReport(ctx); });
-bot.command("expense",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsExpense(ctx); });
-bot.command("expenses",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsExpenses(ctx); });
-bot.command("occupancy",     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsOccupancy(ctx); });
-bot.command("meeting",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMeeting(ctx); });
-bot.command("gsync",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsGsync(ctx); });
+bot.command("sla",           safeHandler('ops:sla',           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSla(ctx); }));
+bot.command("approve",       safeHandler('ops:approve',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsApprove(ctx); }));
+bot.command("reject",        safeHandler('ops:reject',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsReject(ctx); }));
+bot.command("recurring",     safeHandler('ops:recurring',     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRecurring(ctx); }));
+bot.command("depends",       safeHandler('ops:depends',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsDepends(ctx); }));
+bot.command("handover",      safeHandler('ops:handover',      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsHandover(ctx); }));
+bot.command("monthlyreport", safeHandler('ops:monthlyreport', (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMonthlyReport(ctx); }));
+bot.command("expense",       safeHandler('ops:expense',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsExpense(ctx); }));
+bot.command("expenses",      safeHandler('ops:expenses',      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsExpenses(ctx); }));
+bot.command("occupancy",     safeHandler('ops:occupancy',     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsOccupancy(ctx); }));
+bot.command("meeting",       safeHandler('ops:meeting',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMeeting(ctx); }));
+bot.command("gsync",         safeHandler('ops:gsync',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsGsync(ctx); }));
 
 // Phase 4 v4
-bot.command("setrole",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSetRole(ctx); });
-bot.command("roles",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRoles(ctx); });
-bot.command("audit",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAudit(ctx); });
-bot.command("verify",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsVerify(ctx); });
-bot.command("onboarding",    (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsOnboarding(ctx); });
-bot.command("team",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTeam(ctx); });
-bot.command("performance",   (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPerformance(ctx); });
-bot.command("leaderboard",   (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsLeaderboard(ctx); });
-bot.command("away",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAway(ctx); });
-bot.command("back",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsBack(ctx); });
-bot.command("availability",  (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAvailability(ctx); });
-bot.command("poll",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPoll(ctx); });
-bot.command("pin",           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPin(ctx); });
+bot.command("setrole",       safeHandler('ops:setrole',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsSetRole(ctx); }));
+bot.command("roles",         safeHandler('ops:roles',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsRoles(ctx); }));
+bot.command("audit",         safeHandler('ops:audit',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAudit(ctx); }));
+bot.command("verify",        safeHandler('ops:verify',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsVerify(ctx); }));
+bot.command("onboarding",    safeHandler('ops:onboarding',    (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsOnboarding(ctx); }));
+bot.command("team",          safeHandler('ops:team',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTeam(ctx); }));
+bot.command("performance",   safeHandler('ops:performance',   (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPerformance(ctx); }));
+bot.command("leaderboard",   safeHandler('ops:leaderboard',   (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsLeaderboard(ctx); }));
+bot.command("away",          safeHandler('ops:away',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAway(ctx); }));
+bot.command("back",          safeHandler('ops:back',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsBack(ctx); }));
+bot.command("availability",  safeHandler('ops:availability',  (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAvailability(ctx); }));
+bot.command("poll",          safeHandler('ops:poll',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPoll(ctx); }));
+bot.command("pin",           safeHandler('ops:pin',           (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPin(ctx); }));
 
 // Phase 4 v5
-bot.command("mlog",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMlog(ctx); });
-bot.command("workflow",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsWorkflow(ctx); });
-bot.command("template",      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTemplate(ctx); });
-bot.command("trends",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTrends(ctx); });
-bot.command("weather",       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsWeather(ctx); });
-bot.command("clean",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsClean(ctx); });
-bot.command("idea",          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsIdea(ctx); });
-bot.command("ideas",         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsIdeas(ctx); });
-bot.command("brainstorm",    (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsBrainstorm(ctx); });
-bot.command("photos",        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPhotos(ctx); });
+bot.command("mlog",          safeHandler('ops:mlog',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMlog(ctx); }));
+bot.command("workflow",      safeHandler('ops:workflow',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsWorkflow(ctx); }));
+bot.command("template",      safeHandler('ops:template',      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTemplate(ctx); }));
+bot.command("trends",        safeHandler('ops:trends',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTrends(ctx); }));
+bot.command("weather",       safeHandler('ops:weather',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsWeather(ctx); }));
+bot.command("clean",         safeHandler('ops:clean',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsClean(ctx); }));
+bot.command("idea",          safeHandler('ops:idea',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsIdea(ctx); }));
+bot.command("ideas",         safeHandler('ops:ideas',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsIdeas(ctx); }));
+bot.command("brainstorm",    safeHandler('ops:brainstorm',    (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsBrainstorm(ctx); }));
+bot.command("photos",        safeHandler('ops:photos',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPhotos(ctx); }));
 
 // ─── Text Message Handler ─────────────────────────────────────
 
@@ -310,7 +365,7 @@ const ALL_BUTTON_LABELS = (() => {
   return map;
 })();
 
-bot.on("text", async (ctx) => {
+bot.on("text", safeHandler('on:text', async (ctx) => {
   const chatId = ctx.chat.id;
   const chatType = ctx.chat.type;
   const isPrivate = chatType === "private";
@@ -331,11 +386,15 @@ bot.on("text", async (ctx) => {
     try {
       await handleV4Passive(ctx);
     } catch (e) {
-      console.error("[Bot] v4 passive error:", e.message);
+      log.error('Bot', 'v4 passive error', { error: e.message });
     }
 
     // v3 passive monitoring: detect follow-up promises
-    await handleOpsPassive(ctx);
+    try {
+      await handleOpsPassive(ctx);
+    } catch (e) {
+      log.error('Bot', 'v3 passive error', { error: e.message });
+    }
 
     // Active AI response: only when @mentioned or replying to bot
     const botUsername = bot.botInfo?.username || "monthlykey_bot";
@@ -343,7 +402,11 @@ bot.on("text", async (ctx) => {
     const isReplyToBot = ctx.message.reply_to_message?.from?.id === bot.botInfo?.id;
 
     if (isMentioned || isReplyToBot) {
-      await handleOpsMessage(ctx, ai.getOpenAIClient());
+      try {
+        await handleOpsMessage(ctx, ai.getOpenAIClient());
+      } catch (e) {
+        log.error('Bot', 'Ops AI message error', { error: e.message });
+      }
     }
     return;
   }
@@ -460,76 +523,51 @@ bot.on("text", async (ctx) => {
       await ctx.reply(aiResponse, { parse_mode: "Markdown" });
     }
   } catch (error) {
-    console.error("[Bot] Error in text handler:", error.message);
+    log.error('Bot', 'Error in text handler AI response', { error: error.message, chatId });
     try {
       await ctx.reply(t(lang, "error"), { message_thread_id: ctx.message?.message_thread_id || undefined });
     } catch (e) {
-      console.error("[Bot] Could not send error reply:", e.message);
+      log.error('Bot', 'Could not send error reply', { error: e.message });
     }
   }
-});
+}));
 
 // ─── Phase 4: Ops Group — Photo/Document Logging (Feature 6) ──
-bot.on(["photo", "document", "video"], async (ctx) => {
+bot.on(["photo", "document", "video"], safeHandler('on:media', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
-  try {
-    await handleOpsMedia(ctx);
-  } catch (e) {
-    console.error("[Bot] Ops media handler error:", e.message);
-  }
-});
+  await handleOpsMedia(ctx);
+}));
 
 // ─── Phase 4: Ops Group — Voice Note Transcription (Feature 10) ─
-bot.on(["voice", "audio"], async (ctx) => {
+bot.on(["voice", "audio"], safeHandler('on:voice', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
-  try {
-    await handleOpsVoice(ctx, ai.getOpenAIClient());
-  } catch (e) {
-    console.error("[Bot] Ops voice handler error:", e.message);
-  }
-});
+  await handleOpsVoice(ctx, ai.getOpenAIClient());
+}));
 
 // ─── Phase 4 v4: New Member Welcome ──────────────────────────
-bot.on("new_chat_members", async (ctx) => {
+bot.on("new_chat_members", safeHandler('on:new_member', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
-  try {
-    for (const member of ctx.message.new_chat_members) {
-      await handleNewMember(ctx, member);
-    }
-  } catch (e) {
-    console.error("[Bot] New member handler error:", e.message);
+  for (const member of ctx.message.new_chat_members) {
+    await handleNewMember(ctx, member);
   }
-});
+}));
 
 // ─── Phase 4 v4: Poll Callbacks ─────────────────────────────
-bot.action(/^poll_vote_/, async (ctx) => {
+bot.action(/^poll_vote_/, safeCallback('cb:poll_vote', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
-  try {
-    await handlePollCallback(ctx);
-  } catch (e) {
-    console.error("[Bot] Poll callback error:", e.message);
-  }
-});
+  await handlePollCallback(ctx);
+}));
 
-bot.action(/^photo_(approve|reject)_(\d+)$/, async (ctx) => {
+bot.action(/^photo_(approve|reject)_(\d+)$/, safeCallback('cb:photo_review', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
-  try {
-    await handlePhotoReviewCallback(ctx);
-  } catch (e) {
-    console.error("[Bot] Photo review callback error:", e.message);
-  }
-});
+  await handlePhotoReviewCallback(ctx);
+}));
 
 // ─── Phase 5 v5: Idea Vote Callbacks ────────────────────────
-bot.action(/^idea_vote_\d+$/, async (ctx) => {
+bot.action(/^idea_vote_\d+$/, safeCallback('cb:idea_vote', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
-  try {
-    await handleIdeaVoteCallback(ctx);
-  } catch (e) {
-    console.error("[Bot] Idea vote callback error:", e.message);
-    await ctx.answerCbQuery("\u274c Error recording vote").catch(() => {});
-  }
-});
+  await handleIdeaVoteCallback(ctx);
+}));
 
 // ─── Inline Search & Callbacks ────────────────────────────────
 
@@ -615,33 +653,38 @@ async function setupBot() {
       },
     });
 
-    console.log("[Bot] Commands and Menu Button configured");
-    console.log(`[Bot] Mini App URL: ${config.webappUrl}`);
-    console.log(`[Bot] Ops Group ID: ${OPS_GROUP_ID}`);
+    log.info('Bot', 'Commands and Menu Button configured');
+    log.info('Bot', `Mini App URL: ${config.webappUrl}`);
+    log.info('Bot', `Ops Group ID: ${OPS_GROUP_ID}`);
 
     if (config.adminIds.length > 0) {
-      console.log(`[Bot] Admin IDs: ${config.adminIds.join(", ")}`);
+      log.info('Bot', `Admin IDs: ${config.adminIds.join(", ")}`);
     }
 
     initChannelPosting(bot);
   } catch (error) {
-    console.error("[Bot] Error setting up commands/menu:", error.message);
+    log.error('Bot', 'Error setting up commands/menu', { error: error.message });
   }
 }
 
 // ─── Initialize DB Tables ─────────────────────────────────────
 // Must happen BEFORE the bot starts handling updates.
+let v4Ready = false;
+let v5Ready = false;
+
 try {
   initV4();
-  console.log("[Bot] v4 tables initialized");
+  v4Ready = true;
+  log.info('Boot', 'v4 tables initialized');
 } catch (e) {
-  console.error("[Bot] v4 init error:", e.message);
+  log.error('Boot', 'v4 init error', { error: e.message });
 }
 try {
   initV5Tables();
-  console.log("[Bot] v5 tables initialized");
+  v5Ready = true;
+  log.info('Boot', 'v5 tables initialized');
 } catch (e) {
-  console.error("[Bot] v5 init error:", e.message);
+  log.error('Boot', 'v5 init error', { error: e.message });
 }
 
 // ─── WEBHOOK MODE ─────────────────────────────────────────────
@@ -657,66 +700,168 @@ const WEBHOOK_URL    = `https://${WEBHOOK_DOMAIN}${WEBHOOK_PATH}`;
 const app = express();
 app.use(express.json());
 
-// Health check endpoint — Railway uses this to confirm the service is up
+// ─── Request timeout middleware ──────────────────────────────
+// Ensure webhook requests don't hang forever
+app.use((req, res, next) => {
+  // Set a 25-second timeout for all requests
+  req.setTimeout(25000);
+  res.setTimeout(25000);
+  next();
+});
+
+// ─── Health check endpoint — enhanced with detailed status ──
 app.get("/", (req, res) => {
+  const errorStats = log.getErrorStats();
+  const lastMsg = getLastMessageTime();
   res.json({
     status: "ok",
     mode: "webhook",
     bot: bot.botInfo ? "@" + bot.botInfo.username : "starting",
-    uptime: process.uptime(),
+    uptime: Math.round(process.uptime()),
+    uptimeHuman: formatUptime(process.uptime()),
+    lastMessageProcessed: lastMsg ? new Date(lastMsg).toISOString() : null,
+    lastMessageAgo: lastMsg ? Math.round((Date.now() - lastMsg) / 1000) + 's' : null,
+    errors: {
+      total: errorStats.totalErrors,
+      recent: errorStats.recentErrors,
+    },
+    memory: {
+      rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB',
+    },
+    subsystems: {
+      v4: v4Ready,
+      v5: v5Ready,
+      webhook: WEBHOOK_URL,
+    },
     timestamp: new Date().toISOString(),
   });
 });
 
 app.get("/health", (req, res) => {
+  const errorStats = log.getErrorStats();
+  const lastMsg = getLastMessageTime();
   res.json({
     status: "ok",
     mode: "webhook",
     bot: bot.botInfo ? "@" + bot.botInfo.username : "starting",
-    uptime: process.uptime(),
+    uptime: Math.round(process.uptime()),
+    uptimeHuman: formatUptime(process.uptime()),
+    lastMessageProcessed: lastMsg ? new Date(lastMsg).toISOString() : null,
+    lastMessageAgo: lastMsg ? Math.round((Date.now() - lastMsg) / 1000) + 's' : null,
+    errors: {
+      total: errorStats.totalErrors,
+      recent: errorStats.recentErrors,
+    },
+    memory: {
+      rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB',
+    },
+    subsystems: {
+      v4: v4Ready,
+      v5: v5Ready,
+      webhook: WEBHOOK_URL,
+    },
     timestamp: new Date().toISOString(),
   });
 });
 
-// Telegram sends all updates to this endpoint
+function formatUptime(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const parts = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(' ');
+}
+
+// ─── Webhook endpoint — return 200 quickly, process in background ──
 app.post(WEBHOOK_PATH, (req, res) => {
-  bot.handleUpdate(req.body, res);
+  // Immediately acknowledge receipt to Telegram
+  // This prevents Telegram from retrying if processing takes time
+  res.status(200).json({ ok: true });
+
+  // Process the update in the background
+  try {
+    bot.handleUpdate(req.body).catch((err) => {
+      log.error('Webhook', 'Error processing update in background', {
+        error: err.message,
+        updateId: req.body?.update_id,
+      });
+    });
+  } catch (err) {
+    log.error('Webhook', 'Sync error handling update', {
+      error: err.message,
+      updateId: req.body?.update_id,
+    });
+  }
 });
 
 // ─── Start Express + Register Webhook ────────────────────────
 async function startWebhook() {
+  log.startupBanner({ port: PORT });
+
   // 1. Fetch bot info first (needed by handlers that reference bot.botInfo)
   try {
     bot.botInfo = await bot.telegram.getMe();
-    console.log(`[Bot] Connected as @${bot.botInfo.username}`);
+    log.info('Boot', `Connected as @${bot.botInfo.username}`);
   } catch (e) {
-    console.error("[Bot] getMe failed:", e.message);
+    log.error('Boot', 'getMe failed — will retry in 10s', { error: e.message });
+    // Retry once after delay
+    await new Promise(r => setTimeout(r, 10000));
+    try {
+      bot.botInfo = await bot.telegram.getMe();
+      log.info('Boot', `Connected as @${bot.botInfo.username} (retry)`);
+    } catch (e2) {
+      log.error('Boot', 'getMe retry also failed', { error: e2.message });
+    }
   }
 
-  // 2. Register webhook with Telegram
+  // 2. Register webhook with Telegram (with verification)
   try {
-    await bot.telegram.setWebhook(WEBHOOK_URL, {
-      drop_pending_updates: true,
-      allowed_updates: [
-        "message", "edited_message", "callback_query",
-        "inline_query", "chosen_inline_result",
-        "chat_member", "my_chat_member",
-      ],
-    });
-    console.log(`[Bot] Webhook registered: ${WEBHOOK_URL}`);
+    // First check current webhook status
+    const currentInfo = await bot.telegram.getWebhookInfo();
+    if (currentInfo.url === WEBHOOK_URL) {
+      log.info('Boot', 'Webhook already correctly registered', { url: WEBHOOK_URL });
+    } else {
+      log.info('Boot', 'Registering webhook...', {
+        current: currentInfo.url || '(none)',
+        target: WEBHOOK_URL,
+      });
+      await bot.telegram.setWebhook(WEBHOOK_URL, {
+        drop_pending_updates: true,
+        allowed_updates: [
+          "message", "edited_message", "callback_query",
+          "inline_query", "chosen_inline_result",
+          "chat_member", "my_chat_member",
+        ],
+      });
+      log.info('Boot', `Webhook registered: ${WEBHOOK_URL}`);
+    }
+
+    // Verify webhook was set correctly
+    const verifyInfo = await bot.telegram.getWebhookInfo();
+    if (verifyInfo.url === WEBHOOK_URL) {
+      log.info('Boot', 'Webhook verified OK');
+    } else {
+      log.warn('Boot', 'Webhook verification mismatch', {
+        expected: WEBHOOK_URL,
+        actual: verifyInfo.url,
+      });
+    }
   } catch (e) {
-    console.error("[Bot] setWebhook failed:", e.message);
+    log.error('Boot', 'setWebhook failed', { error: e.message });
   }
 
   // 3. Start Express server
   app.listen(PORT, () => {
-    console.log("-------------------------------------------");
-    console.log("Monthly Key Telegram Bot is RUNNING (WEBHOOK)");
-    console.log(`Bot Username: @${bot.botInfo?.username || "unknown"}`);
-    console.log(`Webhook URL: ${WEBHOOK_URL}`);
-    console.log(`HTTP Port: ${PORT}`);
-    console.log("Phase 4: Ops Group v5 — 49 Features");
-    console.log("-------------------------------------------");
+    log.info('Boot', `HTTP server listening on port ${PORT}`);
   });
 
   // 4. Run one-time setup (commands, menu button, channel posting)
@@ -724,22 +869,103 @@ async function startWebhook() {
 
   // 5. Start the ops scheduler (cron jobs: morning briefing, check-ins, daily report)
   startOpsScheduler(bot);
+
+  // 6. Start health monitor (self-ping + webhook verification)
+  healthMonitor.init(bot, WEBHOOK_URL, PORT);
+
+  // 7. Log system readiness
+  log.systemReady({
+    'Express Server': true,
+    'Webhook': true,
+    'Bot Info': !!bot.botInfo,
+    'Public DB': true,
+    'Ops DB v4': v4Ready,
+    'Ops DB v5': v5Ready,
+    'Scheduler': true,
+    'Health Monitor': true,
+    'Channel Posting': true,
+  });
+
   writeHeartbeat();
 }
 
 startWebhook().catch((err) => {
-  console.error("[Bot] Fatal startup error:", err);
-  process.exit(1);
+  log.error('Boot', 'Fatal startup error', { error: err.message, stack: err.stack });
+  // Don't exit immediately — give logs time to flush
+  setTimeout(() => process.exit(1), 2000);
 });
 
-// Enable graceful stop
-process.once("SIGINT", () => {
-  stopChannelPosting();
-  stopOpsScheduler();
-  process.exit(0);
-});
-process.once("SIGTERM", () => {
-  stopChannelPosting();
-  stopOpsScheduler();
-  process.exit(0);
-});
+// ─── Graceful Shutdown ──────────────────────────────────────
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  log.info('Shutdown', `Received ${signal} — starting graceful shutdown...`);
+
+  // 1. Stop accepting new updates
+  try {
+    healthMonitor.stop();
+    log.info('Shutdown', 'Health monitor stopped');
+  } catch (e) {
+    log.warn('Shutdown', 'Error stopping health monitor', { error: e.message });
+  }
+
+  // 2. Stop channel posting
+  try {
+    stopChannelPosting();
+    log.info('Shutdown', 'Channel posting stopped');
+  } catch (e) {
+    log.warn('Shutdown', 'Error stopping channel posting', { error: e.message });
+  }
+
+  // 3. Stop scheduler
+  try {
+    stopOpsScheduler();
+    log.info('Shutdown', 'Ops scheduler stopped');
+  } catch (e) {
+    log.warn('Shutdown', 'Error stopping scheduler', { error: e.message });
+  }
+
+  // 4. Close database connections
+  try {
+    const publicDb = db.getDb();
+    if (publicDb && publicDb.open) {
+      publicDb.close();
+      log.info('Shutdown', 'Public database closed');
+    }
+  } catch (e) {
+    log.warn('Shutdown', 'Error closing public database', { error: e.message });
+  }
+
+  try {
+    const opsDb = require("./services/ops-database");
+    const opsDbInstance = opsDb.getDb();
+    if (opsDbInstance && opsDbInstance.open) {
+      opsDbInstance.close();
+      log.info('Shutdown', 'Ops database closed');
+    }
+  } catch (e) {
+    log.warn('Shutdown', 'Error closing ops database', { error: e.message });
+  }
+
+  try {
+    const opsDbV5 = require("./services/ops-database-v5");
+    // v5 uses its own getDb() — try to close it
+    if (typeof opsDbV5.closeDb === 'function') {
+      opsDbV5.closeDb();
+      log.info('Shutdown', 'Ops v5 database closed');
+    }
+  } catch (e) {
+    log.warn('Shutdown', 'Error closing ops v5 database', { error: e.message });
+  }
+
+  log.info('Shutdown', 'Graceful shutdown complete. Exiting.');
+
+  // Give logs time to flush
+  setTimeout(() => process.exit(0), 1000);
+}
+
+process.once("SIGINT", () => gracefulShutdown('SIGINT'));
+process.once("SIGTERM", () => gracefulShutdown('SIGTERM'));

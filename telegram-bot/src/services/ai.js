@@ -1,19 +1,28 @@
 /**
  * AI Chatbot Service for Monthly Key Telegram Bot
  * Uses OpenAI GPT-4.1-mini for intelligent customer support
+ *
+ * Stability improvements:
+ *  - Retry with exponential backoff for OpenAI API failures
+ *  - Separate error handling for DB writes vs API calls
+ *  - Structured logging with context
  */
 const { OpenAI } = require("openai");
 const config = require("../config");
 const db = require("./database");
+const log = require("../utils/logger");
+const { safeOpenAICall, safeDbCall } = require("../utils/resilience");
 
 // Support OpenAI-compatible proxy via OPENAI_BASE_URL / OPENAI_API_BASE env vars
 const openaiBaseUrl = process.env.OPENAI_BASE_URL || process.env.OPENAI_API_BASE || undefined;
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
+  timeout: 30000,       // 30s timeout for API calls
+  maxRetries: 0,        // We handle retries ourselves
 });
 if (openaiBaseUrl) {
-  console.log(`[AI] Using OpenAI proxy: ${openaiBaseUrl}`);
+  log.info('AI', `Using OpenAI proxy: ${openaiBaseUrl}`);
 }
 
 /**
@@ -123,26 +132,30 @@ function detectLanguage(text) {
 
 /**
  * Get AI response for a user message
+ * Now with retry logic for OpenAI API failures
  */
 async function getAiResponse(chatId, userMessage, ctx = null) {
   try {
     // Safety: ensure user row exists before any DB writes (prevents FK constraint errors)
-    if (!db.getUser(chatId)) {
-      db.upsertUser(chatId, { language: "ar" });
-    }
+    safeDbCall(() => {
+      if (!db.getUser(chatId)) {
+        db.upsertUser(chatId, { language: "ar" });
+      }
+    }, undefined, 'ensure_user_exists');
+
     // Get user's preferred language
-    let lang = db.getUserLanguage(chatId);
+    let lang = safeDbCall(() => db.getUserLanguage(chatId), "ar", 'get_user_lang');
     
     // Also detect language from the message
     const detectedLang = detectLanguage(userMessage);
     if (detectedLang) {
       lang = detectedLang;
       // Update user's language preference based on what they write
-      db.setUserLanguage(chatId, detectedLang);
+      safeDbCall(() => db.setUserLanguage(chatId, detectedLang), undefined, 'set_user_lang');
     }
 
     // Get conversation history for context
-    const history = db.getConversationHistory(chatId, 10);
+    const history = safeDbCall(() => db.getConversationHistory(chatId, 10), [], 'get_conv_history');
 
     // Build messages array
     const messages = [
@@ -154,27 +167,39 @@ async function getAiResponse(chatId, userMessage, ctx = null) {
       { role: "user", content: userMessage },
     ];
 
-    // Call OpenAI
-    const completion = await openai.chat.completions.create({
-      model: config.aiModel,
-      messages,
-      max_tokens: 1000,
-      temperature: 0.7,
-    });
+    // Call OpenAI with retry logic
+    const fallbackMsg = lang === "ar"
+      ? "عذراً، حدث خطأ في معالجة طلبك. يرجى المحاولة مرة أخرى لاحقاً. 🙏"
+      : "Sorry, an error occurred while processing your request. Please try again later. 🙏";
+
+    const completion = await safeOpenAICall(
+      () => openai.chat.completions.create({
+        model: config.aiModel,
+        messages,
+        max_tokens: 1000,
+        temperature: 0.7,
+      }),
+      { name: 'getAiResponse', fallback: null }
+    );
+
+    // If OpenAI call failed after retries, return fallback
+    if (!completion) {
+      return fallbackMsg;
+    }
 
     const reply = completion.choices[0]?.message?.content || 
       (lang === "ar" 
         ? "عذراً، لم أتمكن من معالجة طلبك. يرجى المحاولة مرة أخرى."
         : "Sorry, I couldn't process your request. Please try again.");
 
-    // Save conversation to database
-    db.addMessage(chatId, "user", userMessage);
-    db.addMessage(chatId, "assistant", reply);
+    // Save conversation to database (non-critical — don't let DB errors affect response)
+    safeDbCall(() => db.addMessage(chatId, "user", userMessage), undefined, 'save_user_msg');
+    safeDbCall(() => db.addMessage(chatId, "assistant", reply), undefined, 'save_assistant_msg');
 
     return reply;
   } catch (error) {
-    console.error("[AI] Error getting response:", error.message);
-    const lang = db.getUserLanguage(chatId);
+    log.error('AI', 'Error getting response', { error: error.message, chatId });
+    const lang = safeDbCall(() => db.getUserLanguage(chatId), "ar", 'get_lang_fallback');
     return lang === "ar"
       ? "عذراً، حدث خطأ في معالجة طلبك. يرجى المحاولة مرة أخرى لاحقاً. 🙏"
       : "Sorry, an error occurred while processing your request. Please try again later. 🙏";
@@ -270,15 +295,24 @@ STRICT RULES:
   - "📝 تم تسجيل التحديث من سعد القاسم: [Details]"
   - "🎉 تم إنجاز المهمة: [Title]"${historyContext}`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Sender: ${senderName}\nMessage: ${userMessage}` }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.1,
-    });
+    // Use retry logic for the OpenAI call
+    const completion = await safeOpenAICall(
+      () => openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Sender: ${senderName}\nMessage: ${userMessage}` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+      }),
+      { name: 'analyzeOpsMessage', fallback: null }
+    );
+
+    // If OpenAI call failed after retries
+    if (!completion) {
+      return { category: "general", actionable: false };
+    }
 
     const result = JSON.parse(completion.choices[0]?.message?.content || "{}");
     
@@ -289,7 +323,7 @@ STRICT RULES:
     
     return result;
   } catch (error) {
-    console.error("[AI] Error analyzing ops message:", error.message);
+    log.error('AI', 'Error analyzing ops message', { error: error.message, sender: senderName });
     return { category: "general", actionable: false };
   }
 }

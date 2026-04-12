@@ -5,6 +5,7 @@
 const path = require("path");
 const fs = require("fs");
 const Database = require("better-sqlite3");
+const log = require("../utils/logger");
 
 const DB_PATH = path.join(__dirname, "..", "..", "data", "ops.db");
 let db;
@@ -13,10 +14,32 @@ function getDb() {
   if (!db) {
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
+    try {
+      db = new Database(DB_PATH);
+      db.pragma("journal_mode = WAL");
+      db.pragma("busy_timeout = 5000");
+      log.info('OpsDBv5', 'Database opened', { path: DB_PATH });
+    } catch (err) {
+      log.error('OpsDBv5', 'Failed to open database', { path: DB_PATH, error: err.message });
+      throw err;
+    }
   }
   return db;
+}
+
+/**
+ * Close the v5 database connection cleanly.
+ */
+function closeDb() {
+  if (db) {
+    try {
+      db.close();
+      db = null;
+      log.info('OpsDBv5', 'Database closed');
+    } catch (e) {
+      log.warn('OpsDBv5', 'Error closing database', { error: e.message });
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -480,6 +503,7 @@ function getWebsiteReadyPhotos(unitId) {
 
 module.exports = {
   initV5Tables,
+  closeDb,
   // Maintenance
   addMaintenanceLog, getMaintenanceByUnit, getMaintenanceSummary, getRecentMaintenance, getMaintenanceStats,
   // Workflows

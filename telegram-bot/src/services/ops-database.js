@@ -23,6 +23,7 @@
  */
 const Database = require("better-sqlite3");
 const path = require("path");
+const log = require("../utils/logger");
 
 // Use persistent volume on Railway (/app/data) if available, else local
 const VOLUME_PATH = "/app/data/ops.db";
@@ -52,12 +53,35 @@ function getDb() {
   if (!db) {
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
-    initTables();
-    runMigrations();
+    try {
+      db = new Database(DB_PATH);
+      db.pragma("journal_mode = WAL");
+      db.pragma("busy_timeout = 5000");
+      initTables();
+      runMigrations();
+      log.info('OpsDB', 'Database opened', { path: DB_PATH });
+    } catch (err) {
+      log.error('OpsDB', 'Failed to open database', { path: DB_PATH, error: err.message });
+      throw err;
+    }
   }
   return db;
+}
+
+/**
+ * Close the ops database connection cleanly.
+ * Used during graceful shutdown.
+ */
+function closeDb() {
+  if (db) {
+    try {
+      db.close();
+      db = null;
+      log.info('OpsDB', 'Database closed');
+    } catch (e) {
+      log.warn('OpsDB', 'Error closing database', { error: e.message });
+    }
+  }
 }
 
 function initTables() {
@@ -933,6 +957,7 @@ function getConversationHistory(chatId, threadId, limit = 20) {
 
 module.exports = {
   getDb,
+  closeDb,
   // Tasks
   addTask, getTasksByThread, getPendingTasksByThread, getAllPendingTasks, getTaskById,
   markTaskDone, markTaskPending, cancelTask, getTaskStats,

@@ -27,6 +27,7 @@ const opsDb = require("./ops-database");
 const v4Db = require("./ops-database-v4");
 const googleSync = require("./google-sync");
 const v5Handlers = require("../handlers/ops-v5");
+const log = require("../utils/logger");
 
 let bot = null;
 let schedulerInterval = null;
@@ -1123,44 +1124,59 @@ async function checkDailyWeather() {
 
 let tickCount = 0;
 
+/**
+ * Safely run a scheduler job. If it throws, log the error and continue.
+ * This ensures one failing job never stops other jobs from running.
+ */
+async function safeJob(name, fn) {
+  try {
+    await fn();
+  } catch (error) {
+    log.error('Scheduler', `Job "${name}" failed`, {
+      error: error.message,
+      stack: (error.stack || '').split('\n').slice(0, 3).join(' → '),
+    });
+  }
+}
+
 async function tick() {
   try {
     tickCount++;
 
     // Every tick (1 minute): reminders and follow-ups
-    await checkFollowUps();
-    await checkReminders();
+    await safeJob('checkFollowUps', checkFollowUps);
+    await safeJob('checkReminders', checkReminders);
 
     // Every 5 minutes: escalations, vendor, SLA, recurring, mentions, priority
     if (tickCount % 5 === 0) {
-      await checkEscalations();
-      await checkVendorFollowUps();
-      await checkSlaBreaches();
-      await processRecurringTasks();
-      await checkMentionAlerts();
-      await checkPriorityEscalation();
+      await safeJob('checkEscalations', checkEscalations);
+      await safeJob('checkVendorFollowUps', checkVendorFollowUps);
+      await safeJob('checkSlaBreaches', checkSlaBreaches);
+      await safeJob('processRecurringTasks', processRecurringTasks);
+      await safeJob('checkMentionAlerts', checkMentionAlerts);
+      await safeJob('checkPriorityEscalation', checkPriorityEscalation);
     }
 
     // Every 60 minutes: overdue pings
     if (tickCount % 60 === 0) {
-      await pingOverdueTasks();
+      await safeJob('pingOverdueTasks', pingOverdueTasks);
     }
 
     // Daily scheduled messages (checked every tick, deduped)
-    await sendMorningBriefing();
-    await sendPerEmployeeTaskBriefing();
-    await sendDailyReport();
-    await sendEveningReminder();
-    await sendAfternoonTaskFollowUp();
-    await syncToGoogle();
-    await sendCheckinReminder();
-    await flagUncheckedMembers();
-    await sendWeeklyCeoMessage();
-    await sendWeeklyStandup();
-    await checkDailyWeather();
+    await safeJob('sendMorningBriefing', sendMorningBriefing);
+    await safeJob('sendPerEmployeeTaskBriefing', sendPerEmployeeTaskBriefing);
+    await safeJob('sendDailyReport', sendDailyReport);
+    await safeJob('sendEveningReminder', sendEveningReminder);
+    await safeJob('sendAfternoonTaskFollowUp', sendAfternoonTaskFollowUp);
+    await safeJob('syncToGoogle', syncToGoogle);
+    await safeJob('sendCheckinReminder', sendCheckinReminder);
+    await safeJob('flagUncheckedMembers', flagUncheckedMembers);
+    await safeJob('sendWeeklyCeoMessage', sendWeeklyCeoMessage);
+    await safeJob('sendWeeklyStandup', sendWeeklyStandup);
+    await safeJob('checkDailyWeather', checkDailyWeather);
 
   } catch (error) {
-    console.error("[OpsScheduler] Tick error:", error.message);
+    log.error('Scheduler', 'Tick-level error (outer catch)', { error: error.message });
   }
 }
 
@@ -1320,22 +1336,26 @@ function startOpsScheduler(botInstance) {
   bot = botInstance;
 
   // Initialize the ops database
-  opsDb.getDb();
+  try {
+    opsDb.getDb();
+  } catch (e) {
+    log.error('Scheduler', 'Ops database init failed', { error: e.message });
+  }
 
   // Initialize v4 tables
   try {
     v4Db.initV4Tables();
-    console.log("[OpsScheduler] v4 tables initialized");
+    log.info('Scheduler', 'v4 tables initialized');
   } catch (e) {
-    console.error("[OpsScheduler] v4 init error:", e.message);
+    log.error('Scheduler', 'v4 init error', { error: e.message });
   }
 
   // Initialize v5 tables
   try {
     v5Handlers.initV5();
-    console.log("[OpsScheduler] v5 tables initialized");
+    log.info('Scheduler', 'v5 tables initialized');
   } catch (e) {
-    console.error("[OpsScheduler] v5 init error:", e.message);
+    log.error('Scheduler', 'v5 init error', { error: e.message });
   }
 
   // Initialize default SLA configs
@@ -1388,7 +1408,7 @@ function stopOpsScheduler() {
     clearInterval(schedulerInterval);
     schedulerInterval = null;
   }
-  console.log("[OpsScheduler] Stopped.");
+  log.info('Scheduler', 'Stopped');
 }
 
 module.exports = {
