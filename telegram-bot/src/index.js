@@ -825,26 +825,52 @@ try {
 
 setupBot();
 
-bot
-  .launch()
-  .then(() => {
-    writeHeartbeat();
-    console.log("-------------------------------------------");
-    console.log("Monthly Key Telegram Bot is RUNNING");
-    console.log(`Bot Username: @${bot.botInfo?.username || "Bot"}`);
-    console.log("Phase 1: Search, AI Chat, Notifications");
-    console.log("Phase 2: Booking, Payments, Alerts");
-    console.log("Phase 3: Admin, Channel, Multi-lang, Inline");
-    console.log("Phase 4: Ops Group v5 — 49 Features (Tasks, KPI, SLA, Roles, Audit, Polls, Ideas, Photos, etc.)");
-    console.log("Languages: AR, EN, FR, UR, HI");
-    console.log("-------------------------------------------");
+// ─── Launch with 409-Conflict Retry ──────────────────────────
+// During Railway rolling deployments, the old container keeps polling
+// for ~60s while the new one starts. Telegraf crashes on 409 Conflict.
+// This wrapper retries with exponential backoff so the new instance
+// takes over cleanly once the old container shuts down.
+async function launchWithRetry(attempt) {
+  attempt = attempt || 1;
+  const maxAttempts = 12;
+  const baseDelay = 5000;
+  try {
+    console.log('[Bot] Launch attempt ' + attempt + '/' + maxAttempts + '...');
+    await bot.launch({ dropPendingUpdates: false });
+    // bot.launch() never resolves during normal long-polling
+    // This block only runs on graceful stop
+    console.log('[Bot] Polling stopped gracefully.');
+  } catch (err) {
+    const msg = (err && err.message) ? err.message : String(err);
+    const is409 = (err && err.error_code === 409) || msg.includes('409');
+    if (is409 && attempt < maxAttempts) {
+      const delay = baseDelay * attempt;
+      console.warn('[Bot] 409 Conflict — old instance still running. Retrying in ' + (delay/1000) + 's (attempt ' + attempt + '/' + maxAttempts + ')...');
+      setTimeout(function() { launchWithRetry(attempt + 1); }, delay);
+    } else {
+      console.error('[Bot] Fatal launch error after ' + attempt + ' attempts:', msg);
+      process.exit(1);
+    }
+  }
+}
 
-    // Start the ops scheduler after bot is connected
+// Start scheduler once bot is connected (poll for botInfo)
+function waitForBotAndStartScheduler() {
+  if (bot.botInfo) {
+    writeHeartbeat();
+    console.log('-------------------------------------------');
+    console.log('Monthly Key Telegram Bot is RUNNING');
+    console.log('Bot Username: @' + bot.botInfo.username);
+    console.log('Phase 4: Ops Group v5 — 49 Features');
+    console.log('-------------------------------------------');
     startOpsScheduler(bot);
-  })
-  .catch((err) => {
-    console.error("Failed to launch bot:", err);
-  });
+  } else {
+    setTimeout(waitForBotAndStartScheduler, 1000);
+  }
+}
+
+launchWithRetry();
+waitForBotAndStartScheduler();
 
 // Enable graceful stop
 process.once("SIGINT", () => {
