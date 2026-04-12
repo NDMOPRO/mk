@@ -14,6 +14,7 @@
 const { Telegraf, session } = require("telegraf");
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
 
 // ─── Heartbeat (for keep-alive monitor) ──────────────────────
 const HEARTBEAT_FILE = path.join(__dirname, "../.heartbeat");
@@ -855,4 +856,27 @@ process.once("SIGTERM", () => {
   stopChannelPosting();
   stopOpsScheduler();
   bot.stop("SIGTERM");
+});
+
+// ─── HTTP Keepalive Server ────────────────────────────────────
+// Railway requires a process to either bind to PORT (web service)
+// or run indefinitely (worker). Without this, Node.js exits after
+// bot.launch() resolves, killing the bot. This minimal HTTP server
+// keeps the process alive and satisfies Railway health checks.
+const PORT = process.env.PORT || 3001;
+http.createServer((req, res) => {
+  if (req.url === '/health' || req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'ok',
+      bot: bot.botInfo ? '@' + bot.botInfo.username : 'starting',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString()
+    }));
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+}).listen(PORT, () => {
+  console.log('[Bot] HTTP keepalive server listening on port', PORT);
 });
