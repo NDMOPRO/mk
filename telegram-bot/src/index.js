@@ -827,55 +827,63 @@ setupBot();
 
 // ─── Launch with Robust 409-Conflict Recovery ──────────────
 // Strategy:
-// 1. Delete any stale webhook first (clears Telegram session)
-// 2. Use dropPendingUpdates to avoid processing old messages
-// 3. Retry INDEFINITELY with exponential backoff (never process.exit)
-// 4. Prevent duplicate retry chains with a lock flag
-let launchInProgress = false;
+// 1. Call /close to kill any ghost polling session on Telegram's side
+// 2. Delete webhook + drop pending updates
+// 3. Wait 10s for Telegram to fully release the polling lock
+// 4. Then launch with dropPendingUpdates:true
+// 5. Retry INDEFINITELY — NEVER call process.exit()
 let schedulerStarted = false;
+let launchLock = false;
+
+async function killGhostAndLaunch() {
+  if (launchLock) return;
+  launchLock = true;
+
+  // Step 1: Force-close any existing bot session on Telegram's servers
+  console.log('[Bot] Killing any ghost polling session...');
+  try {
+    const https = require('https');
+    const TOKEN = process.env.BOT_TOKEN || config.botToken;
+    await new Promise((resolve) => {
+      https.get('https://api.telegram.org/bot' + TOKEN + '/close', (res) => {
+        let d = ''; res.on('data', c => d += c); res.on('end', () => { console.log('[Bot] /close response:', d.substring(0, 80)); resolve(); });
+      }).on('error', (e) => { console.warn('[Bot] /close error:', e.message); resolve(); });
+    });
+  } catch(e) { console.warn('[Bot] /close warning:', e.message); }
+
+  // Step 2: Delete webhook
+  try {
+    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+    console.log('[Bot] Webhook deleted, pending updates dropped.');
+  } catch(e) { console.warn('[Bot] deleteWebhook warning:', e.message); }
+
+  // Step 3: Wait 10s for Telegram to release the polling lock
+  console.log('[Bot] Waiting 10s for Telegram to release polling lock...');
+  await new Promise(r => setTimeout(r, 10000));
+
+  // Step 4: Launch with retry
+  launchWithRetry(1);
+}
 
 async function launchWithRetry(attempt) {
-  if (launchInProgress) {
-    console.log('[Bot] Launch already in progress, skipping duplicate call');
-    return;
-  }
-  launchInProgress = true;
-  attempt = attempt || 1;
-  const maxDelay = 60000; // cap at 60s between retries
-
-  // Step 1: Clear any stale webhook/session before polling
-  if (attempt === 1) {
-    try {
-      console.log('[Bot] Clearing stale webhook/session...');
-      await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-      console.log('[Bot] Webhook cleared, pending updates dropped.');
-      // Wait 2s for Telegram to release the polling lock
-      await new Promise(r => setTimeout(r, 2000));
-    } catch (e) {
-      console.warn('[Bot] deleteWebhook warning:', e.message);
-    }
-  }
-
+  const maxDelay = 60000;
   try {
     console.log('[Bot] Launch attempt ' + attempt + '...');
     await bot.launch({ dropPendingUpdates: true });
-    // bot.launch() never resolves during normal long-polling
     console.log('[Bot] Polling stopped gracefully.');
   } catch (err) {
-    launchInProgress = false;
     const msg = (err && err.message) ? err.message : String(err);
     const is409 = (err && err.error_code === 409) || msg.includes('409');
+    const delay = is409 ? Math.min(5000 * attempt, maxDelay) : Math.min(10000 * attempt, maxDelay);
     if (is409) {
-      const delay = Math.min(5000 * attempt, maxDelay);
-      console.warn('[Bot] 409 Conflict — old session active. Retrying in ' + (delay/1000) + 's (attempt ' + attempt + ')...');
-      // Try to force-clear the session again
+      console.warn('[Bot] 409 Conflict — retrying in ' + (delay/1000) + 's (attempt ' + attempt + ')...');
+      // Force-close the ghost again before retrying
       try { await bot.telegram.deleteWebhook({ drop_pending_updates: true }); } catch(e) {}
-      setTimeout(function() { launchWithRetry(attempt + 1); }, delay);
     } else {
-      const delay = Math.min(10000 * attempt, maxDelay);
       console.error('[Bot] Launch error (attempt ' + attempt + '):', msg, '— retrying in ' + (delay/1000) + 's');
-      setTimeout(function() { launchWithRetry(attempt + 1); }, delay);
     }
+    // NEVER exit — always retry
+    setTimeout(function() { launchLock = false; launchWithRetry(attempt + 1); }, delay);
   }
 }
 
@@ -895,7 +903,7 @@ function waitForBotAndStartScheduler() {
   }
 }
 
-launchWithRetry();
+killGhostAndLaunch();
 waitForBotAndStartScheduler();
 
 // Enable graceful stop
