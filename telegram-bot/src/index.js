@@ -218,6 +218,10 @@ const {
   postCEOAnnouncement,
 } = require("./handlers/contacts");
 
+// Smart Hybrid Translation System
+const translationService = require("./services/translation");
+const { handleTranslate } = require("./handlers/translate");
+
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
 
@@ -414,8 +418,10 @@ bot.command("contact",           safeHandler('ops:contact',           (ctx) => {
 bot.command("deletecontact",     safeHandler('ops:deletecontact',     (ctx) => { if (!isOpsGroup(ctx)) return; return handleDeleteContact(ctx); }));
 bot.command("editcontact",       safeHandler('ops:editcontact',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleEditContact(ctx); }));
 
-// ─── Text Message Handler ─────────────────────────────────────
+// Smart Hybrid Translation System
+bot.command("translate",         safeHandler('ops:translate',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleTranslate(ctx); }));
 
+// ─── Text Message Handler ───────────────────────────────────────
 /**
  * Build a set of all button labels across all languages for quick lookup.
  */
@@ -499,6 +505,23 @@ bot.on("text", safeHandler('on:text', async (ctx) => {
       } catch (e) {
         log.error('Bot', 'Ops AI message error', { error: e.message });
       }
+    }
+
+    // Smart auto-translation: runs LAST, after all other handlers
+    try {
+      const result = await translationService.processAutoTranslation(userMessage, ctx);
+      if (result.shouldTranslate && result.translation) {
+        const threadId = ctx.message?.message_thread_id;
+        await ctx.reply(
+          `\uD83D\uDD04 "${result.translation}"`,
+          {
+            ...(threadId ? { message_thread_id: threadId } : {}),
+            reply_to_message_id: ctx.message.message_id,
+          }
+        );
+      }
+    } catch (e) {
+      log.error('Bot', 'Auto-translation error', { error: e.message });
     }
     return;
   }
@@ -636,6 +659,26 @@ bot.on(["photo", "document", "video"], safeHandler('on:media', async (ctx) => {
   }
 
   await handleOpsMedia(ctx);
+
+  // Smart auto-translation for photo/document captions
+  const caption = ctx.message?.caption || "";
+  if (caption) {
+    try {
+      const result = await translationService.processAutoTranslation(caption, ctx);
+      if (result.shouldTranslate && result.translation) {
+        const threadId = ctx.message?.message_thread_id;
+        await ctx.reply(
+          `\uD83D\uDD04 "${result.translation}"`,
+          {
+            ...(threadId ? { message_thread_id: threadId } : {}),
+            reply_to_message_id: ctx.message.message_id,
+          }
+        );
+      }
+    } catch (e) {
+      log.error('Bot', 'Auto-translation (caption) error', { error: e.message });
+    }
+  }
 }));
 
 // ─── Phase 4: Ops Group — Voice Note Transcription (Feature 10) ─
@@ -754,6 +797,7 @@ async function setupBot() {
         { command: "contact",       description: "Search contacts | بحث جهات اتصال" },
         { command: "editcontact",   description: "Edit contact | تعديل جهة اتصال" },
         { command: "deletecontact", description: "Delete contact | حذف جهة اتصال" },
+        { command: "translate",      description: "Translate message | ترجمة رسالة" },
       ], { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
     );
 
