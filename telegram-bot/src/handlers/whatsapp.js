@@ -32,7 +32,8 @@ function extractCommandArgs(text, command) {
 
 function escMd(text) {
   if (!text) return "";
-  return String(text).replace(/[_*[\]()~`>#+=|{}.!\\-]/g, "\\$&");
+  // Markdown v1 only needs _ * ` [ escaped
+  return String(text).replace(/([_*`\[])/g, "\\$1");
 }
 
 // ─── Track reply context: WhatsApp number → last incoming message info ──

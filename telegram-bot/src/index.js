@@ -226,6 +226,15 @@ const { handleTranslate } = require("./handlers/translate");
 const consultant = require("./services/consultant");
 const { handleConsultant } = require("./handlers/consultant");
 
+// Team Management (addmember, removemember, editmember, team display)
+const {
+  handleTeam: handleTeamManage,
+  handleAddMember,
+  handleRemoveMember,
+  handleEditMember,
+} = require("./handlers/team-manage");
+const { loadFromDatabase: loadTeamFromDb } = require("./team-members");
+
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
 
@@ -386,7 +395,7 @@ bot.command("roles",         safeHandler('ops:roles',         (ctx) => { if (!is
 bot.command("audit",         safeHandler('ops:audit',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAudit(ctx); }));
 bot.command("verify",        safeHandler('ops:verify',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsVerify(ctx); }));
 bot.command("onboarding",    safeHandler('ops:onboarding',    (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsOnboarding(ctx); }));
-bot.command("team",          safeHandler('ops:team',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsTeam(ctx); }));
+bot.command("team",          safeHandler('ops:team',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleTeamManage(ctx); }));
 bot.command("performance",   safeHandler('ops:performance',   (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPerformance(ctx); }));
 bot.command("leaderboard",   safeHandler('ops:leaderboard',   (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsLeaderboard(ctx); }));
 bot.command("away",          safeHandler('ops:away',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsAway(ctx); }));
@@ -427,6 +436,11 @@ bot.command("translate",         safeHandler('ops:translate',         (ctx) => {
 
 // AI Operations Consultant
 bot.command("consultant",        safeHandler('ops:consultant',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleConsultant(ctx); }));
+
+// Team Management — override /team with clean bilingual display, add /addmember etc.
+bot.command("addmember",         safeHandler('ops:addmember',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleAddMember(ctx); }));
+bot.command("removemember",      safeHandler('ops:removemember',      (ctx) => { if (!isOpsGroup(ctx)) return; return handleRemoveMember(ctx); }));
+bot.command("editmember",        safeHandler('ops:editmember',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleEditMember(ctx); }));
 
 // ─── Text Message Handler ───────────────────────────────────────
 /**
@@ -806,6 +820,9 @@ async function setupBot() {
         { command: "deletecontact", description: "Delete contact | حذف جهة اتصال" },
         { command: "translate",      description: "Translate message | ترجمة رسالة" },
         { command: "consultant",     description: "AI consultant report | تقرير المستشار" },
+        { command: "addmember",      description: "Add team member | إضافة عضو" },
+        { command: "removemember",   description: "Remove team member | إزالة عضو" },
+        { command: "editmember",     description: "Edit team member role | تعديل دور" },
       ], { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
     );
 
@@ -1032,7 +1049,15 @@ async function startWebhook() {
   // 4. Run one-time setup (commands, menu button, channel posting)
   await setupBot();
 
-  // 5. Start the ops scheduler (cron jobs: morning briefing, check-ins, daily report)
+  // 5. Load extended team members from database (merges with hardcoded registry)
+  try {
+    loadTeamFromDb();
+    log.info('Boot', 'Team registry loaded (hardcoded + database members)');
+  } catch (e) {
+    log.error('Boot', 'Team registry load error (non-fatal)', { error: e.message });
+  }
+
+  // 5a. Start the ops scheduler (cron jobs: morning briefing, check-ins, daily report)
   startOpsScheduler(bot);
 
   // 5b. Register WhatsApp webhook endpoint
@@ -1084,6 +1109,7 @@ async function startWebhook() {
     'WhatsApp/Twilio': whatsappService.isConfigured(),
     'Contacts System': true,
     'AI Consultant': true,
+    'Team Management': true,
   });
 
   // 8. Trigger one-time demo consultant report on first deploy

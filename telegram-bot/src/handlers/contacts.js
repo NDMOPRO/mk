@@ -49,8 +49,9 @@ function sessionKey(ctx) {
 // ─── Helpers ────────────────────────────────────────────────
 
 function escMd(text) {
-  if (!text) return '';
-  return text.replace(/([_*[\]()~`>#+\-=|{}.!])/g, '\\$1');
+  if (!text) return "";
+  // Markdown v1 only needs _ * ` [ escaped
+  return String(text).replace(/([_*`\[])/g, "\\$1");
 }
 
 /**

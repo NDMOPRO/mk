@@ -445,6 +445,23 @@ function initTables() {
     )
   `);
 
+  // ─── Extended Team Members (added via /addmember) ─────────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS team_members_ext (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      username      TEXT NOT NULL UNIQUE,
+      name          TEXT NOT NULL,
+      name_ar       TEXT,
+      role          TEXT DEFAULT 'Staff',
+      role_ar       TEXT,
+      priority      TEXT DEFAULT 'normal',
+      is_admin      INTEGER DEFAULT 0,
+      added_by      TEXT,
+      created_at    TEXT DEFAULT (datetime('now')),
+      updated_at    TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   // ─── Indexes for frequently queried columns ───────────────────
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_tasks_chat_status ON tasks(chat_id, status)',
@@ -1180,6 +1197,9 @@ module.exports = {
   saveConsultantReport, getConsultantReports, getLastConsultantReport,
   // Consultant Data Gathering
   getConsultantWeekData, getConsultantPeriodData,
+  // Extended Team Members
+  addTeamMemberExt, getTeamMemberExt, getAllTeamMembersExt,
+  updateTeamMemberExt, removeTeamMemberExt,
 };
 
 function getAllTasksForSync(chatId) {
@@ -1780,4 +1800,76 @@ function getConsultantWeekData(chatId) {
   const sinceUtc = weekAgo.toISOString().replace('T', ' ').substring(0, 19);
   const untilUtc = now.toISOString().replace('T', ' ').substring(0, 19);
   return getConsultantPeriodData(chatId, sinceUtc, untilUtc);
+}
+
+// ═════════════════════════════════════════════════════════════
+// ═══ Extended Team Members ═══════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Add a new team member to the database.
+ */
+function addTeamMemberExt(username, name, nameAr, role, roleAr, priority, isAdmin, addedBy) {
+  const d = getDb();
+  return d.prepare(`
+    INSERT INTO team_members_ext (username, name, name_ar, role, role_ar, priority, is_admin, added_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    username.toLowerCase().replace(/^@/, ''),
+    name,
+    nameAr || null,
+    role || 'Staff',
+    roleAr || null,
+    priority || 'normal',
+    isAdmin ? 1 : 0,
+    addedBy || null
+  );
+}
+
+/**
+ * Get a team member by username.
+ */
+function getTeamMemberExt(username) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM team_members_ext WHERE username = ?`).get(
+    username.toLowerCase().replace(/^@/, '')
+  );
+}
+
+/**
+ * Get all extended team members.
+ */
+function getAllTeamMembersExt() {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM team_members_ext ORDER BY name ASC`).all();
+}
+
+/**
+ * Update a team member's info.
+ */
+function updateTeamMemberExt(username, updates) {
+  const d = getDb();
+  const cleanUsername = username.toLowerCase().replace(/^@/, '');
+  const fields = [];
+  const values = [];
+  if (updates.name !== undefined) { fields.push('name = ?'); values.push(updates.name); }
+  if (updates.nameAr !== undefined) { fields.push('name_ar = ?'); values.push(updates.nameAr); }
+  if (updates.role !== undefined) { fields.push('role = ?'); values.push(updates.role); }
+  if (updates.roleAr !== undefined) { fields.push('role_ar = ?'); values.push(updates.roleAr); }
+  if (updates.priority !== undefined) { fields.push('priority = ?'); values.push(updates.priority); }
+  if (updates.isAdmin !== undefined) { fields.push('is_admin = ?'); values.push(updates.isAdmin ? 1 : 0); }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(cleanUsername);
+  d.prepare(`UPDATE team_members_ext SET ${fields.join(', ')} WHERE username = ?`).run(...values);
+}
+
+/**
+ * Remove a team member from the database.
+ */
+function removeTeamMemberExt(username) {
+  const d = getDb();
+  return d.prepare(`DELETE FROM team_members_ext WHERE username = ?`).run(
+    username.toLowerCase().replace(/^@/, '')
+  );
 }
