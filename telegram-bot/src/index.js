@@ -999,6 +999,25 @@ function formatUptime(seconds) {
   return parts.join(' ');
 }
 
+// ─── Internal one-shot announcement endpoint ──────────────────
+app.post("/internal/announce", async (req, res) => {
+  const secret = req.headers["x-internal-secret"];
+  if (secret !== (process.env.INTERNAL_SECRET || "mk-internal-2026")) {
+    return res.status(403).json({ ok: false, error: "Forbidden" });
+  }
+  const { text, chat_id, thread_id } = req.body;
+  if (!text || !chat_id) return res.status(400).json({ ok: false, error: "Missing text or chat_id" });
+  try {
+    const sent = await bot.telegram.sendMessage(chat_id, text, {
+      message_thread_id: thread_id || undefined,
+    });
+    try { await bot.telegram.pinChatMessage(chat_id, sent.message_id); } catch (e) {}
+    res.json({ ok: true, message_id: sent.message_id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ─── Webhook endpoint — return 200 quickly, process in background ──
 app.post(WEBHOOK_PATH, (req, res) => {
   // Immediately acknowledge receipt to Telegram
