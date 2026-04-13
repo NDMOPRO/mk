@@ -314,6 +314,38 @@ function initTables() {
       created_at    TEXT DEFAULT (datetime('now'))
     )
   `);
+
+  // ─── Scheduled Meetings (Meeting Management System) ─────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS scheduled_meetings (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id         INTEGER NOT NULL,
+      thread_id       INTEGER,
+      title           TEXT NOT NULL,
+      meeting_datetime TEXT NOT NULL,
+      location        TEXT,
+      agenda          TEXT,
+      attendees       TEXT DEFAULT '[]',
+      status          TEXT DEFAULT 'scheduled',
+      created_by      TEXT,
+      reminded_30     INTEGER DEFAULT 0,
+      reminded_5      INTEGER DEFAULT 0,
+      calendar_event_id TEXT,
+      created_at      TEXT DEFAULT (datetime('now')),
+      updated_at      TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS meeting_notes (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id      INTEGER NOT NULL,
+      notes           TEXT NOT NULL,
+      action_items    TEXT DEFAULT '[]',
+      created_by      TEXT,
+      created_at      TEXT DEFAULT (datetime('now'))
+    )
+  `);
 }
 
 // ─── Migrations ─────────────────────────────────────────────
@@ -1001,9 +1033,113 @@ module.exports = {
   storeConversationMessage, getConversationHistory,
   // Google Sync
   getAllTasksForSync,
+  // Scheduled Meetings (Meeting Management System)
+  scheduleNewMeeting, getScheduledMeetings, getScheduledMeetingById,
+  cancelScheduledMeeting, getMeetingsNeedingReminder,
+  markMeetingReminded30, markMeetingReminded5,
+  addMeetingNotes, getMeetingNotes, getUpcomingMeetings,
 };
 
 function getAllTasksForSync(chatId) {
   const d = getDb();
   return d.prepare(`SELECT * FROM tasks WHERE chat_id = ? AND status != 'cancelled' ORDER BY updated_at DESC`).all(chatId);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ Scheduled Meetings (Meeting Management System) ═════════
+// ═══════════════════════════════════════════════════════════════
+
+function scheduleNewMeeting(chatId, threadId, title, meetingDatetime, options = {}) {
+  const d = getDb();
+  const result = d.prepare(`
+    INSERT INTO scheduled_meetings (chat_id, thread_id, title, meeting_datetime, location, agenda, attendees, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    chatId,
+    threadId || null,
+    title,
+    meetingDatetime,
+    options.location || null,
+    options.agenda || null,
+    JSON.stringify(options.attendees || []),
+    options.createdBy || null
+  );
+  return result.lastInsertRowid;
+}
+
+function getScheduledMeetings(chatId) {
+  const d = getDb();
+  return d.prepare(`
+    SELECT * FROM scheduled_meetings
+    WHERE chat_id = ? AND status = 'scheduled'
+    ORDER BY meeting_datetime ASC
+  `).all(chatId);
+}
+
+function getUpcomingMeetings(chatId) {
+  const d = getDb();
+  return d.prepare(`
+    SELECT * FROM scheduled_meetings
+    WHERE chat_id = ? AND status = 'scheduled' AND meeting_datetime >= datetime('now')
+    ORDER BY meeting_datetime ASC
+  `).all(chatId);
+}
+
+function getScheduledMeetingById(meetingId) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM scheduled_meetings WHERE id = ?`).get(meetingId);
+}
+
+function cancelScheduledMeeting(meetingId) {
+  const d = getDb();
+  d.prepare(`UPDATE scheduled_meetings SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?`).run(meetingId);
+}
+
+function getMeetingsNeedingReminder(minutesBefore) {
+  const d = getDb();
+  // Find meetings that are within `minutesBefore` minutes from now, still scheduled, and not yet reminded
+  if (minutesBefore === 30) {
+    return d.prepare(`
+      SELECT * FROM scheduled_meetings
+      WHERE status = 'scheduled'
+        AND reminded_30 = 0
+        AND meeting_datetime <= datetime('now', '+31 minutes')
+        AND meeting_datetime > datetime('now')
+    `).all();
+  } else if (minutesBefore === 5) {
+    return d.prepare(`
+      SELECT * FROM scheduled_meetings
+      WHERE status = 'scheduled'
+        AND reminded_5 = 0
+        AND meeting_datetime <= datetime('now', '+6 minutes')
+        AND meeting_datetime > datetime('now')
+    `).all();
+  }
+  return [];
+}
+
+function markMeetingReminded30(meetingId) {
+  const d = getDb();
+  d.prepare(`UPDATE scheduled_meetings SET reminded_30 = 1, updated_at = datetime('now') WHERE id = ?`).run(meetingId);
+}
+
+function markMeetingReminded5(meetingId) {
+  const d = getDb();
+  d.prepare(`UPDATE scheduled_meetings SET reminded_5 = 1, updated_at = datetime('now') WHERE id = ?`).run(meetingId);
+}
+
+function addMeetingNotes(meetingId, notes, actionItems, createdBy) {
+  const d = getDb();
+  const result = d.prepare(`
+    INSERT INTO meeting_notes (meeting_id, notes, action_items, created_by)
+    VALUES (?, ?, ?, ?)
+  `).run(meetingId, notes, JSON.stringify(actionItems || []), createdBy || null);
+  // Mark the meeting as 'completed' once notes are added
+  d.prepare(`UPDATE scheduled_meetings SET status = 'completed', updated_at = datetime('now') WHERE id = ?`).run(meetingId);
+  return result.lastInsertRowid;
+}
+
+function getMeetingNotes(meetingId) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM meeting_notes WHERE meeting_id = ? ORDER BY created_at ASC`).all(meetingId);
 }

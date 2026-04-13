@@ -172,6 +172,14 @@ const {
   initV4,
 } = require("./handlers/ops-v4");
 
+// Meeting Management System
+const {
+  handleScheduleMeeting,
+  handleListMeetings,
+  handleMeetingNotes,
+  handleCancelMeeting,
+} = require("./handlers/meetings");
+
 // v5 Database Init
 const { initV5Tables } = require("./services/ops-database-v5");
 // Admin Panel handler (topic 15, thread 235)
@@ -315,7 +323,20 @@ bot.command("monthlyreport", safeHandler('ops:monthlyreport', (ctx) => { if (!is
 bot.command("expense",       safeHandler('ops:expense',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsExpense(ctx); }));
 bot.command("expenses",      safeHandler('ops:expenses',      (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsExpenses(ctx); }));
 bot.command("occupancy",     safeHandler('ops:occupancy',     (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsOccupancy(ctx); }));
-bot.command("meeting",       safeHandler('ops:meeting',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsMeeting(ctx); }));
+bot.command("meeting",       safeHandler('ops:meeting',       (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  // Route: /meeting start|end|note|status → existing real-time handler
+  // Route: /meeting "Title" ... or /meeting with scheduling args → new scheduler
+  const text = (ctx.message.text || "").replace(/^\/meeting(?:@\S+)?\s*/, "").trim();
+  const isRealtime = /^(start|end|note|status)\b/i.test(text);
+  if (isRealtime || !text) {
+    return handleOpsMeeting(ctx);
+  }
+  return handleScheduleMeeting(ctx);
+}));
+bot.command("meetings",      safeHandler('ops:meetings',      (ctx) => { if (!isOpsGroup(ctx)) return; return handleListMeetings(ctx); }));
+bot.command("notes",         safeHandler('ops:notes',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleMeetingNotes(ctx); }));
+bot.command("cancel_meeting", safeHandler('ops:cancel_meeting', (ctx) => { if (!isOpsGroup(ctx)) return; return handleCancelMeeting(ctx); }));
 bot.command("gsync",         safeHandler('ops:gsync',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsGsync(ctx); }));
 
 // Phase 4 v4
@@ -608,7 +629,10 @@ async function setupBot() {
         { command: "expense",       description: "Log expense | تسجيل مصروف" },
         { command: "expenses",      description: "Expense summary | ملخص المصاريف" },
         { command: "occupancy",     description: "Unit occupancy | إشغال الوحدات" },
-        { command: "meeting",       description: "Meeting notes | محضر اجتماع" },
+        { command: "meeting",       description: "Schedule/manage meeting | جدولة اجتماع" },
+        { command: "meetings",      description: "List meetings | عرض الاجتماعات" },
+        { command: "notes",         description: "Meeting notes | محضر اجتماع" },
+        { command: "cancel_meeting", description: "Cancel meeting | إلغاء اجتماع" },
         { command: "handover",      description: "Shift handover | تسليم الوردية" },
         { command: "monthlyreport", description: "Monthly report | تقرير شهري" },
         { command: "property",      description: "Property tracker | متابعة الوحدات" },

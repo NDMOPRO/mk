@@ -27,6 +27,7 @@ const opsDb = require("./ops-database");
 const v4Db = require("./ops-database-v4");
 const googleSync = require("./google-sync");
 const v5Handlers = require("../handlers/ops-v5");
+const { resolveAttendees, formatKSA } = require("../handlers/meetings");
 const log = require("../utils/logger");
 
 let bot = null;
@@ -1124,6 +1125,90 @@ async function checkDailyWeather() {
 
 let tickCount = 0;
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ Meeting Reminders (30 min + 5 min before) ━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async function checkMeetingReminders() {
+  if (!bot) return;
+
+  try {
+    // Check for 30-minute reminders
+    const meetings30 = opsDb.getMeetingsNeedingReminder(30);
+    for (const meeting of meetings30) {
+      try {
+        let attendees = [];
+        try { attendees = JSON.parse(meeting.attendees || '[]'); } catch (e) {}
+        const resolved = resolveAttendees(attendees);
+        const dt = formatKSA(meeting.meeting_datetime);
+        const tags = attendees.map(a => a.startsWith('@') ? a : `@${a}`).join(' ');
+        const attendeeListEn = resolved.map(a => `  👤 ${a.name}`).join('\n') || '  _No attendees_';
+        const attendeeListAr = resolved.map(a => `  👤 ${a.nameAr}`).join('\n') || '  _لا يوجد حضور_';
+
+        const en = [
+          `⏰ *Meeting in 30 minutes!*`,
+          ``,
+          `📌 *${meeting.title}*`,
+          `🕐 ${dt.en}`,
+          meeting.location ? `📍 ${meeting.location}` : null,
+          ``,
+          `👥 *Attendees:*`,
+          attendeeListEn,
+          tags ? `\n${tags}` : null,
+        ].filter(Boolean).join('\n');
+
+        const ar = [
+          `⏰ *اجتماع بعد 30 دقيقة!*`,
+          ``,
+          `📌 *${meeting.title}*`,
+          `🕐 ${dt.ar}`,
+          meeting.location ? `📍 ${meeting.location}` : null,
+          ``,
+          `👥 *الحضور:*`,
+          attendeeListAr,
+        ].filter(Boolean).join('\n');
+
+        const text = `${en}\n━━━━━━━━━━━━━━\n${ar}`;
+        const threadId = meeting.thread_id || 4; // Default to CEO Update thread
+        await bot.telegram.sendMessage(meeting.chat_id, text, {
+          parse_mode: 'Markdown',
+          message_thread_id: threadId,
+        });
+        opsDb.markMeetingReminded30(meeting.id);
+        log.info('Scheduler', `Sent 30-min reminder for meeting #M${meeting.id}: ${meeting.title}`);
+      } catch (err) {
+        log.error('Scheduler', `Failed to send 30-min reminder for meeting #M${meeting.id}`, { error: err.message });
+      }
+    }
+
+    // Check for 5-minute reminders
+    const meetings5 = opsDb.getMeetingsNeedingReminder(5);
+    for (const meeting of meetings5) {
+      try {
+        let attendees = [];
+        try { attendees = JSON.parse(meeting.attendees || '[]'); } catch (e) {}
+        const tags = attendees.map(a => a.startsWith('@') ? a : `@${a}`).join(' ');
+
+        const en = `🔔 *Meeting starting in 5 minutes!*\n\n📌 *${meeting.title}*${meeting.location ? `\n📍 ${meeting.location}` : ''}\n\n${tags || ''}`;
+        const ar = `🔔 *الاجتماع يبدأ بعد 5 دقائق!*\n\n📌 *${meeting.title}*${meeting.location ? `\n📍 ${meeting.location}` : ''}`;
+
+        const text = `${en}\n━━━━━━━━━━━━━━\n${ar}`;
+        const threadId = meeting.thread_id || 4;
+        await bot.telegram.sendMessage(meeting.chat_id, text, {
+          parse_mode: 'Markdown',
+          message_thread_id: threadId,
+        });
+        opsDb.markMeetingReminded5(meeting.id);
+        log.info('Scheduler', `Sent 5-min reminder for meeting #M${meeting.id}: ${meeting.title}`);
+      } catch (err) {
+        log.error('Scheduler', `Failed to send 5-min reminder for meeting #M${meeting.id}`, { error: err.message });
+      }
+    }
+  } catch (error) {
+    log.error('Scheduler', 'checkMeetingReminders failed', { error: error.message });
+  }
+}
+
 /**
  * Safely run a scheduler job. If it throws, log the error and continue.
  * This ensures one failing job never stops other jobs from running.
@@ -1143,9 +1228,10 @@ async function tick() {
   try {
     tickCount++;
 
-    // Every tick (1 minute): reminders and follow-ups
+    // Every tick (1 minute): reminders, follow-ups, and meeting reminders
     await safeJob('checkFollowUps', checkFollowUps);
     await safeJob('checkReminders', checkReminders);
+    await safeJob('checkMeetingReminders', checkMeetingReminders);
 
     // Every 5 minutes: escalations, vendor, SLA, recurring, mentions, priority
     if (tickCount % 5 === 0) {
@@ -1401,6 +1487,7 @@ function startOpsScheduler(botInstance) {
   console.log("  🚨 Escalation/SLA/Vendor/Mentions: every 5 min");
   console.log("  ⏰ Overdue pings: every 60 min");
   console.log("  🔔 Reminders/Follow-ups: every 1 min");
+  console.log("  📅 Meeting Reminders: every 1 min (30 min + 5 min before)");
 }
 
 function stopOpsScheduler() {
