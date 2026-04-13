@@ -746,9 +746,8 @@ async function postCEOAnnouncement(bot) {
     // Check if already announced
     if (opsDb.getBotState('contacts_ceo_announced')) return;
 
-    // Find CEO Update topic thread ID (thread 2)
-    // Or fallback to General
-    const CEO_TOPIC_THREAD = 2; 
+    // CEO Update topic thread ID (from ops.js THREAD_IDS.CEO_UPDATE = 4)
+    const CEO_TOPIC_THREAD = 4;
 
     const announcementText = `📢 *CEO Update: New Contact Management System*
 
