@@ -270,50 +270,91 @@ async function handleOpsTasks(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
-  const tasks = opsDb.getTasksByThread(chatId, threadId);
 
-  if (tasks.length === 0) {
-    const en = `${topicInfo.emoji} *${topicInfo.name}*\n\n✨ No tasks in this topic.`;
-    const ar = `${topicInfo.emoji} *${topicInfo.arName}*\n\n✨ لا توجد مهام في هذا الموضوع.`;
-    return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
-  }
+  // Strip Markdown special chars from user-entered text to prevent parse errors
+  function safeTxt(s) { return String(s || "").replace(/[_*`\[\]]/g, ""); }
 
-  const pending = tasks.filter(t => t.status === "pending");
-  const done = tasks.filter(t => t.status === "done");
-
-  let en = `${topicInfo.emoji} *${topicInfo.name}* — Tasks\n\n`;
-  let ar = `${topicInfo.emoji} *${topicInfo.arName}* — المهام\n\n`;
-
-  if (pending.length > 0) {
-    en += `*⬜ Pending (${pending.length}):*\n`;
-    ar += `*⬜ قيد التنفيذ (${pending.length}):*\n`;
-    pending.forEach((task, i) => {
-      const prio = task.priority === "urgent" ? " 🔴" : task.priority === "high" ? " 🟠" : "";
-      const assignee = task.assigned_to ? ` → ${task.assigned_to}` : "";
-      const prop = task.property_tag ? ` 🏠#${task.property_tag}` : "";
-      const due = task.due_date ? ` 📅${task.due_date}` : "";
-      const line = `${i + 1}. ⬜ ${task.title}${prio}${assignee}${prop}${due} [#${task.id}]\n`;
-      en += line; ar += line;
-    });
-  }
-
-  if (done.length > 0) {
-    en += `\n*✅ Done (${done.length}):*\n`;
-    ar += `\n*✅ المكتملة (${done.length}):*\n`;
-    done.slice(0, 5).forEach(task => { 
-      const line = `✅ ${task.title} [#${task.id}]\n`;
-      en += line; ar += line;
-    });
-    if (done.length > 5) {
-      en += `_... and ${done.length - 5} more_\n`;
-      ar += `_... و ${done.length - 5} غيرها_\n`;
+  // Send with Markdown, fall back to plain text if Telegram rejects it
+  async function safeSend(text, opts) {
+    try {
+      await ctx.reply(text, { parse_mode: "Markdown", ...opts });
+    } catch (mdErr) {
+      console.error("[handleOpsTasks] Markdown send failed, retrying plain:", mdErr.message);
+      const plain = text.replace(/[*_`]/g, "");
+      try {
+        await ctx.reply(plain, { ...opts, parse_mode: undefined });
+      } catch (plainErr) {
+        console.error("[handleOpsTasks] Plain send also failed:", plainErr.message);
+      }
     }
   }
 
-  const enFooter = pending.length > 0 ? `\n\`/done [number]\` to complete` : "";
-  const arFooter = pending.length > 0 ? `\nاستخدم \`/done [الرقم]\` للإتمام` : "";
-  
-  await ctx.reply(getBilingualText(en + enFooter, ar + arFooter), { parse_mode: "Markdown", message_thread_id: threadId });
+  try {
+    const tasks = opsDb.getTasksByThread(chatId, threadId);
+
+    if (tasks.length === 0) {
+      const msg = `${topicInfo.emoji} *${topicInfo.name}*\n\n\u2728 No tasks in this topic.\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n${topicInfo.emoji} *${topicInfo.arName}*\n\n\u2728 \u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0647\u0627\u0645 \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u0645\u0648\u0636\u0648\u0639.`;
+      return safeSend(msg, { message_thread_id: threadId || undefined });
+    }
+
+    const pending = tasks.filter(t => t.status === "pending");
+    const done = tasks.filter(t => t.status === "done");
+
+    // Build lines — use safeTxt on all user-entered content
+    const lines = [];
+    lines.push(`${topicInfo.emoji} *${topicInfo.name}* \u2014 Tasks | \u0627\u0644\u0645\u0647\u0627\u0645`);
+    lines.push("");
+
+    if (pending.length > 0) {
+      lines.push(`*\u2b1c Pending / \u0642\u064a\u062f \u0627\u0644\u062a\u0646\u0641\u064a\u0630 (${pending.length}):*`);
+      pending.forEach((task, i) => {
+        const prio = task.priority === "urgent" ? " \ud83d\udd34" : task.priority === "high" ? " \ud83d\udfe0" : "";
+        const assignee = task.assigned_to ? ` \u2192 ${safeTxt(task.assigned_to)}` : "";
+        const prop = task.property_tag ? ` \ud83c\udfe0${safeTxt(task.property_tag)}` : "";
+        const due = task.due_date ? ` \ud83d\udcc5${task.due_date}` : "";
+        lines.push(`${i + 1}. \u2b1c ${safeTxt(task.title)}${prio}${assignee}${prop}${due} [#${task.id}]`);
+      });
+    }
+
+    if (done.length > 0) {
+      lines.push("");
+      lines.push(`*\u2705 Done / \u0627\u0644\u0645\u0643\u062a\u0645\u0644\u0629 (${done.length}):*`);
+      done.slice(0, 5).forEach(task => {
+        lines.push(`\u2705 ${safeTxt(task.title)} [#${task.id}]`);
+      });
+      if (done.length > 5) lines.push(`... and ${done.length - 5} more`);
+    }
+
+    if (pending.length > 0) {
+      lines.push("");
+      lines.push("`/done [number]` to complete a task");
+    }
+
+    // Split into chunks of max 4000 chars to stay under Telegram's 4096 limit
+    const MAX_LEN = 4000;
+    let chunk = "";
+    const chunks = [];
+    for (const line of lines) {
+      const addition = (chunk ? "\n" : "") + line;
+      if (chunk.length + addition.length > MAX_LEN) {
+        if (chunk) chunks.push(chunk);
+        chunk = line;
+      } else {
+        chunk += addition;
+      }
+    }
+    if (chunk) chunks.push(chunk);
+
+    for (const c of chunks) {
+      await safeSend(c, { message_thread_id: threadId || undefined });
+    }
+
+  } catch (e) {
+    console.error("[handleOpsTasks] Fatal error:", e.message, e.stack);
+    try {
+      await ctx.reply(`\u274c Error loading tasks: ${e.message}`, { message_thread_id: threadId || undefined });
+    } catch (_) {}
+  }
 }
 
 async function handleOpsDone(ctx) {
