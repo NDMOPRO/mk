@@ -273,8 +273,6 @@ async function handleOpsTasks(ctx) {
   const topicInfo = getTopicInfo(threadId);
   const chatId = ctx.chat.id;
 
-  // Strip Markdown special chars from user-entered text to prevent parse errors
-  function safeTxt(s) { return String(s || "").replace(/[_*`\[\]]/g, ""); }
 
   // Send with Markdown, fall back to plain text if Telegram rejects it
   async function safeSend(text, opts) {
@@ -504,39 +502,69 @@ async function handleOpsSummary(ctx) {
     const allTasks = opsDb.getAllPendingTasks(chatId);
     if (allTasks.length === 0) {
       return ctx.reply(
-        `📊 Task Summary\n\n✨ No pending tasks. Great work!\n━━━━━━━━━━━━━━\n📊 ملخص المهام\n\n✨ لا توجد مهام معلقة. عمل رائع!`,
+        `📊 Task Summary\n\n✨ No pending tasks. All clear!\n━━━━━━━━━━━━━━━━━━━━\n📊 ملخص المهام\n\n✨ لا توجد مهام معلقة. كل شيء على ما يرام!`,
         { message_thread_id: threadId || undefined }
       );
     }
-    const byTopic = {};
+
+    // Build topic map using thread_id for Arabic name lookup
+    const byThread = {};
     for (const task of allTasks) {
-      const key = safeTxt(task.topic_name || "General");
-      if (!byTopic[key]) byTopic[key] = [];
-      byTopic[key].push(task);
+      const tid = task.thread_id || 0;
+      if (!byThread[tid]) byThread[tid] = [];
+      byThread[tid].push(task);
     }
+
+    // Get overdue task IDs for status indicators
+    const overdueIds = new Set((opsDb.getOverdueTasks(chatId) || []).map(t => t.id));
+
     const stats = opsDb.getTaskStats(chatId);
-    let lines = [];
-    lines.push(`📊 Task Summary`);
-    lines.push(`📌 ${stats.pending} pending / ${stats.done} done`);
-    lines.push(`━━━━━━━━━━━━━━`);
-    lines.push(`📊 ملخص المهام`);
-    lines.push(`📌 ${stats.pending} معلقة / ${stats.done} مكتملة`);
-    lines.push(``);
-    for (const [topicName, tasks] of Object.entries(byTopic)) {
-      const emoji = getEmojiFromName(topicName);
-      lines.push(`${emoji} ${topicName} (${tasks.length}):`);
-      tasks.slice(0, 5).forEach((task, i) => {
-        const assignee = task.assigned_to ? ` → ${safeTxt(task.assigned_to)}` : "";
-        lines.push(`  ${i + 1}. ⬜ ${safeTxt(task.title)}${assignee} [#${task.id}]`);
+    const overdueCount = overdueIds.size;
+
+    // ── English section: full detail ──────────────────────────
+    const enLines = [];
+    enLines.push(`📊 TASK SUMMARY`);
+    enLines.push(`📌 ${stats.pending} pending  |  ✅ ${stats.done} done  |  🔴 ${overdueCount} overdue`);
+    enLines.push(``);
+
+    const arTopicLines = []; // collect for Arabic section
+
+    for (const [tid, tasks] of Object.entries(byThread)) {
+      const info = getTopicInfo(parseInt(tid));
+      const emoji = info.emoji || "💬";
+      enLines.push(`────────────────────`);
+      enLines.push(`${emoji} ${info.name}  (${tasks.length} task${tasks.length !== 1 ? "s" : ""})`);
+      tasks.slice(0, 8).forEach((task) => {
+        const status = overdueIds.has(task.id) ? "🔴" : "🟡";
+        const assignee = task.assigned_to ? `  → ${safeTxt(task.assigned_to)}` : "";
+        const due = task.due_date ? `  📅 ${task.due_date}` : "";
+        enLines.push(`  ${status} #${task.id}  ${safeTxt(task.title)}${assignee}${due}`);
       });
-      if (tasks.length > 5) lines.push(`  ... and ${tasks.length - 5} more`);
-      lines.push(``);
+      if (tasks.length > 8) enLines.push(`  ⋯  +${tasks.length - 8} more tasks`);
+      enLines.push(``);
+
+      // Collect Arabic summary line
+      arTopicLines.push(`${emoji} ${info.arName}:  ${tasks.length} مهمة${overdueCount > 0 ? `` : ""}`);
     }
-    const msg = lines.join("\n");
-    // Split if too long
+
+    // ── Arabic section: brief counts only ─────────────────────
+    const arLines = [];
+    arLines.push(`📊 ملخص المهام`);
+    arLines.push(`📌 ${stats.pending} معلقة  |  ✅ ${stats.done} مكتملة  |  🔴 ${overdueCount} متأخرة`);
+    arLines.push(``);
+    arTopicLines.forEach(l => arLines.push(l));
+
+    // ── Combine ────────────────────────────────────────────────
+    const fullLines = [
+      ...enLines,
+      `━━━━━━━━━━━━━━━━━━━━`,
+      ...arLines,
+    ];
+
+    // Split into chunks of max 3800 chars
     const chunks = [];
     let current = "";
-    for (const line of lines) {
+    for (const line of fullLines) {
       if (current.length + line.length + 1 > 3800) {
         chunks.push(current);
         current = line;
@@ -545,6 +573,7 @@ async function handleOpsSummary(ctx) {
       }
     }
     if (current) chunks.push(current);
+
     for (const chunk of chunks) {
       await ctx.reply(chunk, { message_thread_id: threadId || undefined });
     }

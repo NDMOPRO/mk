@@ -110,7 +110,7 @@ async function sendMorningBriefing() {
     if (priorities.length > 0) {
       msg += `📋 *Today's Priorities:*\n`;
       priorities.slice(0, 10).forEach((t, i) => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.assigned_to)}` : "";
         msg += `  ${i + 1}. ${safeTxt(t.title)}${assignee} [#${t.id}]\n`;
       });
       msg += "\n";
@@ -119,7 +119,7 @@ async function sendMorningBriefing() {
     if (overdue.length > 0) {
       msg += `🔴 *Overdue (${overdue.length}):*\n`;
       overdue.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.assigned_to)}` : "";
         msg += `  • ${safeTxt(t.title)}${assignee} _(due: ${t.due_date})_ [#${t.id}]\n`;
       });
       msg += "\n";
@@ -128,7 +128,7 @@ async function sendMorningBriefing() {
     if (dueToday.length > 0) {
       msg += `📌 *Due Today (${dueToday.length}):*\n`;
       dueToday.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.assigned_to)}` : "";
         msg += `  • ${safeTxt(t.title)}${assignee} [#${t.id}]\n`;
       });
       msg += "\n";
@@ -262,7 +262,7 @@ async function sendDailyReport() {
     if (overdue.length > 0) {
       msg += `🔴 *Overdue (${overdue.length}):*\n`;
       overdue.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.assigned_to)}` : "";
         msg += `  • ${safeTxt(t.title)}${assignee} _(due: ${t.due_date})_\n`;
       });
       msg += "\n";
@@ -437,36 +437,50 @@ async function checkEscalations() {
   try {
     const staleBlockers = opsDb.getStaleBlockers(OPS_GROUP_ID, THREAD_BLOCKERS, 24);
 
-    for (const task of staleBlockers) {
-      if (escalatedTasks.has(task.id)) continue;
+    const newStaleBlockers = staleBlockers.filter(t => !escalatedTasks.has(t.id));
+    if (newStaleBlockers.length === 0) return;
+
+    // Build combined message
+    let enLines = [];
+    let arLines = [];
+
+    enLines.push(`🚨 *ESCALATION: UNRESOLVED BLOCKERS*`);
+    enLines.push(`The following tasks have been blocked for >24 hours:`);
+    enLines.push(``);
+
+    arLines.push(`🚨 *تصعيد: عوائق لم تُحل*`);
+    arLines.push(`المهام التالية معطلة منذ أكثر من 24 ساعة:`);
+    arLines.push(``);
+
+    for (const task of newStaleBlockers) {
       escalatedTasks.add(task.id);
-
-      const assignee = task.assigned_to ? ` → ${safeTxt(task.title)}` : "";
       const hoursOld = Math.round((Date.now() - new Date(task.created_at).getTime()) / (60 * 60 * 1000));
+      const assignee = task.assigned_to ? `  👤 ${safeTxt(task.assigned_to)}` : "";
+      
+      enLines.push(`🔴 *#${task.id}*  ${safeTxt(task.title)}`);
+      enLines.push(`   ⏰ ${hoursOld}h old${assignee}`);
+      enLines.push(``);
 
-      let msg = `🚨 *ESCALATION | تصعيد*\n`;
-      msg += `${DIV}\n\n`;
-      msg += `*Blocker Unresolved >24h*\n`;
-      msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
-      msg += `  ⏰ Created ${hoursOld}h ago\n`;
-      msg += `  📍 10 — Blockers & Escalations\n`;
-      msg += `  🔗 Task #${task.id}\n\n`;
-      msg += `  ⚠️ _This blocker needs immediate attention._\n`;
-      msg += `\n${DIV}\n\n`;
-      msg += `*عائق لم يُحل منذ أكثر من 24 ساعة*\n`;
-      msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
-      msg += `  ⏰ منذ ${hoursOld} ساعة\n`;
-      msg += `  📍 10 — العوائق والتصعيد\n`;
-      msg += `  🔗 مهمة #${task.id}\n\n`;
-      msg += `  ⚠️ _هذا العائق يحتاج اهتمام فوري._`;
-
-      await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
-        parse_mode: "Markdown",
-        message_thread_id: THREAD_CEO_UPDATE,
-      });
-
-      console.log(`[OpsScheduler] Escalated blocker task #${task.id}`);
+      arLines.push(`🔴 *#${task.id}*  ${safeTxt(task.title)}`);
+      arLines.push(`   ⏰ منذ ${hoursOld} ساعة${assignee}`);
+      arLines.push(``);
     }
+
+    enLines.push(`⚠️ _These items need immediate attention._`);
+    arLines.push(`⚠️ _هذه البنود تحتاج إلى اهتمام فوري._`);
+
+    const fullMsg = [
+      ...enLines,
+      `━━━━━━━━━━━━━━━━━━━━`,
+      ...arLines
+    ].join("\n");
+
+    await bot.telegram.sendMessage(OPS_GROUP_ID, fullMsg, {
+      parse_mode: "Markdown",
+      message_thread_id: THREAD_CEO_UPDATE,
+    });
+
+    console.log(`[OpsScheduler] Escalated ${newStaleBlockers.length} blockers`);
   } catch (error) {
     console.error("[OpsScheduler] Escalation check error:", error.message);
   }
@@ -641,7 +655,7 @@ async function checkSlaBreaches() {
       for (const task of tasks) {
         const createdAt = new Date(task.created_at).getTime();
         const elapsedHours = (Date.now() - createdAt) / (60 * 60 * 1000);
-        const assignee = task.assigned_to ? ` → ${safeTxt(task.title)}` : "";
+        const assignee = task.assigned_to ? ` → ${safeTxt(task.assigned_to)}` : "";
 
         // 75% warning
         if (elapsedHours >= slaHours * 0.75 && elapsedHours < slaHours && !slaWarned.has(task.id)) {
@@ -858,7 +872,7 @@ async function checkPriorityEscalation() {
       if (alreadySent(key)) continue;
       markSent(key);
 
-      const assignee = task.assigned_to ? ` → ${safeTxt(task.title)}` : "";
+      const assignee = task.assigned_to ? ` → ${safeTxt(task.assigned_to)}` : "";
       const hours = Math.round((Date.now() - new Date(task.created_at).getTime()) / 3600000);
 
       let msg = `🔺 *Priority Escalation | تصعيد أولوية*\n`;
@@ -1052,7 +1066,7 @@ async function sendWeeklyStandup() {
     if (overdue.length > 0) {
       msg += `🔴 *Overdue (${overdue.length}):*\n`;
       for (const t of overdue.slice(0, 5)) {
-        msg += `  • #${t.id}: ${safeTxt(t.title)}${t.assigned_to ? ` → ${safeTxt(t.title)}` : ""}\n`;
+        msg += `  • #${t.id}: ${safeTxt(t.title)}${t.assigned_to ? ` → ${safeTxt(t.assigned_to)}` : ""}\n`;
       }
       if (overdue.length > 5) msg += `  _...and ${overdue.length - 5} more_\n`;
       msg += "\n";
@@ -1566,7 +1580,7 @@ async function sendAfternoonTaskFollowUp() {
     if (overdue.length > 0) {
       msg += `🔴 <b>OVERDUE — Needs Immediate Update (${overdue.length}):</b>\n`;
       overdue.slice(0, 6).forEach(t => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.assigned_to)}` : "";
         msg += `  🔴 [#${t.id}] ${safeTxt(t.title)}${assignee} | Was due: ${t.due_date}\n`;
       });
       msg += "\n";
@@ -1575,7 +1589,7 @@ async function sendAfternoonTaskFollowUp() {
     if (allPending.length > 0) {
       msg += `⏳ <b>Still Pending (${allPending.length}) — Please update status:</b>\n`;
       allPending.slice(0, 8).forEach(t => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.assigned_to)}` : "";
         msg += `  🟡 [#${t.id}] ${safeTxt(t.title)}${assignee}\n`;
       });
       msg += "\n";
