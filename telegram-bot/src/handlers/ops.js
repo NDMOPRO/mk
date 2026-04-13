@@ -206,6 +206,20 @@ async function handleOpsTask(ctx) {
   const ar = `✅ *تم إنشاء المهمة #${taskId}*\n\n📝 ${cleanTitle}\n👤 بواسطة: ${createdBy}${displayAssigneeAr ? `\n👤 المسؤول: ${displayAssigneeAr}` : (displayAssignee ? `\n👤 المسؤول: ${displayAssignee}` : "")}${propertyTag ? `\n🏠 العقار: #${propertyTag}` : ""}`;
   
   await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+
+  // ── WhatsApp assignment notification (fire-and-forget, don't block the reply) ──
+  if (assignedTo) {
+    try {
+      const whatsappSvc = require("../services/whatsapp");
+      if (whatsappSvc.isConfigured()) {
+        const assignerName = getDisplayName(rawCreatedBy) || rawCreatedBy;
+        whatsappSvc.sendTaskAssignment(
+          { id: taskId, title: cleanTitle, assigned_to: assignedTo, topic_name: topicInfo.name },
+          assignerName
+        ).catch(() => {}); // silent fail — don't crash the bot if WhatsApp is down
+      }
+    } catch (e) { /* ignore */ }
+  }
 }
 
 async function handleOpsChecklist(ctx) {

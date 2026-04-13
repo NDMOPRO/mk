@@ -108,12 +108,19 @@ async function showWhatsAppHelp(ctx, threadId) {
     "📱 *WhatsApp Integration*",
     "",
     "Commands:",
-    '`/whatsapp send +966XXXXXXXXX "Message text"`',
+    '`/whatsapp send Mushtaq "Message"`  — send to team member by name',
+    '`/whatsapp send @saq198 "Message"`  — send by @username',
+    '`/whatsapp send +966XXXXXXXXX "Message"` — send to phone number',
+    '`/whatsapp send all "Message"`  — broadcast to all team members',
     "`/whatsapp status` — Show integration status",
     "`/whatsapp notify on` — Enable WhatsApp notifications",
     "`/whatsapp notify off` — Disable WhatsApp notifications",
     "",
+    "Team Members:",
+    "  • Khalid (CEO) • Saad Al Qasem • Mushtaq • Sameh (CFO) • Khaled Abu Fahd",
+    "",
     "Features:",
+    "  • Task assignment alerts to assignee",
     "  • Critical alerts forwarded to WhatsApp",
     "  • Daily summary at 9 PM KSA",
     "  • Appointment/meeting reminders",
@@ -124,12 +131,19 @@ async function showWhatsAppHelp(ctx, threadId) {
     "📱 *تكامل واتساب*",
     "",
     "الأوامر:",
-    '`/whatsapp send +966XXXXXXXXX "نص الرسالة"`',
+    '`/whatsapp send Mushtaq "رسالة"`  — إرسال لعضو الفريق بالاسم',
+    '`/whatsapp send @saq198 "رسالة"`  — إرسال باسم المستخدم',
+    '`/whatsapp send +966XXXXXXXXX "رسالة"` — إرسال لرقم هاتف',
+    '`/whatsapp send all "رسالة"`  — بث لجميع أعضاء الفريق',
     "`/whatsapp status` — عرض حالة التكامل",
     "`/whatsapp notify on` — تفعيل إشعارات واتساب",
     "`/whatsapp notify off` — إيقاف إشعارات واتساب",
     "",
+    "أعضاء الفريق:",
+    "  • خالد (CEO) • سعد القاسم • مشتاق • سامح (CFO) • خالد أبو فهد",
+    "",
     "المميزات:",
+    "  • إشعارات تعيين المهام للمسؤول",
     "  • إعادة توجيه التنبيهات الحرجة إلى واتساب",
     "  • ملخص يومي الساعة 9 مساءً بتوقيت السعودية",
     "  • تذكيرات المواعيد والاجتماعات",
@@ -140,7 +154,8 @@ async function showWhatsAppHelp(ctx, threadId) {
 }
 
 /**
- * /whatsapp send +966XXXXXXXXX "Message text"
+ * /whatsapp send <+966XXXXXXXXX|MemberName|all> "Message text"
+ * Accepts phone numbers, team member names/usernames, or "all" to broadcast
  */
 async function handleWhatsAppSend(ctx, args, threadId) {
   if (!whatsapp.isConfigured()) {
@@ -149,37 +164,61 @@ async function handleWhatsAppSend(ctx, args, threadId) {
     return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
   }
 
-  // Parse: +966XXXXXXXXX "Message text" or +966XXXXXXXXX Message text
-  const sendMatch = args.match(/^(\+?\d[\d\s-]+)\s+"?([^"]+)"?\s*$/);
-  if (!sendMatch) {
-    const en = '❌ *Invalid format.*\n\nUsage: `/whatsapp send +966XXXXXXXXX "Your message"`';
-    const ar = '❌ *صيغة غير صالحة.*\n\nالاستخدام: `/whatsapp send +966XXXXXXXXX "رسالتك"`';
+  if (!args) {
+    const en = '❌ *Missing arguments.*\n\nUsage:\n`/whatsapp send Mushtaq "Your message"`\n`/whatsapp send +966XXXXXXXXX "Your message"`\n`/whatsapp send all "Broadcast message"`';
+    const ar = '❌ *وسائط مفقودة.*\n\nالاستخدام:\n`/whatsapp send Mushtaq "رسالتك"`\n`/whatsapp send +966XXXXXXXXX "رسالتك"`\n`/whatsapp send all "رسالة جماعية"`';
     return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
   }
 
-  const phoneNumber = sendMatch[1].replace(/[\s-]/g, "").trim();
+  const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+
+  // Parse: <recipient> "message" or <recipient> message
+  // Recipient can be: +966XXXXXXXXX, MemberName, @username, or "all"
+  const sendMatch = args.match(/^(\S+)\s+"([\s\S]+)"\s*$/) || args.match(/^(\S+)\s+([\s\S]+)$/);
+  if (!sendMatch) {
+    const en = '❌ *Invalid format.*\n\nUsage: `/whatsapp send Mushtaq "Your message"`';
+    const ar = '❌ *صيغة غير صالحة.*\n\nالاستخدام: `/whatsapp send Mushtaq "رسالتك"`';
+    return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+  }
+
+  const recipient = sendMatch[1].trim();
   const messageText = sendMatch[2].trim();
 
-  const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
-  await ctx.reply(`📤 Sending WhatsApp message to ${phoneNumber}...`, { message_thread_id: threadId });
+  // ── Broadcast to all team members ──
+  if (recipient.toLowerCase() === "all") {
+    await ctx.reply(`📤 Broadcasting WhatsApp message to all team members...`, { message_thread_id: threadId });
+    const results = await whatsapp.sendToAll(messageText);
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.length - successCount;
+    const lines = results.map(r => r.success ? `✅ ${r.name}` : `❌ ${r.name}: ${r.error}`);
+    const en = [`📱 *Broadcast Result*`, ``, `Sent to ${successCount}/${results.length} members:`, ...lines].join("\n");
+    const ar = [`📱 *نتيجة البث*`, ``, `أُرسل إلى ${successCount}/${results.length} أعضاء:`, ...lines].join("\n");
+    return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+  }
 
-  const result = await whatsapp.sendMessage(phoneNumber, messageText);
+  // ── Send to phone number directly ──
+  if (/^\+?\d[\d\s-]{6,}$/.test(recipient)) {
+    const phoneNumber = recipient.replace(/[\s-]/g, "").trim();
+    await ctx.reply(`📤 Sending WhatsApp message to ${phoneNumber}...`, { message_thread_id: threadId });
+    const result = await whatsapp.sendMessage(phoneNumber, messageText);
+    if (result.success) {
+      const en = [`✅ *WhatsApp Message Sent*`, ``, `📱 *To:* ${phoneNumber}`, `💬 *Message:* ${escMd(messageText.substring(0, 100))}${messageText.length > 100 ? "..." : ""}`, `👤 *Sent by:* ${user}`].join("\n");
+      const ar = [`✅ *تم إرسال رسالة واتساب*`, ``, `📱 *إلى:* ${phoneNumber}`, `💬 *الرسالة:* ${escMd(messageText.substring(0, 100))}${messageText.length > 100 ? "..." : ""}`, `👤 *أرسلها:* ${user}`].join("\n");
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    } else {
+      const en = `❌ *Failed to send:* ${escMd(result.error)}`;
+      const ar = `❌ *فشل الإرسال:* ${escMd(result.error)}`;
+      return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    }
+  }
 
+  // ── Send to team member by name or @username ──
+  await ctx.reply(`📤 Resolving team member "${recipient}"...`, { message_thread_id: threadId });
+  const result = await whatsapp.sendToMember(recipient, messageText);
   if (result.success) {
-    const en = [
-      `✅ *WhatsApp Message Sent*`,
-      "",
-      `📱 *To:* ${phoneNumber}`,
-      `💬 *Message:* ${escMd(messageText.substring(0, 100))}${messageText.length > 100 ? "..." : ""}`,
-      `👤 *Sent by:* ${user}`,
-    ].join("\n");
-    const ar = [
-      `✅ *تم إرسال رسالة واتساب*`,
-      "",
-      `📱 *إلى:* ${phoneNumber}`,
-      `💬 *الرسالة:* ${escMd(messageText.substring(0, 100))}${messageText.length > 100 ? "..." : ""}`,
-      `👤 *أرسلها:* ${user}`,
-    ].join("\n");
+    const displayName = result.memberName || recipient;
+    const en = [`✅ *WhatsApp Message Sent*`, ``, `📱 *To:* ${displayName}`, `💬 *Message:* ${escMd(messageText.substring(0, 100))}${messageText.length > 100 ? "..." : ""}`, `👤 *Sent by:* ${user}`].join("\n");
+    const ar = [`✅ *تم إرسال رسالة واتساب*`, ``, `📱 *إلى:* ${displayName}`, `💬 *الرسالة:* ${escMd(messageText.substring(0, 100))}${messageText.length > 100 ? "..." : ""}`, `👤 *أرسلها:* ${user}`].join("\n");
     return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
   } else {
     const en = `❌ *Failed to send:* ${escMd(result.error)}`;

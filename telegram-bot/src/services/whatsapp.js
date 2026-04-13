@@ -21,6 +21,12 @@ const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
 const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || "";
 const WHATSAPP_CEO_NUMBER = process.env.WHATSAPP_CEO_NUMBER || "+966535080045";
 
+// ─── Team member WhatsApp lookup ────────────────────────────
+// Lazy-loaded to avoid circular require issues at startup
+function getTeamMembers() {
+  try { return require("../team-members"); } catch (e) { return null; }
+}
+
 let twilioClient = null;
 
 // ─── Name resolution helpers ────────────────────────────────
@@ -148,6 +154,109 @@ async function sendToCeo(body) {
     return { success: false, error: "WHATSAPP_CEO_NUMBER not configured" };
   }
   return sendMessage(WHATSAPP_CEO_NUMBER, body);
+}
+
+/**
+ * Send a WhatsApp message to a specific team member by name or username.
+ * Resolves the member from team-members.js registry.
+ * @param {string} nameOrUsername - e.g., "Mushtaq", "@saq198", "Sameh", "Khalid"
+ * @param {string} body - Message text
+ * @returns {Promise<{success: boolean, sid?: string, error?: string, memberName?: string}>}
+ */
+async function sendToMember(nameOrUsername, body) {
+  const tm = getTeamMembers();
+  if (!tm) return { success: false, error: "team-members module unavailable" };
+  const number = tm.getWhatsAppNumber(nameOrUsername);
+  if (!number) {
+    const member = tm.resolveTeamMember(nameOrUsername);
+    if (member) {
+      return { success: false, error: `${member.name} does not have a WhatsApp number configured` };
+    }
+    return { success: false, error: `Unknown team member: ${nameOrUsername}` };
+  }
+  const result = await sendMessage(number, body);
+  const member = tm.resolveTeamMember(nameOrUsername);
+  return { ...result, memberName: member ? member.name : nameOrUsername };
+}
+
+/**
+ * Send a WhatsApp message to ALL team members with configured numbers.
+ * @param {string} body - Message text
+ * @returns {Promise<Array<{name, success, sid?, error?}>>}
+ */
+async function sendToAll(body) {
+  const tm = getTeamMembers();
+  if (!tm) return [{ name: "all", success: false, error: "team-members module unavailable" }];
+  const members = tm.getTeamWhatsAppNumbers();
+  const results = [];
+  for (const m of members) {
+    const result = await sendMessage(m.whatsapp, body);
+    results.push({ name: m.name, nameAr: m.nameAr, whatsapp: m.whatsapp, ...result });
+  }
+  return results;
+}
+
+/**
+ * Send a task assignment notification to the assigned team member via WhatsApp.
+ * Called when a new task is created or reassigned.
+ * @param {object} task - Task object { id, title, assigned_to, due_date, topic_name }
+ * @param {string} assignedBy - Name of the person who assigned the task
+ */
+async function sendTaskAssignment(task, assignedBy) {
+  if (!isConfigured()) return { success: false, error: "Not configured" };
+  if (!task || !task.assigned_to) return { success: false, error: "No assignee" };
+
+  const tm = getTeamMembers();
+  if (!tm) return { success: false, error: "team-members module unavailable" };
+
+  // Resolve assignee — may be a multi-mention string like "@ceo @administration"
+  // Use the first resolvable token for WhatsApp delivery
+  const tokens = String(task.assigned_to).trim().split(/\s+/);
+  let targetNumber = null;
+  let targetName = task.assigned_to;
+  let targetNameAr = task.assigned_to;
+  for (const token of tokens) {
+    const num = tm.getWhatsAppNumber(token);
+    if (num) {
+      targetNumber = num;
+      const member = tm.resolveTeamMember(token);
+      if (member) { targetName = member.name; targetNameAr = member.nameAr || member.name; }
+      break;
+    }
+  }
+  if (!targetNumber) {
+    // Try resolving the whole string as a display name
+    const num = tm.getWhatsAppNumber(task.assigned_to);
+    if (!num) return { success: false, error: `No WhatsApp number for: ${task.assigned_to}` };
+    targetNumber = num;
+  }
+
+  const dueEn = task.due_date ? `\n📅 Due: ${task.due_date}` : "";
+  const dueAr = task.due_date ? `\n📅 موعد الاستحقاق: ${task.due_date}` : "";
+  const topicEn = task.topic_name ? `\n📍 Topic: ${task.topic_name}` : "";
+  const topicAr = task.topic_name ? `\n📍 الموضوع: ${task.topic_name}` : "";
+  const byEn = assignedBy ? ` (assigned by ${assignedBy})` : "";
+  const byAr = assignedBy ? ` (من ${assignedBy})` : "";
+
+  const body = [
+    `📋 *New Task Assigned — Monthly Key*`,
+    ``,
+    `Hi ${targetName}! You have a new task:`,
+    ``,
+    `📌 #${task.id}: ${task.title}${byEn}${dueEn}${topicEn}`,
+    ``,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    ``,
+    `📋 *مهمة جديدة — Monthly Key*`,
+    ``,
+    `مرحباً ${targetNameAr}! لديك مهمة جديدة:`,
+    ``,
+    `📌 #${task.id}: ${task.title}${byAr}${dueAr}${topicAr}`,
+    ``,
+    `— Monthly Key Bot`,
+  ].join("\n");
+
+  return sendMessage(targetNumber, body);
 }
 
 /**
@@ -336,11 +445,14 @@ async function forwardToWhatsApp(to, body) {
  * Get integration status info.
  */
 function getStatus() {
+  const tm = getTeamMembers();
+  const members = tm ? tm.getTeamWhatsAppNumbers() : [];
   return {
     configured: isConfigured(),
     accountSid: TWILIO_ACCOUNT_SID ? `${TWILIO_ACCOUNT_SID.substring(0, 8)}...` : "Not set",
     whatsappNumber: TWILIO_WHATSAPP_NUMBER || "Not set",
     ceoNumber: WHATSAPP_CEO_NUMBER || "Not set",
+    teamMembers: members.map(m => ({ name: m.name, role: m.role, whatsapp: m.whatsapp })),
   };
 }
 
@@ -348,6 +460,9 @@ module.exports = {
   isConfigured,
   sendMessage,
   sendToCeo,
+  sendToMember,
+  sendToAll,
+  sendTaskAssignment,
   sendCriticalAlert,
   sendDailySummary,
   sendEventReminder,

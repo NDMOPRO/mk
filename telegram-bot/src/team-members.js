@@ -24,6 +24,7 @@ const HARDCODED_MEMBERS = {
     roleAr: "المدير التنفيذي",
     priority: "top",
     isAdmin: true,
+    whatsapp: "+966535080045",
   },
   // Alias for the same CEO account
   hobart2007: {
@@ -33,6 +34,7 @@ const HARDCODED_MEMBERS = {
     roleAr: "المدير التنفيذي",
     priority: "top",
     isAdmin: true,
+    whatsapp: "+966535080045",
   },
   // Common mention aliases for CEO (used in task assignee fields)
   ceo: {
@@ -42,6 +44,7 @@ const HARDCODED_MEMBERS = {
     roleAr: "المدير التنفيذي",
     priority: "top",
     isAdmin: true,
+    whatsapp: "+966535080045",
   },
   administration: {
     name: "Khalid",
@@ -50,6 +53,7 @@ const HARDCODED_MEMBERS = {
     roleAr: "المدير التنفيذي",
     priority: "top",
     isAdmin: true,
+    whatsapp: "+966535080045",
   },
 
   // ─── Top Management ───────────────────────────────────────
@@ -60,6 +64,7 @@ const HARDCODED_MEMBERS = {
     roleAr: "الإدارة العليا",
     priority: "high",
     isAdmin: false,
+    whatsapp: "+966500051679",
   },
 
   // ─── Operational Management ───────────────────────────────
@@ -70,6 +75,7 @@ const HARDCODED_MEMBERS = {
     roleAr: "مدير العمليات",
     priority: "high",
     isAdmin: false,
+    whatsapp: "+966531324929",
   },
 
   // ─── CFO — no Telegram username, matched by first name ────
@@ -84,6 +90,7 @@ const HARDCODED_MEMBERS = {
     isAdmin: false,
     noUsername: true, // flag: this member has no Telegram username
     telegramFirstName: "Sameh",
+    whatsapp: "+966509463489",
   },
 
   // ─── Public Relations Manager ─────────────────────────────
@@ -94,6 +101,7 @@ const HARDCODED_MEMBERS = {
     roleAr: "مدير العلاقات العامة",
     priority: "normal",
     isAdmin: false,
+    whatsapp: "+966530344344",
   },
 };
 
@@ -350,6 +358,41 @@ function isHighPriority(username) {
 }
 
 /**
+ * Get the WhatsApp number for a team member by username, name, or first name.
+ * @param {string} usernameOrName - Telegram username, display name, or first name
+ * @returns {string|null} WhatsApp number (e.g., "+966535080045") or null if not found/set
+ */
+function getWhatsAppNumber(usernameOrName) {
+  const member = resolveTeamMember(usernameOrName);
+  return (member && member.whatsapp) ? member.whatsapp : null;
+}
+
+/**
+ * Get all team members that have a WhatsApp number configured.
+ * Deduplicates by name+role (same person may have multiple alias keys).
+ * @returns {Array<{name, nameAr, role, roleAr, whatsapp, username}>}
+ */
+function getTeamWhatsAppNumbers() {
+  const result = [];
+  const seen = new Set();
+  for (const [key, m] of Object.entries(HARDCODED_MEMBERS)) {
+    if (!m.whatsapp) continue;
+    const dedupeKey = m.whatsapp; // dedupe by phone number
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    result.push({
+      username: key.startsWith("__firstname__") ? null : key,
+      name: m.name,
+      nameAr: m.nameAr,
+      role: m.role,
+      roleAr: m.roleAr,
+      whatsapp: m.whatsapp,
+    });
+  }
+  return result;
+}
+
+/**
  * Get the full team registry (for AI system prompts, reports, etc.)
  * @returns {string} Formatted team directory
  */
@@ -403,6 +446,9 @@ module.exports = {
   isHighPriority,
   getTeamDirectory,
   getAllTeamMembers,
+  // WhatsApp number lookup
+  getWhatsAppNumber,
+  getTeamWhatsAppNumbers,
   // DB integration
   loadFromDatabase,
   addToRegistry,
