@@ -222,6 +222,10 @@ const {
 const translationService = require("./services/translation");
 const { handleTranslate } = require("./handlers/translate");
 
+// AI Operations Consultant
+const consultant = require("./services/consultant");
+const { handleConsultant } = require("./handlers/consultant");
+
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
 
@@ -420,6 +424,9 @@ bot.command("editcontact",       safeHandler('ops:editcontact',       (ctx) => {
 
 // Smart Hybrid Translation System
 bot.command("translate",         safeHandler('ops:translate',         (ctx) => { if (!isOpsGroup(ctx)) return; return handleTranslate(ctx); }));
+
+// AI Operations Consultant
+bot.command("consultant",        safeHandler('ops:consultant',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleConsultant(ctx); }));
 
 // ─── Text Message Handler ───────────────────────────────────────
 /**
@@ -798,6 +805,7 @@ async function setupBot() {
         { command: "editcontact",   description: "Edit contact | تعديل جهة اتصال" },
         { command: "deletecontact", description: "Delete contact | حذف جهة اتصال" },
         { command: "translate",      description: "Translate message | ترجمة رسالة" },
+        { command: "consultant",     description: "AI consultant report | تقرير المستشار" },
       ], { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
     );
 
@@ -1075,7 +1083,30 @@ async function startWebhook() {
     'Channel Posting': true,
     'WhatsApp/Twilio': whatsappService.isConfigured(),
     'Contacts System': true,
+    'AI Consultant': true,
   });
+
+  // 8. Trigger one-time demo consultant report on first deploy
+  try {
+    const opsDb = require('./services/ops-database');
+    const demoSent = opsDb.getBotState('consultant_demo_sent');
+    if (!demoSent) {
+      log.info('Boot', 'Triggering one-time consultant demo report...');
+      opsDb.setBotState('consultant_demo_sent', 'true');
+      // Run async — don't block startup
+      consultant.generateTodayReport(bot).then(result => {
+        if (result.success) {
+          log.info('Boot', `Consultant demo report posted (msg ${result.messageId})`);
+        } else {
+          log.error('Boot', `Consultant demo report failed: ${result.error}`);
+        }
+      }).catch(e => {
+        log.error('Boot', 'Consultant demo report error', { error: e.message });
+      });
+    }
+  } catch (e) {
+    log.error('Boot', 'Consultant demo init error', { error: e.message });
+  }
 
   writeHeartbeat();
 }

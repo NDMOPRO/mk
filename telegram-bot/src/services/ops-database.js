@@ -424,6 +424,19 @@ function initTables() {
     )
   `);
 
+  // ─── Consultant Reports ──────────────────────────────────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS consultant_reports (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_type     TEXT NOT NULL DEFAULT 'weekly',
+      period_start    TEXT,
+      period_end      TEXT,
+      report_text     TEXT,
+      posted_message_id INTEGER,
+      created_at      TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   // ─── Bot State (for one-time flags) ───────────────────────────
   d.exec(`
     CREATE TABLE IF NOT EXISTS bot_state (
@@ -1163,6 +1176,10 @@ module.exports = {
   searchContactsByType, updateContact, deleteContact, updateContactMessageId,
   // Bot State
   getBotState, setBotState,
+  // Consultant Reports
+  saveConsultantReport, getConsultantReports, getLastConsultantReport,
+  // Consultant Data Gathering
+  getConsultantWeekData, getConsultantPeriodData,
 };
 
 function getAllTasksForSync(chatId) {
@@ -1558,4 +1575,209 @@ function setBotState(key, value) {
     INSERT INTO bot_state (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run(key, value);
+}
+
+// ═════════════════════════════════════════════════════════════
+// ═══ Consultant Reports ═════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+
+function saveConsultantReport(reportType, periodStart, periodEnd, reportText, postedMessageId) {
+  const d = getDb();
+  return d.prepare(`
+    INSERT INTO consultant_reports (report_type, period_start, period_end, report_text, posted_message_id)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(reportType, periodStart, periodEnd, reportText, postedMessageId || null).lastInsertRowid;
+}
+
+function getConsultantReports(limit = 10) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM consultant_reports ORDER BY created_at DESC LIMIT ?`).all(limit);
+}
+
+function getLastConsultantReport(reportType) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM consultant_reports WHERE report_type = ? ORDER BY created_at DESC LIMIT 1`).get(reportType);
+}
+
+// ═════════════════════════════════════════════════════════════
+// ═══ Consultant Data Gathering (comprehensive) ══════════════
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Gather all operational data for a given period.
+ * @param {number} chatId - The ops group chat ID
+ * @param {string} sinceUtc - UTC datetime string "YYYY-MM-DD HH:MM:SS"
+ * @param {string} untilUtc - UTC datetime string "YYYY-MM-DD HH:MM:SS"
+ * @returns {object} Comprehensive data object for AI analysis
+ */
+function getConsultantPeriodData(chatId, sinceUtc, untilUtc) {
+  const d = getDb();
+
+  // ─── Tasks ───────────────────────────────────────────────
+  const tasksCreated = d.prepare(`
+    SELECT * FROM tasks WHERE chat_id = ? AND created_at >= ? AND created_at < ?
+    ORDER BY created_at ASC
+  `).all(chatId, sinceUtc, untilUtc);
+
+  const tasksCompleted = d.prepare(`
+    SELECT * FROM tasks WHERE chat_id = ? AND status = 'done' AND done_at >= ? AND done_at < ?
+    ORDER BY done_at ASC
+  `).all(chatId, sinceUtc, untilUtc);
+
+  const tasksPending = d.prepare(`
+    SELECT * FROM tasks WHERE chat_id = ? AND status = 'pending'
+    ORDER BY created_at ASC
+  `).all(chatId);
+
+  const tasksOverdue = d.prepare(`
+    SELECT * FROM tasks WHERE chat_id = ? AND status = 'pending' AND due_date IS NOT NULL AND due_date < date('now')
+    ORDER BY due_date ASC
+  `).all(chatId);
+
+  const tasksCancelled = d.prepare(`
+    SELECT * FROM tasks WHERE chat_id = ? AND status = 'cancelled' AND updated_at >= ? AND updated_at < ?
+    ORDER BY updated_at ASC
+  `).all(chatId, sinceUtc, untilUtc);
+
+  // ─── Per-assignee breakdown ──────────────────────────────
+  const byAssignee = d.prepare(`
+    SELECT assigned_to,
+           COUNT(*) as total,
+           SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done,
+           SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+           SUM(CASE WHEN status = 'pending' AND due_date IS NOT NULL AND due_date < date('now') THEN 1 ELSE 0 END) as overdue
+    FROM tasks WHERE chat_id = ? AND created_at >= ? AND assigned_to IS NOT NULL
+    GROUP BY assigned_to ORDER BY total DESC
+  `).all(chatId, sinceUtc);
+
+  // ─── Average resolution time (hours) ────────────────────
+  const avgResolution = d.prepare(`
+    SELECT AVG(CAST((julianday(done_at) - julianday(created_at)) * 24 AS REAL)) as avg_hours
+    FROM tasks WHERE chat_id = ? AND status = 'done' AND done_at >= ? AND done_at < ? AND done_at IS NOT NULL
+  `).get(chatId, sinceUtc, untilUtc);
+
+  // ─── By topic/property ──────────────────────────────────
+  const byTopic = d.prepare(`
+    SELECT topic_name, COUNT(*) as total,
+           SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done,
+           SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+    FROM tasks WHERE chat_id = ? AND created_at >= ?
+    GROUP BY topic_name ORDER BY total DESC
+  `).all(chatId, sinceUtc);
+
+  // ─── Activity Log ────────────────────────────────────────
+  const activities = d.prepare(`
+    SELECT * FROM activity_log
+    WHERE chat_id = ? AND timestamp >= ? AND timestamp < ?
+    ORDER BY timestamp ASC
+  `).all(chatId, sinceUtc, untilUtc);
+
+  // Activity per user
+  const activityByUser = d.prepare(`
+    SELECT user_display_name, message_type, COUNT(*) as count
+    FROM activity_log
+    WHERE chat_id = ? AND timestamp >= ? AND timestamp < ?
+    GROUP BY user_display_name, message_type
+    ORDER BY user_display_name ASC
+  `).all(chatId, sinceUtc, untilUtc);
+
+  // ─── Task Evidence ───────────────────────────────────────
+  const evidence = d.prepare(`
+    SELECT te.*, t.title AS task_title
+    FROM task_evidence te
+    JOIN tasks t ON te.task_id = t.id
+    WHERE t.chat_id = ? AND te.submitted_at >= ? AND te.submitted_at < ?
+    ORDER BY te.submitted_at ASC
+  `).all(chatId, sinceUtc, untilUtc);
+
+  // ─── Meetings ────────────────────────────────────────────
+  const meetings = d.prepare(`
+    SELECT * FROM scheduled_meetings
+    WHERE chat_id = ? AND meeting_datetime >= ? AND meeting_datetime < ?
+    ORDER BY meeting_datetime ASC
+  `).all(chatId, sinceUtc, untilUtc);
+
+  // ─── Appointments ────────────────────────────────────────
+  const appointments = d.prepare(`
+    SELECT * FROM appointments
+    WHERE chat_id = ? AND appointment_datetime >= ? AND appointment_datetime < ?
+    ORDER BY appointment_datetime ASC
+  `).all(chatId, sinceUtc, untilUtc);
+
+  // ─── Vendor Follow-ups ──────────────────────────────────
+  let vendorFollowups = [];
+  try {
+    vendorFollowups = d.prepare(`
+      SELECT * FROM vendor_followups
+      WHERE chat_id = ? AND created_at >= ? AND created_at < ?
+      ORDER BY created_at ASC
+    `).all(chatId, sinceUtc, untilUtc);
+  } catch (e) { /* table may not have chat_id */ }
+
+  // ─── Escalations (SLA alerts) ───────────────────────────
+  let slaAlerts = [];
+  try {
+    slaAlerts = d.prepare(`
+      SELECT sa.*, t.title AS task_title, t.assigned_to
+      FROM sla_alerts sa
+      JOIN tasks t ON sa.task_id = t.id
+      WHERE sa.sent_at >= ? AND sa.sent_at < ?
+      ORDER BY sa.sent_at ASC
+    `).all(sinceUtc, untilUtc);
+  } catch (e) { /* table may be empty */ }
+
+  // ─── Upcoming (next week) ───────────────────────────────
+  const upcomingTasks = d.prepare(`
+    SELECT * FROM tasks WHERE chat_id = ? AND status = 'pending' AND due_date >= date('now') AND due_date <= date('now', '+7 days')
+    ORDER BY due_date ASC
+  `).all(chatId);
+
+  const upcomingMeetings = d.prepare(`
+    SELECT * FROM scheduled_meetings
+    WHERE chat_id = ? AND status = 'scheduled' AND meeting_datetime >= datetime('now') AND meeting_datetime <= datetime('now', '+7 days')
+    ORDER BY meeting_datetime ASC
+  `).all(chatId);
+
+  const upcomingAppointments = d.prepare(`
+    SELECT * FROM appointments
+    WHERE chat_id = ? AND status = 'scheduled' AND appointment_datetime >= datetime('now') AND appointment_datetime <= datetime('now', '+7 days')
+    ORDER BY appointment_datetime ASC
+  `).all(chatId);
+
+  return {
+    period: { start: sinceUtc, end: untilUtc },
+    tasks: {
+      created: tasksCreated,
+      completed: tasksCompleted,
+      pending: tasksPending,
+      overdue: tasksOverdue,
+      cancelled: tasksCancelled,
+      byAssignee,
+      byTopic,
+      avgResolutionHours: avgResolution?.avg_hours ? Math.round(avgResolution.avg_hours * 10) / 10 : null,
+    },
+    activities,
+    activityByUser,
+    evidence,
+    meetings,
+    appointments,
+    vendorFollowups,
+    slaAlerts,
+    upcoming: {
+      tasks: upcomingTasks,
+      meetings: upcomingMeetings,
+      appointments: upcomingAppointments,
+    },
+  };
+}
+
+/**
+ * Convenience: get the last 7 days of data (weekly report).
+ */
+function getConsultantWeekData(chatId) {
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const sinceUtc = weekAgo.toISOString().replace('T', ' ').substring(0, 19);
+  const untilUtc = now.toISOString().replace('T', ' ').substring(0, 19);
+  return getConsultantPeriodData(chatId, sinceUtc, untilUtc);
 }

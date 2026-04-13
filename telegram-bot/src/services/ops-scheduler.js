@@ -21,6 +21,7 @@
  * 14. Priority Escalation — every 5 min
  * 15. Overdue Pings — every 60 min
  * 16. Reminders/Follow-ups — every 1 min
+ * 17. Weekly AI Consultant Report — Sunday 8:00 PM KSA → CEO Update (thread 4)
  */
 
 const opsDb = require("./ops-database");
@@ -29,6 +30,7 @@ const googleSync = require("./google-sync");
 const v5Handlers = require("../handlers/ops-v5");
 const { resolveAttendees, formatKSA } = require("../handlers/meetings");
 const log = require("../utils/logger");
+const consultant = require("./consultant");
 
 let bot = null;
 let schedulerInterval = null;
@@ -1417,6 +1419,7 @@ async function tick() {
     await safeJob('sendWeeklyCeoMessage', sendWeeklyCeoMessage);
     await safeJob('sendWeeklyStandup', sendWeeklyStandup);
     await safeJob('checkDailyWeather', checkDailyWeather);
+    await safeJob('sendWeeklyConsultantReport', sendWeeklyConsultantReport);
 
   } catch (error) {
     log.error('Scheduler', 'Tick-level error (outer catch)', { error: error.message });
@@ -1425,9 +1428,37 @@ async function tick() {
   }
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━ Weekly AI Consultant Report (Sunday 8 PM KSA) ━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async function sendWeeklyConsultantReport() {
+  if (!bot) return;
+  if (alreadySent("weekly_consultant")) return;
+
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  const dayOfWeek = ksa.getUTCDay();
+  if (dayOfWeek !== 0 || hour !== 20 || min >= 5) return;  // Sunday 8 PM KSA
+
+  markSent("weekly_consultant");
+
+  try {
+    const result = await consultant.generateWeeklyReport(bot);
+    if (result.success) {
+      log.info('Scheduler', `Weekly consultant report posted (msg ${result.messageId})`);
+    } else {
+      log.error('Scheduler', `Weekly consultant report failed: ${result.error}`);
+    }
+  } catch (error) {
+    log.error('Scheduler', 'Weekly consultant report error', { error: error.message });
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ━━━ Per-Employee Morning Task Briefing (9:05 AM KSA) ━━━━━━━━━
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function sendPerEmployeeTaskBriefing() {
   if (!bot) return;
