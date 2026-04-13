@@ -110,8 +110,8 @@ async function sendMorningBriefing() {
     if (priorities.length > 0) {
       msg += `📋 *Today's Priorities:*\n`;
       priorities.slice(0, 10).forEach((t, i) => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t)}` : "";
-        msg += `  ${i + 1}. ${safeTxt(t)}${assignee} [#${t.id}]\n`;
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        msg += `  ${i + 1}. ${safeTxt(t.title)}${assignee} [#${t.id}]\n`;
       });
       msg += "\n";
     }
@@ -119,8 +119,8 @@ async function sendMorningBriefing() {
     if (overdue.length > 0) {
       msg += `🔴 *Overdue (${overdue.length}):*\n`;
       overdue.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t)}` : "";
-        msg += `  • ${safeTxt(t)}${assignee} _(due: ${t.due_date})_ [#${t.id}]\n`;
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        msg += `  • ${safeTxt(t.title)}${assignee} _(due: ${t.due_date})_ [#${t.id}]\n`;
       });
       msg += "\n";
     }
@@ -128,8 +128,8 @@ async function sendMorningBriefing() {
     if (dueToday.length > 0) {
       msg += `📌 *Due Today (${dueToday.length}):*\n`;
       dueToday.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t)}` : "";
-        msg += `  • ${safeTxt(t)}${assignee} [#${t.id}]\n`;
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        msg += `  • ${safeTxt(t.title)}${assignee} [#${t.id}]\n`;
       });
       msg += "\n";
     }
@@ -161,8 +161,8 @@ async function sendMorningBriefing() {
     if (priorities.length > 0) {
       msg += `📋 *أولويات اليوم:*\n`;
       priorities.slice(0, 10).forEach((t, i) => {
-        const assignee = t.assigned_to ? ` ← ${safeTxt(t)}` : "";
-        msg += `  ${i + 1}. ${safeTxt(t)}${assignee} [#${t.id}]\n`;
+        const assignee = t.assigned_to ? ` ← ${safeTxt(t.title)}` : "";
+        msg += `  ${i + 1}. ${safeTxt(t.title)}${assignee} [#${t.id}]\n`;
       });
       msg += "\n";
     }
@@ -170,8 +170,8 @@ async function sendMorningBriefing() {
     if (overdue.length > 0) {
       msg += `🔴 *متأخرة (${overdue.length}):*\n`;
       overdue.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` ← ${safeTxt(t)}` : "";
-        msg += `  • ${safeTxt(t)}${assignee} _(${t.due_date})_ [#${t.id}]\n`;
+        const assignee = t.assigned_to ? ` ← ${safeTxt(t.title)}` : "";
+        msg += `  • ${safeTxt(t.title)}${assignee} _(${t.due_date})_ [#${t.id}]\n`;
       });
       msg += "\n";
     }
@@ -179,8 +179,8 @@ async function sendMorningBriefing() {
     if (dueToday.length > 0) {
       msg += `📌 *مستحقة اليوم (${dueToday.length}):*\n`;
       dueToday.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` ← ${safeTxt(t)}` : "";
-        msg += `  • ${safeTxt(t)}${assignee} [#${t.id}]\n`;
+        const assignee = t.assigned_to ? ` ← ${safeTxt(t.title)}` : "";
+        msg += `  • ${safeTxt(t.title)}${assignee} [#${t.id}]\n`;
       });
       msg += "\n";
     }
@@ -236,8 +236,8 @@ async function sendDailyReport() {
     if (completedToday.length > 0) {
       msg += `✅ *Completed Today (${completedToday.length}):*\n`;
       completedToday.slice(0, 12).forEach((t) => {
-        const assignee = t.assigned_to ? ` (${safeTxt(t)})` : "";
-        msg += `  • ${safeTxt(t)}${assignee}\n`;
+        const assignee = t.assigned_to ? ` (${safeTxt(t.title)})` : "";
+        msg += `  • ${safeTxt(t.title)}${assignee}\n`;
       });
       if (completedToday.length > 12) msg += `  _... and ${completedToday.length - 12} more_\n`;
       msg += "\n";
@@ -262,8 +262,8 @@ async function sendDailyReport() {
     if (overdue.length > 0) {
       msg += `🔴 *Overdue (${overdue.length}):*\n`;
       overdue.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t)}` : "";
-        msg += `  • ${safeTxt(t)}${assignee} _(due: ${t.due_date})_\n`;
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        msg += `  • ${safeTxt(t.title)}${assignee} _(due: ${t.due_date})_\n`;
       });
       msg += "\n";
     }
@@ -281,8 +281,8 @@ async function sendDailyReport() {
     if (completedToday.length > 0) {
       msg += `✅ *المنجز اليوم (${completedToday.length}):*\n`;
       completedToday.slice(0, 12).forEach((t) => {
-        const assignee = t.assigned_to ? ` (${safeTxt(t)})` : "";
-        msg += `  • ${safeTxt(t)}${assignee}\n`;
+        const assignee = t.assigned_to ? ` (${safeTxt(t.title)})` : "";
+        msg += `  • ${safeTxt(t.title)}${assignee}\n`;
       });
       msg += "\n";
     } else {
@@ -306,8 +306,8 @@ async function sendDailyReport() {
     if (overdue.length > 0) {
       msg += `🔴 *متأخرة (${overdue.length}):*\n`;
       overdue.slice(0, 8).forEach((t) => {
-        const assignee = t.assigned_to ? ` ← ${safeTxt(t)}` : "";
-        msg += `  • ${safeTxt(t)}${assignee} _(${t.due_date})_\n`;
+        const assignee = t.assigned_to ? ` ← ${safeTxt(t.title)}` : "";
+        msg += `  • ${safeTxt(t.title)}${assignee} _(${t.due_date})_\n`;
       });
       msg += "\n";
     }
@@ -441,20 +441,20 @@ async function checkEscalations() {
       if (escalatedTasks.has(task.id)) continue;
       escalatedTasks.add(task.id);
 
-      const assignee = task.assigned_to ? ` → ${safeTxt(task)}` : "";
+      const assignee = task.assigned_to ? ` → ${safeTxt(task.title)}` : "";
       const hoursOld = Math.round((Date.now() - new Date(task.created_at).getTime()) / (60 * 60 * 1000));
 
       let msg = `🚨 *ESCALATION | تصعيد*\n`;
       msg += `${DIV}\n\n`;
       msg += `*Blocker Unresolved >24h*\n`;
-      msg += `  ⬜ ${safeTxt(task)}${assignee}\n`;
+      msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
       msg += `  ⏰ Created ${hoursOld}h ago\n`;
       msg += `  📍 10 — Blockers & Escalations\n`;
       msg += `  🔗 Task #${task.id}\n\n`;
       msg += `  ⚠️ _This blocker needs immediate attention._\n`;
       msg += `\n${DIV}\n\n`;
       msg += `*عائق لم يُحل منذ أكثر من 24 ساعة*\n`;
-      msg += `  ⬜ ${safeTxt(task)}${assignee}\n`;
+      msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
       msg += `  ⏰ منذ ${hoursOld} ساعة\n`;
       msg += `  📍 10 — العوائق والتصعيد\n`;
       msg += `  🔗 مهمة #${task.id}\n\n`;
@@ -531,13 +531,13 @@ async function pingOverdueTasks() {
 
       let msg = `⏰ *Overdue Reminder | تذكير بالتأخر*\n`;
       msg += `${DIV}\n\n`;
-      msg += `${safeTxt(task)}, task #${task.id} is overdue:\n`;
-      msg += `  ⬜ ${safeTxt(task)}\n`;
+      msg += `${safeTxt(task.title)}, task #${task.id} is overdue:\n`;
+      msg += `  ⬜ ${safeTxt(task.title)}\n`;
       msg += `  📅 Due: ${task.due_date}\n`;
       msg += `  📍 ${task.topic_name || "General"}\n\n`;
       msg += `${DIV}\n\n`;
-      msg += `${safeTxt(task)}، المهمة #${task.id} متأخرة:\n`;
-      msg += `  ⬜ ${safeTxt(task)}\n`;
+      msg += `${safeTxt(task.title)}، المهمة #${task.id} متأخرة:\n`;
+      msg += `  ⬜ ${safeTxt(task.title)}\n`;
       msg += `  📅 الاستحقاق: ${task.due_date}\n`;
       msg += `  📍 ${task.topic_name || "عام"}`;
 
@@ -641,7 +641,7 @@ async function checkSlaBreaches() {
       for (const task of tasks) {
         const createdAt = new Date(task.created_at).getTime();
         const elapsedHours = (Date.now() - createdAt) / (60 * 60 * 1000);
-        const assignee = task.assigned_to ? ` → ${safeTxt(task)}` : "";
+        const assignee = task.assigned_to ? ` → ${safeTxt(task.title)}` : "";
 
         // 75% warning
         if (elapsedHours >= slaHours * 0.75 && elapsedHours < slaHours && !slaWarned.has(task.id)) {
@@ -651,13 +651,13 @@ async function checkSlaBreaches() {
           let msg = `🟡 *SLA Warning | تحذير SLA*\n`;
           msg += `${DIV}\n\n`;
           msg += `*EN:* Task approaching SLA deadline\n`;
-          msg += `  ⬜ ${safeTxt(task)}${assignee}\n`;
+          msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
           msg += `  ⏱️ SLA: ${slaHours}h | Remaining: ~${remaining}h\n`;
           msg += `  📍 ${sla.topic_name}\n`;
           msg += `  🔗 Task #${task.id}\n\n`;
           msg += `${DIV}\n\n`;
           msg += `*AR:* المهمة تقترب من الموعد النهائي\n`;
-          msg += `  ⬜ ${safeTxt(task)}${assignee}\n`;
+          msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
           msg += `  ⏱️ SLA: ${slaHours} ساعة | المتبقي: ~${remaining} ساعة\n`;
           msg += `  🔗 مهمة #${task.id}`;
 
@@ -678,14 +678,14 @@ async function checkSlaBreaches() {
           let msg = `🔴 *SLA BREACHED | تجاوز SLA*\n`;
           msg += `${DIV}\n\n`;
           msg += `*EN:* SLA deadline exceeded\n`;
-          msg += `  ⬜ ${safeTxt(task)}${assignee}\n`;
+          msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
           msg += `  ⏱️ SLA: ${slaHours}h | Elapsed: ${Math.round(elapsedHours)}h (+${overBy}h over)\n`;
           msg += `  📍 ${sla.topic_name}\n`;
           msg += `  🔗 Task #${task.id}\n\n`;
           msg += `  ⚠️ _SLA breached. Immediate action required._\n`;
           msg += `\n${DIV}\n\n`;
           msg += `*AR:* تم تجاوز الموعد النهائي\n`;
-          msg += `  ⬜ ${safeTxt(task)}${assignee}\n`;
+          msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
           msg += `  ⏱️ SLA: ${slaHours} ساعة | المنقضي: ${Math.round(elapsedHours)} ساعة (+${overBy} ساعة)\n`;
           msg += `  🔗 مهمة #${task.id}\n\n`;
           msg += `  ⚠️ _تم تجاوز SLA. مطلوب إجراء فوري._`;
@@ -758,19 +758,19 @@ async function processRecurringTasks() {
 
         let msg = `🔄 *Recurring Task | مهمة متكررة*\n`;
         msg += `${DIV}\n\n`;
-        msg += `  ⬜ ${safeTxt(rec)} [#${taskId}]\n`;
+        msg += `  ⬜ ${safeTxt(rec.title)} [#${taskId}]\n`;
         msg += `  📅 ${rec.schedule_type}: ${rec.schedule_value}`;
-        if (rec.assigned_to) msg += `\n  👤 ${safeTxt(rec)}`;
+        if (rec.assigned_to) msg += `\n  👤 ${safeTxt(rec.title)}`;
         msg += `\n\n${DIV}\n\n`;
-        msg += `  ⬜ ${safeTxt(rec)} [#${taskId}]\n`;
+        msg += `  ⬜ ${safeTxt(rec.title)} [#${taskId}]\n`;
         msg += `  📅 ${rec.schedule_type === "daily" ? "يومي" : rec.schedule_type === "weekly" ? "أسبوعي" : "شهري"}: ${rec.schedule_value}`;
-        if (rec.assigned_to) msg += `\n  👤 ${safeTxt(rec)}`;
+        if (rec.assigned_to) msg += `\n  👤 ${safeTxt(rec.title)}`;
 
         const sendOpts = { parse_mode: "Markdown" };
         sendOpts.message_thread_id = rec.thread_id || THREAD_CEO_UPDATE;
 
         await bot.telegram.sendMessage(rec.chat_id, msg, sendOpts);
-        console.log(`[OpsScheduler] Recurring task created: "${safeTxt(rec)}" → #${taskId}`);
+        console.log(`[OpsScheduler] Recurring task created: "${safeTxt(rec.title)}" → #${taskId}`);
       } catch (err) {
         console.error(`[OpsScheduler] Recurring task error for ID ${rec.id}:`, err.message);
       }
@@ -858,18 +858,18 @@ async function checkPriorityEscalation() {
       if (alreadySent(key)) continue;
       markSent(key);
 
-      const assignee = task.assigned_to ? ` → ${safeTxt(task)}` : "";
+      const assignee = task.assigned_to ? ` → ${safeTxt(task.title)}` : "";
       const hours = Math.round((Date.now() - new Date(task.created_at).getTime()) / 3600000);
 
       let msg = `🔺 *Priority Escalation | تصعيد أولوية*\n`;
       msg += `${DIV}\n\n`;
       msg += `*EN:* High priority task pending ${hours}h+\n`;
-      msg += `  ⬜ ${safeTxt(task)}${assignee}\n`;
+      msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
       msg += `  📍 ${task.topic_name || "General"} → CEO Update\n`;
       msg += `  🔗 Task #${task.id}\n\n`;
       msg += `${DIV}\n\n`;
       msg += `*AR:* مهمة عالية الأولوية معلقة منذ ${hours}+ ساعة\n`;
-      msg += `  ⬜ ${safeTxt(task)}${assignee}\n`;
+      msg += `  ⬜ ${safeTxt(task.title)}${assignee}\n`;
       msg += `  📍 ${task.topic_name || "عام"} → تحديث المدير\n`;
       msg += `  🔗 مهمة #${task.id}`;
 
@@ -1044,7 +1044,7 @@ async function sendWeeklyStandup() {
       const medals = ["🥇", "🥈", "🥉"];
       leaderboard.slice(0, 5).forEach((entry, i) => {
         const medal = medals[i] || `  ${i + 1}.`;
-        msg += `${medal} ${safeTxt(entry)}: ${entry.completed}/${entry.total_tasks} (${entry.completion_rate || 0}%)\n`;
+        msg += `${medal} ${safeTxt(entry.name)}: ${entry.completed}/${entry.total_tasks} (${entry.completion_rate || 0}%)\n`;
       });
       msg += "\n";
     }
@@ -1052,7 +1052,7 @@ async function sendWeeklyStandup() {
     if (overdue.length > 0) {
       msg += `🔴 *Overdue (${overdue.length}):*\n`;
       for (const t of overdue.slice(0, 5)) {
-        msg += `  • #${t.id}: ${safeTxt(t)}${t.assigned_to ? ` → ${safeTxt(t)}` : ""}\n`;
+        msg += `  • #${t.id}: ${safeTxt(t.title)}${t.assigned_to ? ` → ${safeTxt(t.title)}` : ""}\n`;
       }
       if (overdue.length > 5) msg += `  _...and ${overdue.length - 5} more_\n`;
       msg += "\n";
@@ -1079,7 +1079,7 @@ async function sendWeeklyStandup() {
       const medals = ["🥇", "🥈", "🥉"];
       leaderboard.slice(0, 5).forEach((entry, i) => {
         const medal = medals[i] || `  ${i + 1}.`;
-        msg += `${medal} ${safeTxt(entry)}: ${entry.completed}/${entry.total_tasks} (${entry.completion_rate || 0}%)\n`;
+        msg += `${medal} ${safeTxt(entry.name)}: ${entry.completed}/${entry.total_tasks} (${entry.completion_rate || 0}%)\n`;
       });
       msg += "\n";
     }
@@ -1203,7 +1203,7 @@ async function checkMeetingReminders() {
         const en = [
           `⏰ *Meeting in 30 minutes!*`,
           ``,
-          `📌 *${safeTxt(meeting)}*`,
+          `📌 *${safeTxt(meeting.title)}*`,
           `🕐 ${dt.en}`,
           meeting.location ? `📍 ${meeting.location}` : null,
           ``,
@@ -1215,7 +1215,7 @@ async function checkMeetingReminders() {
         const ar = [
           `⏰ *اجتماع بعد 30 دقيقة!*`,
           ``,
-          `📌 *${safeTxt(meeting)}*`,
+          `📌 *${safeTxt(meeting.title)}*`,
           `🕐 ${dt.ar}`,
           meeting.location ? `📍 ${meeting.location}` : null,
           ``,
@@ -1230,7 +1230,7 @@ async function checkMeetingReminders() {
           message_thread_id: threadId,
         });
         opsDb.markMeetingReminded30(meeting.id);
-        log.info('Scheduler', `Sent 30-min reminder for meeting #M${meeting.id}: ${safeTxt(meeting)}`);
+        log.info('Scheduler', `Sent 30-min reminder for meeting #M${meeting.id}: ${safeTxt(meeting.title)}`);
       } catch (err) {
         log.error('Scheduler', `Failed to send 30-min reminder for meeting #M${meeting.id}`, { error: err.message });
       }
@@ -1244,8 +1244,8 @@ async function checkMeetingReminders() {
         try { attendees = JSON.parse(meeting.attendees || '[]'); } catch (e) {}
         const tags = attendees.map(a => a.startsWith('@') ? a : `@${a}`).join(' ');
 
-        const en = `🔔 *Meeting starting in 5 minutes!*\n\n📌 *${safeTxt(meeting)}*${meeting.location ? `\n📍 ${meeting.location}` : ''}\n\n${tags || ''}`;
-        const ar = `🔔 *الاجتماع يبدأ بعد 5 دقائق!*\n\n📌 *${safeTxt(meeting)}*${meeting.location ? `\n📍 ${meeting.location}` : ''}`;
+        const en = `🔔 *Meeting starting in 5 minutes!*\n\n📌 *${safeTxt(meeting.title)}*${meeting.location ? `\n📍 ${meeting.location}` : ''}\n\n${tags || ''}`;
+        const ar = `🔔 *الاجتماع يبدأ بعد 5 دقائق!*\n\n📌 *${safeTxt(meeting.title)}*${meeting.location ? `\n📍 ${meeting.location}` : ''}`;
 
         const text = `${en}\n━━━━━━━━━━━━━━\n${ar}`;
         const threadId = meeting.thread_id || 4;
@@ -1254,7 +1254,7 @@ async function checkMeetingReminders() {
           message_thread_id: threadId,
         });
         opsDb.markMeetingReminded5(meeting.id);
-        log.info('Scheduler', `Sent 5-min reminder for meeting #M${meeting.id}: ${safeTxt(meeting)}`);
+        log.info('Scheduler', `Sent 5-min reminder for meeting #M${meeting.id}: ${safeTxt(meeting.title)}`);
       } catch (err) {
         log.error('Scheduler', `Failed to send 5-min reminder for meeting #M${meeting.id}`, { error: err.message });
       }
@@ -1301,7 +1301,7 @@ async function checkAppointmentReminders() {
         const en = [
           `\u23F0 *Appointment in 1 hour!*`,
           ``,
-          `\u{1F4CC} *${safeTxt(appt)}*`,
+          `\u{1F4CC} *${safeTxt(appt.title)}*`,
           `\u{1F550} ${dt.en}`,
           appt.location ? `\u{1F4CD} ${appt.location}` : null,
           ``,
@@ -1313,7 +1313,7 @@ async function checkAppointmentReminders() {
         const ar = [
           `\u23F0 *\u0645\u0648\u0639\u062F \u0628\u0639\u062F \u0633\u0627\u0639\u0629!*`,
           ``,
-          `\u{1F4CC} *${safeTxt(appt)}*`,
+          `\u{1F4CC} *${safeTxt(appt.title)}*`,
           `\u{1F550} ${dt.ar}`,
           appt.location ? `\u{1F4CD} ${appt.location}` : null,
           ``,
@@ -1328,7 +1328,7 @@ async function checkAppointmentReminders() {
           message_thread_id: threadId,
         });
         opsDb.markAppointmentReminder1h(appt.id);
-        log.info('Scheduler', `Sent 1h reminder for appointment #A${appt.id}: ${safeTxt(appt)}`);
+        log.info('Scheduler', `Sent 1h reminder for appointment #A${appt.id}: ${safeTxt(appt.title)}`);
 
         // Also send WhatsApp reminder if configured
         if (whatsappSvc && whatsappSvc.isConfigured()) {
@@ -1348,8 +1348,8 @@ async function checkAppointmentReminders() {
         try { intAttendees = JSON.parse(appt.attendees_internal || '[]'); } catch (e) {}
         const tags = intAttendees.map(a => a.startsWith('@') ? a : `@${a}`).join(' ');
 
-        const en = `\u{1F514} *Appointment in 15 minutes!*\n\n\u{1F4CC} *${safeTxt(appt)}*${appt.location ? `\n\u{1F4CD} ${appt.location}` : ''}\n\n${tags || ''}`;
-        const ar = `\u{1F514} *\u0627\u0644\u0645\u0648\u0639\u062F \u0628\u0639\u062F 15 \u062F\u0642\u064A\u0642\u0629!*\n\n\u{1F4CC} *${safeTxt(appt)}*${appt.location ? `\n\u{1F4CD} ${appt.location}` : ''}`;
+        const en = `\u{1F514} *Appointment in 15 minutes!*\n\n\u{1F4CC} *${safeTxt(appt.title)}*${appt.location ? `\n\u{1F4CD} ${appt.location}` : ''}\n\n${tags || ''}`;
+        const ar = `\u{1F514} *\u0627\u0644\u0645\u0648\u0639\u062F \u0628\u0639\u062F 15 \u062F\u0642\u064A\u0642\u0629!*\n\n\u{1F4CC} *${safeTxt(appt.title)}*${appt.location ? `\n\u{1F4CD} ${appt.location}` : ''}`;
 
         const text = `${en}\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n${ar}`;
         const threadId = appt.topic_thread_id || 4;
@@ -1358,7 +1358,7 @@ async function checkAppointmentReminders() {
           message_thread_id: threadId,
         });
         opsDb.markAppointmentReminder15m(appt.id);
-        log.info('Scheduler', `Sent 15-min reminder for appointment #A${appt.id}: ${safeTxt(appt)}`);
+        log.info('Scheduler', `Sent 15-min reminder for appointment #A${appt.id}: ${safeTxt(appt.title)}`);
 
         // Also send WhatsApp reminder if configured
         if (whatsappSvc && whatsappSvc.isConfigured()) {
@@ -1508,7 +1508,7 @@ async function sendPerEmployeeTaskBriefing() {
         const due = t.due_date ? `\n     📅 Deadline: <b>${t.due_date}</b>` : "";
         const topic = t.topic_name ? `\n     📁 ${t.topic_name}` : "";
         const desc = t.description ? `\n     💬 ${t.description.substring(0, 80)}${t.description.length > 80 ? '...' : ''}` : "";
-        msg += `${i + 1}. ${priorityEmoji[t.priority] || '🟡'} <b>[#${t.id}] ${safeTxt(t)}</b>${due}${topic}${desc}\n\n`;
+        msg += `${i + 1}. ${priorityEmoji[t.priority] || '🟡'} <b>[#${t.id}] ${safeTxt(t.title)}</b>${due}${topic}${desc}\n\n`;
       });
 
       msg += `${DIV2}\n\n`;
@@ -1516,7 +1516,7 @@ async function sendPerEmployeeTaskBriefing() {
 
       tasks.forEach((t, i) => {
         const due = t.due_date ? `\n     📅 الموعد: <b>${t.due_date}</b>` : "";
-        msg += `${i + 1}. ${priorityEmoji[t.priority] || '🟡'} <b>[#${t.id}] ${safeTxt(t)}</b>${due}\n\n`;
+        msg += `${i + 1}. ${priorityEmoji[t.priority] || '🟡'} <b>[#${t.id}] ${safeTxt(t.title)}</b>${due}\n\n`;
       });
 
       msg += `💡 /done #ID  /update #ID  /remind #ID`;
@@ -1566,8 +1566,8 @@ async function sendAfternoonTaskFollowUp() {
     if (overdue.length > 0) {
       msg += `🔴 <b>OVERDUE — Needs Immediate Update (${overdue.length}):</b>\n`;
       overdue.slice(0, 6).forEach(t => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t)}` : "";
-        msg += `  🔴 [#${t.id}] ${safeTxt(t)}${assignee} | Was due: ${t.due_date}\n`;
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        msg += `  🔴 [#${t.id}] ${safeTxt(t.title)}${assignee} | Was due: ${t.due_date}\n`;
       });
       msg += "\n";
     }
@@ -1575,8 +1575,8 @@ async function sendAfternoonTaskFollowUp() {
     if (allPending.length > 0) {
       msg += `⏳ <b>Still Pending (${allPending.length}) — Please update status:</b>\n`;
       allPending.slice(0, 8).forEach(t => {
-        const assignee = t.assigned_to ? ` → ${safeTxt(t)}` : "";
-        msg += `  🟡 [#${t.id}] ${safeTxt(t)}${assignee}\n`;
+        const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : "";
+        msg += `  🟡 [#${t.id}] ${safeTxt(t.title)}${assignee}\n`;
       });
       msg += "\n";
     }
@@ -1592,8 +1592,8 @@ async function sendAfternoonTaskFollowUp() {
     if (overdue.length > 0) {
       msg += `🔴 <b>متأخرة — تحتاج تحديثاً فورياً (${overdue.length}):</b>\n`;
       overdue.slice(0, 6).forEach(t => {
-        const assignee = t.assigned_to ? ` ← ${safeTxt(t)}` : "";
-        msg += `  🔴 [#${t.id}] ${safeTxt(t)}${assignee} | كان مستحقاً: ${t.due_date}\n`;
+        const assignee = t.assigned_to ? ` ← ${safeTxt(t.title)}` : "";
+        msg += `  🔴 [#${t.id}] ${safeTxt(t.title)}${assignee} | كان مستحقاً: ${t.due_date}\n`;
       });
       msg += "\n";
     }

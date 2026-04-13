@@ -191,8 +191,8 @@ async function handleOpsTask(ctx) {
 
   if (duplicate) {
     const dupAssignee = duplicate.assigned_to || "Unassigned";
-    const en = `⚠️ *Similar task already exists*\n\n📋 Task #${duplicate.id}: ${safeTxt(duplicate)}\n👤 Assigned to: ${dupAssignee}\n📊 Status: ${duplicate.status}\n\n💡 Use \`/done ${duplicate.id}\` to complete it, or create with a different description if this is truly a separate task.`;
-    const ar = `⚠️ *توجد مهمة مشابهة بالفعل*\n\n📋 المهمة #${duplicate.id}: ${safeTxt(duplicate)}\n👤 المسؤول: ${dupAssignee}\n📊 الحالة: ${duplicate.status}\n\n💡 استخدم \`/done ${duplicate.id}\` لإكمالها، أو أنشئ بوصف مختلف إذا كانت مهمة مختلفة فعلاً.`;
+    const en = `⚠️ *Similar task already exists*\n\n📋 Task #${duplicate.id}: ${safeTxt(duplicate.title)}\n👤 Assigned to: ${dupAssignee}\n📊 Status: ${duplicate.status}\n\n💡 Use \`/done ${duplicate.id}\` to complete it, or create with a different description if this is truly a separate task.`;
+    const ar = `⚠️ *توجد مهمة مشابهة بالفعل*\n\n📋 المهمة #${duplicate.id}: ${safeTxt(duplicate.title)}\n👤 المسؤول: ${dupAssignee}\n📊 الحالة: ${duplicate.status}\n\n💡 استخدم \`/done ${duplicate.id}\` لإكمالها، أو أنشئ بوصف مختلف إذا كانت مهمة مختلفة فعلاً.`;
     return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
   }
 
@@ -255,8 +255,8 @@ async function handleOpsChecklist(ctx) {
     en += `\n⚠️ *${skippedDuplicates.length} duplicate(s) skipped:*\n`;
     ar += `\n⚠️ *تم تخطي ${skippedDuplicates.length} مهمة مكررة:*\n`;
     skippedDuplicates.forEach(d => {
-      en += `• "${safeTxt(d)}" → already exists as #${d.existingId}: ${d.existingTitle}\n`;
-      ar += `• "${safeTxt(d)}" → موجودة كـ #${d.existingId}: ${d.existingTitle}\n`;
+      en += `• "${safeTxt(d.title)}" → already exists as #${d.existingId}: ${d.existingTitle}\n`;
+      ar += `• "${safeTxt(d.title)}" → موجودة كـ #${d.existingId}: ${d.existingTitle}\n`;
     });
   }
 
@@ -384,7 +384,7 @@ async function handleOpsDone(ctx) {
     let ar = `✅ *إكمال مهمة*\n\n*المعلقة:*\n`;
     const buttons = [];
     tasks.forEach(task => {
-      const line = `⬜ ${safeTxt(task)} [#${task.id}]\n`;
+      const line = `⬜ ${safeTxt(task.title)} [#${task.id}]\n`;
       en += line; ar += line;
       buttons.push([Markup.button.callback(`✅ Done #${task.id}: ${safeTxt(task.title).substring(0, 30)}`, `done_${task.id}`)]);
     });
@@ -407,14 +407,14 @@ async function handleOpsDone(ctx) {
 
   opsDb.markTaskDone(taskId);
 
-  let en = `✅ *Task #${taskId} completed!*\n\n✅ ${safeTxt(task)}\n\n🎉 Well done!`;
-  let ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n✅ ${safeTxt(task)}\n\n🎉 عمل رائع!`;
+  let en = `✅ *Task #${taskId} completed!*\n\n✅ ${safeTxt(task.title)}\n\n🎉 Well done!`;
+  let ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n✅ ${safeTxt(task.title)}\n\n🎉 عمل رائع!`;
 
   const dependents = opsDb.getDependentTasks(taskId);
   for (const dep of dependents) {
     if (!opsDb.isTaskBlocked(dep.task_id)) {
-      en += `\n\n🔓 *Unblocked:* Task #${dep.task_id} — ${safeTxt(dep)}`;
-      ar += `\n\n🔓 *تم فتح:* المهمة #${dep.task_id} — ${safeTxt(dep)}`;
+      en += `\n\n🔓 *Unblocked:* Task #${dep.task_id} — ${safeTxt(dep.title)}`;
+      ar += `\n\n🔓 *تم فتح:* المهمة #${dep.task_id} — ${safeTxt(dep.title)}`;
     }
   }
 
@@ -449,8 +449,8 @@ async function handleDoneCallback(ctx) {
 
     opsDb.markTaskDone(taskId);
 
-    const en = `✅ *Task #${taskId} completed!*\n\n✅ ${safeTxt(task)}\n\n🎉 Well done!`;
-    const ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n✅ ${safeTxt(task)}\n\n🎉 عمل رائع!`;
+    const en = `✅ *Task #${taskId} completed!*\n\n✅ ${safeTxt(task.title)}\n\n🎉 Well done!`;
+    const ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n✅ ${safeTxt(task.title)}\n\n🎉 عمل رائع!`;
 
     await ctx.answerCbQuery(`✅ Task #${taskId} done!`);
     await ctx.editMessageText(getBilingualText(en, ar), { parse_mode: "Markdown" });
@@ -518,8 +518,8 @@ async function handleOpsSummary(ctx) {
     const line = `${emoji} *${topicName}* (${tasks.length}):\n`;
     en += line; ar += line;
     tasks.slice(0, 5).forEach((task, i) => { 
-      const assignee = task.assigned_to ? ` → ${safeTxt(task)}` : ""; 
-      const tLine = `  ${i + 1}. ⬜ ${safeTxt(task)}${assignee} [#${task.id}]\n`;
+      const assignee = task.assigned_to ? ` → ${safeTxt(task.title)}` : ""; 
+      const tLine = `  ${i + 1}. ⬜ ${safeTxt(task.title)}${assignee} [#${task.id}]\n`;
       en += tLine; ar += tLine;
     });
     if (tasks.length > 5) {
@@ -571,8 +571,8 @@ async function handleOpsKpi(ctx) {
     en += `\n*⚠️ Overdue Tasks:*\n`;
     ar += `\n*⚠️ مهام متأخرة:*\n`;
     overdue.slice(0, 5).forEach(t => { 
-      const assignee = t.assigned_to ? ` → ${safeTxt(t)}` : ""; 
-      const line = `• #${t.id} ${safeTxt(t)}${assignee} (due: ${t.due_date})\n`;
+      const assignee = t.assigned_to ? ` → ${safeTxt(t.title)}` : ""; 
+      const line = `• #${t.id} ${safeTxt(t.title)}${assignee} (due: ${t.due_date})\n`;
       en += line; ar += line;
     });
   }
@@ -619,7 +619,7 @@ async function handleOpsProperty(ctx) {
     en += `*⬜ Pending Tasks (${pending.length}):*\n`;
     ar += `*⬜ المهام المعلقة (${pending.length}):*\n`;
     pending.forEach(t => { 
-      const line = `• #${t.id} ${safeTxt(t)}${t.assigned_to ? ` → ${safeTxt(t)}` : ""}\n`;
+      const line = `• #${t.id} ${safeTxt(t.title)}${t.assigned_to ? ` → ${safeTxt(t.title)}` : ""}\n`;
       en += line; ar += line;
     });
     en += "\n"; ar += "\n";
@@ -629,7 +629,7 @@ async function handleOpsProperty(ctx) {
     en += `*✅ Completed (${done.length}):*\n`;
     ar += `*✅ المكتملة (${done.length}):*\n`;
     done.slice(0, 5).forEach(t => { 
-      const line = `• #${t.id} ✅ ${safeTxt(t)}\n`;
+      const line = `• #${t.id} ✅ ${safeTxt(t.title)}\n`;
       en += line; ar += line;
     });
     en += "\n"; ar += "\n";
@@ -677,8 +677,8 @@ async function handleOpsMove(ctx) {
   const targetInfo = getTopicInfo(targetThreadId);
   opsDb.moveTask(taskId, targetThreadId, targetInfo.name);
 
-  const en = `🔄 *Task #${taskId} moved*\n\n📝 ${safeTxt(task)}\n📍 To: ${targetInfo.name}`;
-  const ar = `🔄 *تم نقل المهمة #${taskId}*\n\n📝 ${safeTxt(task)}\n📍 إلى: ${targetInfo.arName}`;
+  const en = `🔄 *Task #${taskId} moved*\n\n📝 ${safeTxt(task.title)}\n📍 To: ${targetInfo.name}`;
+  const ar = `🔄 *تم نقل المهمة #${taskId}*\n\n📝 ${safeTxt(task.title)}\n📍 إلى: ${targetInfo.arName}`;
 
   try {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || undefined });
@@ -690,8 +690,8 @@ async function handleOpsMove(ctx) {
 
   // Cross-post notification in the new topic
   try {
-    const notifyEn = `📥 *Task moved to this topic*\n\n⬜ ${safeTxt(task)} [#${taskId}]\n👤 Assigned: ${task.assigned_to || "None"}`;
-    const notifyAr = `📥 *تم نقل مهمة لهذا الموضوع*\n\n⬜ ${safeTxt(task)} [#${taskId}]\n👤 المسؤول: ${task.assigned_to || "لا يوجد"}`;
+    const notifyEn = `📥 *Task moved to this topic*\n\n⬜ ${safeTxt(task.title)} [#${taskId}]\n👤 Assigned: ${task.assigned_to || "None"}`;
+    const notifyAr = `📥 *تم نقل مهمة لهذا الموضوع*\n\n⬜ ${safeTxt(task.title)} [#${taskId}]\n👤 المسؤول: ${task.assigned_to || "لا يوجد"}`;
     await ctx.telegram.sendMessage(chatId, getBilingualText(notifyEn, notifyAr), { parse_mode: "Markdown", message_thread_id: targetThreadId });
   } catch (e) { console.error("[Ops] Move notification error:", e.message); }
 }
@@ -716,7 +716,7 @@ async function handleOpsHandover(ctx) {
     en += `*✅ Completed this shift (${completedTasks.length}):*\n`;
     ar += `*✅ المكتملة في هذه المناوبة (${completedTasks.length}):*\n`;
     completedTasks.slice(0, 10).forEach(t => { 
-      const line = `• ✅ ${safeTxt(t)}${t.assigned_to ? ` (${safeTxt(t)})` : ""}\n`;
+      const line = `• ✅ ${safeTxt(t.title)}${t.assigned_to ? ` (${safeTxt(t.title)})` : ""}\n`;
       en += line; ar += line;
     });
     en += "\n"; ar += "\n";
@@ -728,7 +728,7 @@ async function handleOpsHandover(ctx) {
       en += `*🆕 New tasks created (${newPending.length}):*\n`;
       ar += `*🆕 مهام جديدة منشأة (${newPending.length}):*\n`;
       newPending.slice(0, 10).forEach(t => { 
-        const line = `• #${t.id} ${safeTxt(t)}${t.assigned_to ? ` → ${safeTxt(t)}` : ""}\n`;
+        const line = `• #${t.id} ${safeTxt(t.title)}${t.assigned_to ? ` → ${safeTxt(t.title)}` : ""}\n`;
         en += line; ar += line;
       });
       en += "\n"; ar += "\n";
@@ -739,7 +739,7 @@ async function handleOpsHandover(ctx) {
     en += `*🔴 Overdue (${overdue.length}):*\n`;
     ar += `*🔴 المتأخرة (${overdue.length}):*\n`;
     overdue.slice(0, 5).forEach(t => { 
-      const line = `• #${t.id} ${safeTxt(t)} (due: ${t.due_date})\n`;
+      const line = `• #${t.id} ${safeTxt(t.title)} (due: ${t.due_date})\n`;
       en += line; ar += line;
     });
     en += "\n"; ar += "\n";
@@ -776,7 +776,7 @@ async function handleOpsMonthlyReport(ctx) {
     en += `*👥 Team Performance:*\n`;
     ar += `*👥 أداء الفريق:*\n`;
     monthly.byAssignee.forEach(a => { 
-      const line = `• ${safeTxt(a)}: ${a.done}/${a.total} done (${a.pending} pending)\n`;
+      const line = `• ${safeTxt(a.title)}: ${a.done}/${a.total} done (${a.pending} pending)\n`;
       en += line; ar += line;
     });
     en += "\n"; ar += "\n";
@@ -955,7 +955,7 @@ async function handleOpsRecurring(ctx) {
   if (!args) {
     const tasks = opsDb.getActiveRecurringTasks(chatId);
     let msg = "🔄 *Recurring Tasks*\n\n";
-    tasks.forEach(t => msg += `• #${t.id}: ${safeTxt(t)} (${t.schedule_type} ${t.schedule_value})\n`);
+    tasks.forEach(t => msg += `• #${t.id}: ${safeTxt(t.title)} (${t.schedule_type} ${t.schedule_value})\n`);
     return ctx.reply(msg, { parse_mode: "Markdown", message_thread_id: threadId });
   }
 }
@@ -1223,8 +1223,8 @@ async function handleOpsPassive(ctx) {
 
       if (duplicate) {
         const dupAssignee = duplicate.assigned_to || "Unassigned";
-        const enDup = `\u26a0\ufe0f *Similar task already exists*\n\n\ud83d\udccb Task #${duplicate.id}: ${safeTxt(duplicate)}\n\ud83d\udc64 Assigned to: ${dupAssignee}\n\ud83d\udcca Status: ${duplicate.status}`;
-        const arDup = `\u26a0\ufe0f *\u062a\u0648\u062c\u062f \u0645\u0647\u0645\u0629 \u0645\u0634\u0627\u0628\u0647\u0629 \u0628\u0627\u0644\u0641\u0639\u0644*\n\n\ud83d\udccb \u0627\u0644\u0645\u0647\u0645\u0629 #${duplicate.id}: ${safeTxt(duplicate)}\n\ud83d\udc64 \u0627\u0644\u0645\u0633\u0624\u0648\u0644: ${dupAssignee}\n\ud83d\udcca \u0627\u0644\u062d\u0627\u0644\u0629: ${duplicate.status}`;
+        const enDup = `\u26a0\ufe0f *Similar task already exists*\n\n\ud83d\udccb Task #${duplicate.id}: ${safeTxt(duplicate.title)}\n\ud83d\udc64 Assigned to: ${dupAssignee}\n\ud83d\udcca Status: ${duplicate.status}`;
+        const arDup = `\u26a0\ufe0f *\u062a\u0648\u062c\u062f \u0645\u0647\u0645\u0629 \u0645\u0634\u0627\u0628\u0647\u0629 \u0628\u0627\u0644\u0641\u0639\u0644*\n\n\ud83d\udccb \u0627\u0644\u0645\u0647\u0645\u0629 #${duplicate.id}: ${safeTxt(duplicate.title)}\n\ud83d\udc64 \u0627\u0644\u0645\u0633\u0624\u0648\u0644: ${dupAssignee}\n\ud83d\udcca \u0627\u0644\u062d\u0627\u0644\u0629: ${duplicate.status}`;
         resultText = getBilingualText(enDup, arDup);
       } else {
         const taskId = opsDb.addTask(
@@ -1451,7 +1451,7 @@ function executeTool(name, args, chatId, threadId, topicInfo, fromUser) {
       const pendingTasks = opsDb.getAllPendingTasks(chatId);
       const duplicate = findDuplicateTask(pendingTasks, args.title, resolvedAssignee || args.assigned_to);
       if (duplicate) {
-        return { status: "duplicate", existing_task_id: duplicate.id, existing_title: duplicate.title, message: `Similar task #${duplicate.id} already exists: ${safeTxt(duplicate)}` };
+        return { status: "duplicate", existing_task_id: duplicate.id, existing_title: duplicate.title, message: `Similar task #${duplicate.id} already exists: ${safeTxt(duplicate.title)}` };
       }
       const id = opsDb.addTask(chatId, threadId, topicInfo.name, args.title, { createdBy: normalizeAssignee(fromUser) || "AI", assignedTo: resolvedAssignee, priority: args.priority, propertyTag: args.property_tag, dueDate: args.due_date });
       return { status: "success", task_id: id, title: args.title };
