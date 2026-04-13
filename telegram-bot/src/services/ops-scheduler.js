@@ -480,6 +480,21 @@ async function checkEscalations() {
       message_thread_id: THREAD_CEO_UPDATE,
     });
 
+    // Also send WhatsApp critical alert to CEO
+    try {
+      const whatsappSvc = require('./whatsapp');
+      if (whatsappSvc.isConfigured()) {
+        const waDetails = newStaleBlockers.map(t => {
+          const h = Math.round((Date.now() - new Date(t.created_at).getTime()) / (60 * 60 * 1000));
+          return `#${t.id}: ${t.title} (${h}h old${t.assigned_to ? ` — ${t.assigned_to}` : ''})`;
+        }).join('\n');
+        await whatsappSvc.sendCriticalAlert('escalation',
+          `${newStaleBlockers.length} blocker(s) unresolved >24h:\n\n${waDetails}`);
+      }
+    } catch (waErr) {
+      console.error('[OpsScheduler] WhatsApp escalation alert failed:', waErr.message);
+    }
+
     console.log(`[OpsScheduler] Escalated ${newStaleBlockers.length} blockers`);
   } catch (error) {
     console.error("[OpsScheduler] Escalation check error:", error.message);
