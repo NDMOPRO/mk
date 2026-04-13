@@ -29,6 +29,7 @@ const v4Db = require("./ops-database-v4");
 const googleSync = require("./google-sync");
 const v5Handlers = require("../handlers/ops-v5");
 const { resolveAttendees, formatKSA } = require("../handlers/meetings");
+const { getDisplayName, getDisplayNameAr } = require("../team-members");
 const log = require("../utils/logger");
 const consultant = require("./consultant");
 
@@ -1115,15 +1116,21 @@ async function checkMentionAlerts() {
       };
       const topicName = topicNames[mention.thread_id] || "the group";
 
+      // Resolve @username to real name using team-members registry
+      const mentionedNameEn = getDisplayName(mention.mentioned_username) || mention.mentioned_username;
+      const mentionedNameAr = getDisplayNameAr(mention.mentioned_username) || mention.mentioned_username;
+      const mentionedByNameEn = mention.mentioned_by ? (getDisplayName(mention.mentioned_by) || mention.mentioned_by) : null;
+      const mentionedByNameAr = mention.mentioned_by ? (getDisplayNameAr(mention.mentioned_by) || mention.mentioned_by) : null;
+
       let msg = `🔔 *Mention Alert | تنبيه إشارة*\n`;
       msg += `${DIV}\n\n`;
-      msg += `${mention.mentioned_username}, you were mentioned`;
-      if (mention.mentioned_by) msg += ` by ${mention.mentioned_by}`;
+      msg += `${mentionedNameEn}, you were mentioned`;
+      if (mentionedByNameEn) msg += ` by ${mentionedByNameEn}`;
       msg += ` 2+ hours ago in *${topicName}*.\n`;
       msg += `Please check and respond.\n\n`;
       msg += `${DIV}\n\n`;
-      msg += `${mention.mentioned_username}، تمت الإشارة إليك`;
-      if (mention.mentioned_by) msg += ` بواسطة ${mention.mentioned_by}`;
+      msg += `${mentionedNameAr}، تمت الإشارة إليك`;
+      if (mentionedByNameAr) msg += ` بواسطة ${mentionedByNameAr}`;
       msg += ` منذ أكثر من ساعتين في *${topicName}*.\n`;
       msg += `يرجى المراجعة والرد.`;
 

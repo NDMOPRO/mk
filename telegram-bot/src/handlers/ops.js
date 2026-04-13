@@ -301,7 +301,7 @@ async function handleOpsTasks(ctx) {
     en += `\n*✅ Done (${done.length}):*\n`;
     ar += `\n*✅ المكتملة (${done.length}):*\n`;
     done.slice(0, 5).forEach(task => { 
-      const line = `✅ ~~${task.title}~~ [#${task.id}]\n`;
+      const line = `✅ ${task.title} [#${task.id}]\n`;
       en += line; ar += line;
     });
     if (done.length > 5) {
@@ -360,8 +360,8 @@ async function handleOpsDone(ctx) {
 
   opsDb.markTaskDone(taskId);
 
-  let en = `✅ *Task #${taskId} completed!*\n\n~~${task.title}~~\n\n🎉 Well done!`;
-  let ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n~~${task.title}~~\n\n🎉 عمل رائع!`;
+  let en = `✅ *Task #${taskId} completed!*\n\n✅ ${task.title}\n\n🎉 Well done!`;
+  let ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n✅ ${task.title}\n\n🎉 عمل رائع!`;
 
   const dependents = opsDb.getDependentTasks(taskId);
   for (const dep of dependents) {
@@ -396,8 +396,8 @@ async function handleDoneCallback(ctx) {
 
     opsDb.markTaskDone(taskId);
 
-    const en = `✅ *Task #${taskId} completed!*\n\n~~${task.title}~~\n\n🎉 Well done!`;
-    const ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n~~${task.title}~~\n\n🎉 عمل رائع!`;
+    const en = `✅ *Task #${taskId} completed!*\n\n✅ ${task.title}\n\n🎉 Well done!`;
+    const ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n✅ ${task.title}\n\n🎉 عمل رائع!`;
 
     await ctx.answerCbQuery(`✅ Task #${taskId} done!`);
     await ctx.editMessageText(getBilingualText(en, ar), { parse_mode: "Markdown" });
@@ -570,7 +570,7 @@ async function handleOpsProperty(ctx) {
     en += `*✅ Completed (${done.length}):*\n`;
     ar += `*✅ المكتملة (${done.length}):*\n`;
     done.slice(0, 5).forEach(t => { 
-      const line = `• #${t.id} ~~${t.title}~~\n`;
+      const line = `• #${t.id} ✅ ${t.title}\n`;
       en += line; ar += line;
     });
     en += "\n"; ar += "\n";
@@ -645,7 +645,7 @@ async function handleOpsHandover(ctx) {
     en += `*✅ Completed this shift (${completedTasks.length}):*\n`;
     ar += `*✅ المكتملة في هذه المناوبة (${completedTasks.length}):*\n`;
     completedTasks.slice(0, 10).forEach(t => { 
-      const line = `• ~~${t.title}~~${t.assigned_to ? ` (${t.assigned_to})` : ""}\n`;
+      const line = `• ✅ ${t.title}${t.assigned_to ? ` (${t.assigned_to})` : ""}\n`;
       en += line; ar += line;
     });
     en += "\n"; ar += "\n";
