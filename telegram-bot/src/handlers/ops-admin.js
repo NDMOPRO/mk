@@ -129,8 +129,8 @@ async function guardAdminTopic(ctx) {
   if (isRootAdmin(ctx)) return false; // Admin — allow through
 
   // Non-admin in admin topic — block and warn
-  const en = "🔐 *This topic is restricted to administrators only.*";
-  const ar = "🔐 *هذا الموضوع مقيد للمسؤولين فقط.*";
+  const en = "⛔ This panel is restricted to administrators only.";
+  const ar = "⛔ هذه اللوحة مخصصة للمسؤولين فقط.";
   try {
     await ctx.reply(getBilingualText(en, ar), {
       parse_mode: "Markdown",
