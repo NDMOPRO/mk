@@ -31,13 +31,14 @@ const v4Db = require("../services/ops-database-v4");
 // ─── Constants ──────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
 const ADMIN_PANEL_THREAD = 235;
+const ANNOUNCEMENTS_THREAD = 1923;
 
 // All topic thread IDs for the broadcast subcommand
 const TOPIC_THREADS = {
   rules: 3, ceo: 4, operations: 5, listings: 6,
   bookings: 7, support: 8, tech: 9, payments: 10,
   marketing: 11, legal: 12, blockers: 13, completed: 14,
-  priorities: 15, admin: 235,
+  priorities: 15, admin: 235, announcements: 1923,
 };
 
 // Scheduled jobs metadata (for the /admin schedule subcommand)
@@ -124,25 +125,105 @@ function escMd(text) {
  */
 async function guardAdminTopic(ctx) {
   const threadId = ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id;
-  if (threadId !== ADMIN_PANEL_THREAD) return false; // Not in admin topic — don't block
-
-  if (isRootAdmin(ctx)) return false; // Admin — allow through
-
-  // Non-admin in admin topic — block and warn
-  const en = "⛔ This panel is restricted to administrators only.";
-  const ar = "⛔ هذه اللوحة مخصصة للمسؤولين فقط.";
-  try {
-    await ctx.reply(getBilingualText(en, ar), {
-      parse_mode: "Markdown",
-      message_thread_id: ADMIN_PANEL_THREAD,
-    });
-  } catch (e) {
-    // Silently ignore if we can't reply
+  
+  // 1. Admin Panel Guard (Thread 235)
+  if (threadId === ADMIN_PANEL_THREAD) {
+    if (isRootAdmin(ctx)) return false;
+    const en = "⛔ This panel is restricted to administrators only.";
+    const ar = "⛔ هذه اللوحة مخصصة للمسؤولين فقط.";
+    try {
+      await ctx.reply(getBilingualText(en, ar), {
+        parse_mode: "Markdown",
+        message_thread_id: ADMIN_PANEL_THREAD,
+      });
+    } catch (e) {}
+    return true;
   }
-  return true; // Blocked
+
+  // 2. Announcements Guard (Thread 1923)
+  if (threadId === ANNOUNCEMENTS_THREAD) {
+    if (isRootAdmin(ctx)) return false;
+    const en = "📢 This channel is for announcements only.";
+    const ar = "📢 هذه القناة للإعلانات فقط.";
+    try {
+      await ctx.reply(getBilingualText(en, ar), {
+        parse_mode: "Markdown",
+        message_thread_id: ANNOUNCEMENTS_THREAD,
+      });
+    } catch (e) {}
+    return true;
+  }
+
+  return false;
 }
 
 // ─── Main Handler ────────────────────────────────────────────
+
+async function handleAnnounce(ctx) {
+  const threadId = ctx.message?.message_thread_id || null;
+  try {
+    if (!isRootAdmin(ctx)) {
+      const en = "⛔ Unauthorized. Only CEO can send announcements.";
+      const ar = "⛔ غير مصرح. يمكن للرئيس التنفيذي فقط إرسال الإعلانات.";
+      return ctx.reply(getBilingualText(en, ar), {
+        parse_mode: "Markdown",
+        message_thread_id: threadId,
+      });
+    }
+
+    const message = extractArgs(ctx.message.text, "announce");
+    if (!message) {
+      const en = "❌ Usage: `/announce Your message here`";
+      const ar = "❌ الاستخدام: `/announce رسالتك هنا`";
+      return ctx.reply(getBilingualText(en, ar), {
+        parse_mode: "Markdown",
+        message_thread_id: threadId,
+      });
+    }
+
+    const headerEN = "📢 *ANNOUNCEMENT*";
+    const headerAR = "📢 *إعلان*";
+    const fullMsg = `${headerEN}\n${headerAR}\n━━━━━━━━━━━━━━\n${message}`;
+
+    // 1. Send to Announcements topic and PIN
+    const sent = await ctx.telegram.sendMessage(OPS_GROUP_ID, fullMsg, {
+      parse_mode: "Markdown",
+      message_thread_id: ANNOUNCEMENTS_THREAD,
+    });
+    try {
+      await ctx.telegram.pinChatMessage(OPS_GROUP_ID, sent.message_id);
+    } catch (e) {
+      console.error("[handleAnnounce] Pin failed:", e.message);
+    }
+
+    // 2. Send to WhatsApp if configured
+    try {
+      const whatsappSvc = require('../services/whatsapp');
+      const { getAllTeamMembers } = require('../team-members');
+      if (whatsappSvc.isConfigured()) {
+        const members = getAllTeamMembers();
+        const numbers = members.map(m => m.whatsapp).filter(Boolean);
+        for (const num of numbers) {
+          await whatsappSvc.sendDirectMessage(num, `📢 *ANNOUNCEMENT | إعلان*\n\n${message}`);
+        }
+      }
+    } catch (waErr) {
+      console.error("[handleAnnounce] WhatsApp broadcast failed:", waErr.message);
+    }
+
+    // 3. Confirm to sender
+    const en = "✅ Announcement posted and pinned.";
+    const ar = "✅ تم نشر الإعلان وتثبيته.";
+    await ctx.reply(getBilingualText(en, ar), {
+      parse_mode: "Markdown",
+      message_thread_id: threadId,
+    });
+
+  } catch (e) {
+    console.error("[handleAnnounce] Error:", e.message);
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+  }
+}
 
 async function handleOpsAdmin(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
@@ -506,7 +587,9 @@ function normalizeRole(input) {
 
 module.exports = {
   handleOpsAdmin,
+  handleAnnounce,
   guardAdminTopic,
   isRootAdmin,
   ADMIN_PANEL_THREAD,
+  ANNOUNCEMENTS_THREAD,
 };

@@ -434,6 +434,19 @@ const escalatedTasks = new Set();
 async function checkEscalations() {
   if (!bot) return;
 
+  const ksa = ksaNow();
+  const hour = ksa.getUTCHours();
+  const min = ksa.getUTCMinutes();
+  // Only send at 9:00 AM and 6:00 PM KSA
+  const is9AM = (hour === 9 && min < 5);
+  const is6PM = (hour === 18 && min < 5);
+  if (!is9AM && !is6PM) return;
+
+  // Dedup for the current window
+  const windowKey = `escalation_${hour}`;
+  if (alreadySent(windowKey)) return;
+  markSent(windowKey);
+
   try {
     const staleBlockers = opsDb.getStaleBlockers(OPS_GROUP_ID, THREAD_BLOCKERS, 24);
 

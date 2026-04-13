@@ -184,7 +184,7 @@ const {
 // v5 Database Init
 const { initV5Tables } = require("./services/ops-database-v5");
 // Admin Panel handler (topic 15, thread 235)
-const { handleOpsAdmin, guardAdminTopic, isRootAdmin, ADMIN_PANEL_THREAD } = require("./handlers/ops-admin");
+const { handleOpsAdmin, handleAnnounce, guardAdminTopic, isRootAdmin, ADMIN_PANEL_THREAD, ANNOUNCEMENTS_THREAD } = require("./handlers/ops-admin");
 
 // Appointment Scheduling System
 const {
@@ -263,16 +263,20 @@ try {
 bot.use(async (ctx, next) => {
   if (ctx.chat?.id !== OPS_GROUP_ID) return next();
   const threadId = ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id;
-  if (threadId !== ADMIN_PANEL_THREAD) return next();
-  // Always allow the bot itself (e.g. WhatsApp bridge messages)
+  if (threadId !== ADMIN_PANEL_THREAD && threadId !== ANNOUNCEMENTS_THREAD) return next();
+  
+  // Always allow the bot itself (e.g. WhatsApp bridge messages, /announce posts)
   if (ctx.from?.id === ctx.botInfo?.id) return next();
   if (isRootAdmin(ctx)) return next();
+
   // Block non-admin
   try {
-    await ctx.reply(
-      "\u26d4 This panel is restricted to administrators only.\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u26d4 \u0647\u0630\u0647 \u0627\u0644\u0644\u0648\u062d\u0629 \u0645\u062e\u0635\u0635\u0629 \u0644\u0644\u0645\u0633\u0624\u0648\u0644\u064a\u0646 \u0641\u0642\u0637.",
-      { message_thread_id: ADMIN_PANEL_THREAD }
-    );
+    const isAnnounce = threadId === ANNOUNCEMENTS_THREAD;
+    const msg = isAnnounce
+      ? "📢 This channel is for announcements only. | هذه القناة للإعلانات فقط."
+      : "\u26d4 This panel is restricted to administrators only.\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u26d4 \u0647\u0630\u0647 \u0627\u0644\u0644\u0648\u062d\u0629 \u0645\u062e\u0635\u0635\u0629 \u0644\u0644\u0645\u0633\u0624\u0648\u0644\u064a\u0646 \u0641\u0642\u0637.";
+    
+    await ctx.reply(msg, { message_thread_id: threadId });
   } catch (e) {}
   // Do NOT call next() — stop processing
 });
@@ -355,6 +359,9 @@ bot.command("unsubscribe", safeHandler('cmd:unsubscribe', (ctx) => {
 bot.command("admin", safeHandler('cmd:admin', (ctx) => {
   if (isOpsGroup(ctx)) return handleOpsAdmin(ctx);
   return handleAdminLogin(ctx);
+}));
+bot.command("announce", safeHandler('cmd:announce', (ctx) => {
+  if (isOpsGroup(ctx)) return handleAnnounce(ctx);
 }));
 bot.command("stats", safeHandler('cmd:stats', (ctx) => {
   if (isOpsGroup(ctx)) return;
