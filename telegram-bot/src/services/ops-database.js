@@ -377,6 +377,34 @@ function initTables() {
       updated_at        TEXT DEFAULT (datetime('now'))
     )
   `);
+
+  // ─── Activity Log ─────────────────────────────────────────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id           INTEGER NOT NULL,
+      topic_thread_id   INTEGER,
+      user_username     TEXT,
+      user_display_name TEXT,
+      message_type      TEXT NOT NULL DEFAULT 'text',
+      caption_or_text   TEXT,
+      file_id           TEXT,
+      timestamp         TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // ─── Task Evidence (photo proof linked to tasks) ──────────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS task_evidence (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id       INTEGER NOT NULL,
+      photo_file_id TEXT NOT NULL,
+      caption       TEXT,
+      submitted_by  TEXT,
+      submitted_at  TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (task_id) REFERENCES tasks(id)
+    )
+  `);
 }
 
 // ─── Migrations ─────────────────────────────────────────────
@@ -1075,11 +1103,108 @@ module.exports = {
   getAppointmentsNeedingReminder, markAppointmentReminder1h, markAppointmentReminder15m,
   // WhatsApp Config
   getWhatsAppConfig, setWhatsAppNotifications,
+  // Activity Log
+  logActivity, getActivitySince, getTodayActivity,
+  // Task Evidence
+  addTaskEvidence, getTaskEvidence, getTodayTaskEvidence,
 };
 
 function getAllTasksForSync(chatId) {
   const d = getDb();
   return d.prepare(`SELECT * FROM tasks WHERE chat_id = ? AND status != 'cancelled' ORDER BY updated_at DESC`).all(chatId);
+}
+
+// ═════════════════════════════════════════════════════════════
+// ═══ Activity Log ═══════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Log a team member activity entry (silent — no bot reply).
+ */
+function logActivity(chatId, topicThreadId, userUsername, userDisplayName, messageType, captionOrText, fileId) {
+  const d = getDb();
+  return d.prepare(`
+    INSERT INTO activity_log (chat_id, topic_thread_id, user_username, user_display_name, message_type, caption_or_text, file_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(chatId, topicThreadId || null, userUsername || null, userDisplayName || null, messageType, captionOrText || null, fileId || null).lastInsertRowid;
+}
+
+/**
+ * Get all activity entries for a given chat since a UTC datetime string.
+ * Returns rows ordered by timestamp ASC.
+ */
+function getActivitySince(chatId, sinceUtc) {
+  const d = getDb();
+  return d.prepare(`
+    SELECT * FROM activity_log
+    WHERE chat_id = ? AND timestamp >= ?
+    ORDER BY timestamp ASC
+  `).all(chatId, sinceUtc);
+}
+
+/**
+ * Get today's activity entries grouped by user (KSA day = UTC day + 3h).
+ * "Today" is defined as the current KSA calendar day.
+ */
+function getTodayActivity(chatId) {
+  const d = getDb();
+  // KSA is UTC+3; today in KSA starts at UTC 21:00 yesterday
+  const now = new Date();
+  const ksaOffset = 3 * 60 * 60 * 1000;
+  const ksaNow = new Date(now.getTime() + ksaOffset);
+  // Start of today in KSA = midnight KSA = 21:00 UTC previous day
+  const ksaMidnight = new Date(Date.UTC(ksaNow.getUTCFullYear(), ksaNow.getUTCMonth(), ksaNow.getUTCDate()));
+  const utcStart = new Date(ksaMidnight.getTime() - ksaOffset);
+  const sinceUtc = utcStart.toISOString().replace('T', ' ').substring(0, 19);
+  return d.prepare(`
+    SELECT * FROM activity_log
+    WHERE chat_id = ? AND timestamp >= ?
+    ORDER BY user_display_name ASC, timestamp ASC
+  `).all(chatId, sinceUtc);
+}
+
+// ═════════════════════════════════════════════════════════════
+// ═══ Task Evidence ═════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Store photo evidence linked to a task.
+ */
+function addTaskEvidence(taskId, photoFileId, caption, submittedBy) {
+  const d = getDb();
+  return d.prepare(`
+    INSERT INTO task_evidence (task_id, photo_file_id, caption, submitted_by)
+    VALUES (?, ?, ?, ?)
+  `).run(taskId, photoFileId, caption || null, submittedBy || null).lastInsertRowid;
+}
+
+/**
+ * Get all evidence for a specific task.
+ */
+function getTaskEvidence(taskId) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM task_evidence WHERE task_id = ? ORDER BY submitted_at ASC`).all(taskId);
+}
+
+/**
+ * Get all task evidence submitted today (KSA day).
+ * Returns joined with task title for reporting.
+ */
+function getTodayTaskEvidence(chatId) {
+  const d = getDb();
+  const now = new Date();
+  const ksaOffset = 3 * 60 * 60 * 1000;
+  const ksaNow = new Date(now.getTime() + ksaOffset);
+  const ksaMidnight = new Date(Date.UTC(ksaNow.getUTCFullYear(), ksaNow.getUTCMonth(), ksaNow.getUTCDate()));
+  const utcStart = new Date(ksaMidnight.getTime() - ksaOffset);
+  const sinceUtc = utcStart.toISOString().replace('T', ' ').substring(0, 19);
+  return d.prepare(`
+    SELECT te.*, t.title AS task_title, t.id AS task_id
+    FROM task_evidence te
+    JOIN tasks t ON te.task_id = t.id
+    WHERE t.chat_id = ? AND te.submitted_at >= ?
+    ORDER BY te.submitted_at ASC
+  `).all(chatId, sinceUtc);
 }
 
 // ═══════════════════════════════════════════════════════════════

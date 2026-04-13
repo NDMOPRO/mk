@@ -200,6 +200,9 @@ const {
 } = require("./handlers/whatsapp");
 const whatsappService = require("./services/whatsapp");
 
+// Silent Activity Logger + Smart Photo-Task Matcher
+const activityLogger = require("./services/activity-logger");
+
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
 
@@ -420,6 +423,9 @@ bot.on("text", safeHandler('on:text', async (ctx) => {
     // Skip slash commands here — they are handled by bot.command() above.
     if (userMessage.startsWith("/")) return;
 
+    // ── Silent activity logging (never replies) ────────────────
+    try { activityLogger.logTextActivity(ctx); } catch (e) {}
+
     // Admin topic guard: block non-admins from posting in the Admin Panel topic (thread 235)
     const msgThreadId = ctx.message?.message_thread_id;
     if (msgThreadId === ADMIN_PANEL_THREAD) {
@@ -589,12 +595,24 @@ bot.on("text", safeHandler('on:text', async (ctx) => {
 // ─── Phase 4: Ops Group — Photo/Document Logging (Feature 6) ──
 bot.on(["photo", "document", "video"], safeHandler('on:media', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
+
+  // Silent activity logging + smart photo-task matching (never replies)
+  if (ctx.message?.photo) {
+    try { activityLogger.logPhotoActivity(ctx); } catch (e) {}
+  } else {
+    try { activityLogger.logDocumentActivity(ctx); } catch (e) {}
+  }
+
   await handleOpsMedia(ctx);
 }));
 
 // ─── Phase 4: Ops Group — Voice Note Transcription (Feature 10) ─
 bot.on(["voice", "audio"], safeHandler('on:voice', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
+
+  // Silent activity logging (never replies)
+  try { activityLogger.logVoiceActivity(ctx); } catch (e) {}
+
   await handleOpsVoice(ctx, ai.getOpenAIClient());
 }));
 

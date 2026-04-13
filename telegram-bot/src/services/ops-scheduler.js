@@ -307,6 +307,28 @@ async function sendDailyReport() {
 
     msg += `📈 *الملخص:* ✅ ${stats.done} مكتملة  ⏳ ${stats.pending} معلقة  🔴 ${overdue.length} متأخرة`;
 
+    // ── Team Activity Log section ────────────────────────────────────
+    try {
+      const activityLogger = require('../services/activity-logger');
+      const activitySection = activityLogger.formatActivityReportSection(OPS_GROUP_ID);
+      if (activitySection) {
+        msg += `\n\n${DIV}\n\n${activitySection}`;
+      }
+    } catch (actErr) {
+      log.error('Scheduler', 'Activity log section failed', { error: actErr.message });
+    }
+
+    // ── Photo Evidence section ────────────────────────────────────
+    try {
+      const activityLogger = require('../services/activity-logger');
+      const evidenceSection = activityLogger.formatEvidenceReportSection(OPS_GROUP_ID);
+      if (evidenceSection) {
+        msg += `\n\n${DIV}\n\n${evidenceSection}`;
+      }
+    } catch (evErr) {
+      log.error('Scheduler', 'Evidence section failed', { error: evErr.message });
+    }
+
     await bot.telegram.sendMessage(OPS_GROUP_ID, msg, {
       parse_mode: "Markdown",
       message_thread_id: THREAD_CEO_UPDATE,
