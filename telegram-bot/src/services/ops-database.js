@@ -346,6 +346,37 @@ function initTables() {
       created_at      TEXT DEFAULT (datetime('now'))
     )
   `);
+
+  // ─── Appointments (Appointment Scheduling System) ──────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS appointments (
+      id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id               INTEGER NOT NULL,
+      topic_thread_id       INTEGER,
+      title                 TEXT NOT NULL,
+      appointment_datetime  TEXT NOT NULL,
+      location              TEXT,
+      attendees_internal    TEXT DEFAULT '[]',
+      attendees_external    TEXT DEFAULT '[]',
+      notes                 TEXT,
+      status                TEXT DEFAULT 'scheduled',
+      created_by            TEXT,
+      reminder_1h_sent      INTEGER DEFAULT 0,
+      reminder_15m_sent     INTEGER DEFAULT 0,
+      created_at            TEXT DEFAULT (datetime('now')),
+      updated_at            TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // ─── WhatsApp Notification Preferences ─────────────────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS whatsapp_config (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id           INTEGER NOT NULL,
+      notifications_on  INTEGER DEFAULT 1,
+      updated_at        TEXT DEFAULT (datetime('now'))
+    )
+  `);
 }
 
 // ─── Migrations ─────────────────────────────────────────────
@@ -1038,6 +1069,12 @@ module.exports = {
   cancelScheduledMeeting, getMeetingsNeedingReminder,
   markMeetingReminded30, markMeetingReminded5,
   addMeetingNotes, getMeetingNotes, getUpcomingMeetings,
+  // Appointments (Appointment Scheduling System)
+  createAppointment, getUpcomingAppointments, getAllScheduledAppointments,
+  getAppointmentById, cancelAppointment,
+  getAppointmentsNeedingReminder, markAppointmentReminder1h, markAppointmentReminder15m,
+  // WhatsApp Config
+  getWhatsAppConfig, setWhatsAppNotifications,
 };
 
 function getAllTasksForSync(chatId) {
@@ -1142,4 +1179,106 @@ function addMeetingNotes(meetingId, notes, actionItems, createdBy) {
 function getMeetingNotes(meetingId) {
   const d = getDb();
   return d.prepare(`SELECT * FROM meeting_notes WHERE meeting_id = ? ORDER BY created_at ASC`).all(meetingId);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ Appointments (Appointment Scheduling System) ════════════
+// ═══════════════════════════════════════════════════════════════
+
+function createAppointment(chatId, threadId, title, appointmentDatetime, options = {}) {
+  const d = getDb();
+  const result = d.prepare(`
+    INSERT INTO appointments (chat_id, topic_thread_id, title, appointment_datetime, location, attendees_internal, attendees_external, notes, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    chatId,
+    threadId || null,
+    title,
+    appointmentDatetime,
+    options.location || null,
+    JSON.stringify(options.attendeesInternal || []),
+    JSON.stringify(options.attendeesExternal || []),
+    options.notes || null,
+    options.createdBy || null
+  );
+  return result.lastInsertRowid;
+}
+
+function getUpcomingAppointments(chatId) {
+  const d = getDb();
+  return d.prepare(`
+    SELECT * FROM appointments
+    WHERE chat_id = ? AND status = 'scheduled' AND appointment_datetime >= datetime('now')
+    ORDER BY appointment_datetime ASC
+  `).all(chatId);
+}
+
+function getAllScheduledAppointments(chatId) {
+  const d = getDb();
+  return d.prepare(`
+    SELECT * FROM appointments
+    WHERE chat_id = ? AND status = 'scheduled'
+    ORDER BY appointment_datetime ASC
+  `).all(chatId);
+}
+
+function getAppointmentById(appointmentId) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM appointments WHERE id = ?`).get(appointmentId);
+}
+
+function cancelAppointment(appointmentId) {
+  const d = getDb();
+  d.prepare(`UPDATE appointments SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?`).run(appointmentId);
+}
+
+function getAppointmentsNeedingReminder(minutesBefore) {
+  const d = getDb();
+  if (minutesBefore === 60) {
+    return d.prepare(`
+      SELECT * FROM appointments
+      WHERE status = 'scheduled'
+        AND reminder_1h_sent = 0
+        AND appointment_datetime <= datetime('now', '+61 minutes')
+        AND appointment_datetime > datetime('now')
+    `).all();
+  } else if (minutesBefore === 15) {
+    return d.prepare(`
+      SELECT * FROM appointments
+      WHERE status = 'scheduled'
+        AND reminder_15m_sent = 0
+        AND appointment_datetime <= datetime('now', '+16 minutes')
+        AND appointment_datetime > datetime('now')
+    `).all();
+  }
+  return [];
+}
+
+function markAppointmentReminder1h(appointmentId) {
+  const d = getDb();
+  d.prepare(`UPDATE appointments SET reminder_1h_sent = 1, updated_at = datetime('now') WHERE id = ?`).run(appointmentId);
+}
+
+function markAppointmentReminder15m(appointmentId) {
+  const d = getDb();
+  d.prepare(`UPDATE appointments SET reminder_15m_sent = 1, updated_at = datetime('now') WHERE id = ?`).run(appointmentId);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══ WhatsApp Configuration ═════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+
+function getWhatsAppConfig(chatId) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM whatsapp_config WHERE chat_id = ?`).get(chatId);
+}
+
+function setWhatsAppNotifications(chatId, enabled) {
+  const d = getDb();
+  const existing = d.prepare(`SELECT * FROM whatsapp_config WHERE chat_id = ?`).get(chatId);
+  if (existing) {
+    d.prepare(`UPDATE whatsapp_config SET notifications_on = ?, updated_at = datetime('now') WHERE chat_id = ?`).run(enabled ? 1 : 0, chatId);
+  } else {
+    d.prepare(`INSERT INTO whatsapp_config (chat_id, notifications_on) VALUES (?, ?)`).run(chatId, enabled ? 1 : 0);
+  }
 }

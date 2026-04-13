@@ -185,6 +185,21 @@ const { initV5Tables } = require("./services/ops-database-v5");
 // Admin Panel handler (topic 15, thread 235)
 const { handleOpsAdmin, guardAdminTopic, ADMIN_PANEL_THREAD } = require("./handlers/ops-admin");
 
+// Appointment Scheduling System
+const {
+  handleAppointment,
+  handleAppointments,
+  handleCancelAppointment,
+} = require("./handlers/appointments");
+
+// WhatsApp Business API Integration
+const {
+  handleWhatsApp,
+  registerWhatsAppWebhook,
+  handleTelegramReplyToWhatsApp,
+} = require("./handlers/whatsapp");
+const whatsappService = require("./services/whatsapp");
+
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
 
@@ -366,6 +381,14 @@ bot.command("ideas",         safeHandler('ops:ideas',         (ctx) => { if (!is
 bot.command("brainstorm",    safeHandler('ops:brainstorm',    (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsBrainstorm(ctx); }));
 bot.command("photos",        safeHandler('ops:photos',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleOpsPhotos(ctx); }));
 
+// Phase 6: Appointment Scheduling System
+bot.command("appointment",       safeHandler('ops:appointment',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleAppointment(ctx); }));
+bot.command("appointments",      safeHandler('ops:appointments',      (ctx) => { if (!isOpsGroup(ctx)) return; return handleAppointments(ctx); }));
+bot.command("cancel_appointment", safeHandler('ops:cancel_appointment', (ctx) => { if (!isOpsGroup(ctx)) return; return handleCancelAppointment(ctx); }));
+
+// Phase 6: WhatsApp Business API Integration
+bot.command("whatsapp",          safeHandler('ops:whatsapp',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleWhatsApp(ctx); }));
+
 // ─── Text Message Handler ─────────────────────────────────────
 
 /**
@@ -402,6 +425,16 @@ bot.on("text", safeHandler('on:text', async (ctx) => {
     if (msgThreadId === ADMIN_PANEL_THREAD) {
       const blocked = await guardAdminTopic(ctx).catch(() => false);
       if (blocked) return;
+
+      // WhatsApp reply bridge: if replying to a forwarded WhatsApp message, send back via WhatsApp
+      if (ctx.message.reply_to_message) {
+        try {
+          const handled = await handleTelegramReplyToWhatsApp(ctx);
+          if (handled) return;
+        } catch (e) {
+          log.error('Bot', 'WhatsApp reply bridge error', { error: e.message });
+        }
+      }
     }
     // v4 passive monitoring: sensitive data, topic routing, mentions, check-in
     try {
@@ -723,6 +756,7 @@ const WEBHOOK_URL    = `https://${WEBHOOK_DOMAIN}${WEBHOOK_PATH}`;
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // For Twilio WhatsApp webhook
 
 // ─── Request timeout middleware ──────────────────────────────
 // Ensure webhook requests don't hang forever
@@ -894,6 +928,14 @@ async function startWebhook() {
   // 5. Start the ops scheduler (cron jobs: morning briefing, check-ins, daily report)
   startOpsScheduler(bot);
 
+  // 5b. Register WhatsApp webhook endpoint
+  registerWhatsAppWebhook(app, bot);
+  if (whatsappService.isConfigured()) {
+    log.info('Boot', 'WhatsApp integration: ENABLED');
+  } else {
+    log.info('Boot', 'WhatsApp integration: DISABLED (set TWILIO_* env vars to enable)');
+  }
+
   // 6. Start health monitor (self-ping + webhook verification)
   healthMonitor.init(bot, WEBHOOK_URL, PORT);
 
@@ -908,6 +950,7 @@ async function startWebhook() {
     'Scheduler': true,
     'Health Monitor': true,
     'Channel Posting': true,
+    'WhatsApp/Twilio': whatsappService.isConfigured(),
   });
 
   writeHeartbeat();

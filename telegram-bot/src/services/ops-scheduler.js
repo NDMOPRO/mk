@@ -312,6 +312,25 @@ async function sendDailyReport() {
       message_thread_id: THREAD_CEO_UPDATE,
     });
 
+    // Send WhatsApp daily summary to CEO if configured
+    try {
+      const whatsappSvc = require('./whatsapp');
+      if (whatsappSvc.isConfigured()) {
+        const upcomingAppts = opsDb.getUpcomingAppointments(OPS_GROUP_ID);
+        const upcomingMeetings = opsDb.getUpcomingMeetings(OPS_GROUP_ID);
+        await whatsappSvc.sendDailySummary({
+          completedToday: completedToday.length,
+          pendingTasks: allPending.length,
+          overdueTasks: overdue.length,
+          upcomingAppointments: upcomingAppts.length,
+          upcomingMeetings: upcomingMeetings.length,
+        });
+        log.info('Scheduler', 'WhatsApp daily summary sent to CEO');
+      }
+    } catch (waErr) {
+      log.error('Scheduler', 'WhatsApp daily summary failed', { error: waErr.message });
+    }
+
     console.log("[OpsScheduler] Daily report sent (bilingual).");
   } catch (error) {
     console.error("[OpsScheduler] Daily report error:", error.message);
@@ -1209,6 +1228,115 @@ async function checkMeetingReminders() {
   }
 }
 
+// ━━━ Appointment Reminders (1 hour + 15 min before) ━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async function checkAppointmentReminders() {
+  if (!bot) return;
+
+  // Lazy-load to avoid circular dependencies
+  const { resolveInternalAttendees, formatKSA: fmtKSA } = require('../handlers/appointments');
+  let whatsappSvc;
+  try { whatsappSvc = require('./whatsapp'); } catch (e) {}
+
+  try {
+    // 1-hour reminders
+    const appts1h = opsDb.getAppointmentsNeedingReminder(60);
+    for (const appt of appts1h) {
+      try {
+        let intAttendees = [];
+        let extAttendees = [];
+        try { intAttendees = JSON.parse(appt.attendees_internal || '[]'); } catch (e) {}
+        try { extAttendees = JSON.parse(appt.attendees_external || '[]'); } catch (e) {}
+
+        const resolved = resolveInternalAttendees(intAttendees);
+        const dt = fmtKSA(appt.appointment_datetime);
+        const tags = intAttendees.map(a => a.startsWith('@') ? a : `@${a}`).join(' ');
+
+        const attendeeListEn = [
+          ...resolved.map(a => `  \u{1F464} ${a.name}`),
+          ...extAttendees.map(a => `  \u{1F91D} ${a}`),
+        ].join('\n') || '  _No attendees_';
+        const attendeeListAr = [
+          ...resolved.map(a => `  \u{1F464} ${a.nameAr}`),
+          ...extAttendees.map(a => `  \u{1F91D} ${a}`),
+        ].join('\n') || '  _\u0644\u0627 \u064A\u0648\u062C\u062F \u062D\u0636\u0648\u0631_';
+
+        const en = [
+          `\u23F0 *Appointment in 1 hour!*`,
+          ``,
+          `\u{1F4CC} *${appt.title}*`,
+          `\u{1F550} ${dt.en}`,
+          appt.location ? `\u{1F4CD} ${appt.location}` : null,
+          ``,
+          `\u{1F465} *Attendees:*`,
+          attendeeListEn,
+          tags ? `\n${tags}` : null,
+        ].filter(Boolean).join('\n');
+
+        const ar = [
+          `\u23F0 *\u0645\u0648\u0639\u062F \u0628\u0639\u062F \u0633\u0627\u0639\u0629!*`,
+          ``,
+          `\u{1F4CC} *${appt.title}*`,
+          `\u{1F550} ${dt.ar}`,
+          appt.location ? `\u{1F4CD} ${appt.location}` : null,
+          ``,
+          `\u{1F465} *\u0627\u0644\u062D\u0636\u0648\u0631:*`,
+          attendeeListAr,
+        ].filter(Boolean).join('\n');
+
+        const text = `${en}\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n${ar}`;
+        const threadId = appt.topic_thread_id || 4;
+        await bot.telegram.sendMessage(appt.chat_id, text, {
+          parse_mode: 'Markdown',
+          message_thread_id: threadId,
+        });
+        opsDb.markAppointmentReminder1h(appt.id);
+        log.info('Scheduler', `Sent 1h reminder for appointment #A${appt.id}: ${appt.title}`);
+
+        // Also send WhatsApp reminder if configured
+        if (whatsappSvc && whatsappSvc.isConfigured()) {
+          try { await whatsappSvc.sendEventReminder(appt, 'appointment', '1 hour'); } catch (e) {}
+        }
+      } catch (err) {
+        log.error('Scheduler', `Failed to send 1h reminder for appointment #A${appt.id}`, { error: err.message });
+      }
+    }
+
+    // 15-minute reminders
+    const appts15 = opsDb.getAppointmentsNeedingReminder(15);
+    for (const appt of appts15) {
+      try {
+        const dt = fmtKSA(appt.appointment_datetime);
+        let intAttendees = [];
+        try { intAttendees = JSON.parse(appt.attendees_internal || '[]'); } catch (e) {}
+        const tags = intAttendees.map(a => a.startsWith('@') ? a : `@${a}`).join(' ');
+
+        const en = `\u{1F514} *Appointment in 15 minutes!*\n\n\u{1F4CC} *${appt.title}*${appt.location ? `\n\u{1F4CD} ${appt.location}` : ''}\n\n${tags || ''}`;
+        const ar = `\u{1F514} *\u0627\u0644\u0645\u0648\u0639\u062F \u0628\u0639\u062F 15 \u062F\u0642\u064A\u0642\u0629!*\n\n\u{1F4CC} *${appt.title}*${appt.location ? `\n\u{1F4CD} ${appt.location}` : ''}`;
+
+        const text = `${en}\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n${ar}`;
+        const threadId = appt.topic_thread_id || 4;
+        await bot.telegram.sendMessage(appt.chat_id, text, {
+          parse_mode: 'Markdown',
+          message_thread_id: threadId,
+        });
+        opsDb.markAppointmentReminder15m(appt.id);
+        log.info('Scheduler', `Sent 15-min reminder for appointment #A${appt.id}: ${appt.title}`);
+
+        // Also send WhatsApp reminder if configured
+        if (whatsappSvc && whatsappSvc.isConfigured()) {
+          try { await whatsappSvc.sendEventReminder(appt, 'appointment', '15 minutes'); } catch (e) {}
+        }
+      } catch (err) {
+        log.error('Scheduler', `Failed to send 15-min reminder for appointment #A${appt.id}`, { error: err.message });
+      }
+    }
+  } catch (error) {
+    log.error('Scheduler', 'checkAppointmentReminders failed', { error: error.message });
+  }
+}
+
 /**
  * Safely run a scheduler job. If it throws, log the error and continue.
  * This ensures one failing job never stops other jobs from running.
@@ -1228,10 +1356,11 @@ async function tick() {
   try {
     tickCount++;
 
-    // Every tick (1 minute): reminders, follow-ups, and meeting reminders
+    // Every tick (1 minute): reminders, follow-ups, meeting reminders, and appointment reminders
     await safeJob('checkFollowUps', checkFollowUps);
     await safeJob('checkReminders', checkReminders);
     await safeJob('checkMeetingReminders', checkMeetingReminders);
+    await safeJob('checkAppointmentReminders', checkAppointmentReminders);
 
     // Every 5 minutes: escalations, vendor, SLA, recurring, mentions, priority
     if (tickCount % 5 === 0) {
@@ -1488,6 +1617,7 @@ function startOpsScheduler(botInstance) {
   console.log("  ⏰ Overdue pings: every 60 min");
   console.log("  🔔 Reminders/Follow-ups: every 1 min");
   console.log("  📅 Meeting Reminders: every 1 min (30 min + 5 min before)");
+  console.log("  📅 Appointment Reminders: every 1 min (1 hour + 15 min before)");
 }
 
 function stopOpsScheduler() {
