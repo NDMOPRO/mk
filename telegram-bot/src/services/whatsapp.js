@@ -23,6 +23,44 @@ const WHATSAPP_CEO_NUMBER = process.env.WHATSAPP_CEO_NUMBER || "+966535080045";
 
 let twilioClient = null;
 
+// ─── Name resolution helpers ────────────────────────────────
+
+/**
+ * Resolve a raw assignee string (may contain multiple @mentions separated by spaces)
+ * to a bilingual real name. Returns { en, ar }.
+ * e.g. "@ceo @administration" → { en: "Khaled", ar: "خالد بن عبدالله" }
+ * e.g. "@SAQ198"              → { en: "Saad Al Qasem", ar: "سعد القاسم" }
+ */
+function resolveAssignee(raw) {
+  if (!raw) return { en: "", ar: "" };
+  try {
+    const { getDisplayName, getDisplayNameAr } = require("../team-members");
+    // Handle multi-mention strings like "@ceo @administration" — resolve each token
+    const tokens = String(raw).trim().split(/\s+/);
+    const resolvedEn = new Set();
+    const resolvedAr = new Set();
+    for (const token of tokens) {
+      const en = getDisplayName(token);
+      const ar = getDisplayNameAr(token);
+      // Only add if it was actually resolved (not returned as-is)
+      if (en !== token || ar !== token) {
+        resolvedEn.add(en);
+        resolvedAr.add(ar);
+      } else {
+        // Not resolved — include the raw token
+        resolvedEn.add(token);
+        resolvedAr.add(token);
+      }
+    }
+    return {
+      en: Array.from(resolvedEn).join(", "),
+      ar: Array.from(resolvedAr).join(", "),
+    };
+  } catch (e) {
+    return { en: raw, ar: raw };
+  }
+}
+
 /**
  * Check if Twilio/WhatsApp integration is configured.
  */
@@ -115,60 +153,140 @@ async function sendToCeo(body) {
 /**
  * Send a critical alert to the CEO via WhatsApp.
  * Used for overdue tasks, escalations, urgent blockers.
+ * Message is bilingual: English first, then Arabic after a divider.
+ *
  * @param {string} alertType - Type of alert (e.g., "overdue", "escalation", "blocker")
- * @param {string} details - Alert details
+ * @param {Array<{id, title, assigned_to, hoursOld}>} tasks - Array of task objects
  */
-async function sendCriticalAlert(alertType, details) {
+async function sendCriticalAlert(alertType, tasks) {
   if (!isConfigured()) return { success: false, error: "Not configured" };
 
-  const emoji = {
-    overdue: "🔴",
-    escalation: "🚨",
-    blocker: "⛔",
-    urgent: "⚠️",
-    appointment: "📅",
-    meeting: "📅",
-  };
+  const icons = { overdue: "🔴", escalation: "🚨", blocker: "⛔", urgent: "⚠️" };
+  const icon = icons[alertType] || "📢";
 
-  const icon = emoji[alertType] || "📢";
-  const body = `${icon} *Monthly Key Alert*\n\nType: ${alertType.toUpperCase()}\n\n${details}\n\n— Monthly Key Bot`;
+  const typeLabels = {
+    escalation: { en: "ESCALATION — Unresolved Blockers", ar: "تصعيد — عوائق لم تُحل" },
+    overdue:    { en: "OVERDUE TASKS", ar: "مهام متأخرة" },
+    blocker:    { en: "CRITICAL BLOCKER", ar: "عائق حرج" },
+    urgent:     { en: "URGENT ALERT", ar: "تنبيه عاجل" },
+  };
+  const label = typeLabels[alertType] || { en: alertType.toUpperCase(), ar: alertType };
+
+  // Support legacy string-details call (backwards compat)
+  if (typeof tasks === "string") {
+    const body = [
+      `${icon} *Monthly Key — ${label.en}*`,
+      ``,
+      tasks,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━`,
+      ``,
+      `${icon} *Monthly Key — ${label.ar}*`,
+      ``,
+      tasks,
+      ``,
+      `— Monthly Key Bot`,
+    ].join("\n");
+    return sendToCeo(body);
+  }
+
+  // Build bilingual task list
+  const enLines = [];
+  const arLines = [];
+
+  for (const t of tasks) {
+    const assignee = resolveAssignee(t.assigned_to);
+    const ageEn = t.hoursOld ? `${t.hoursOld}h old` : "";
+    const ageAr = t.hoursOld ? `منذ ${t.hoursOld} ساعة` : "";
+    const assigneeEn = assignee.en ? ` — ${assignee.en}` : "";
+    const assigneeAr = assignee.ar ? ` — ${assignee.ar}` : "";
+
+    enLines.push(`🔴 #${t.id}: ${t.title}`);
+    if (ageEn || assigneeEn) enLines.push(`   ⏰ ${ageEn}${assigneeEn}`);
+    enLines.push(``);
+
+    arLines.push(`🔴 #${t.id}: ${t.title}`);
+    if (ageAr || assigneeAr) arLines.push(`   ⏰ ${ageAr}${assigneeAr}`);
+    arLines.push(``);
+  }
+
+  const body = [
+    `${icon} *Monthly Key — ${label.en}*`,
+    `${tasks.length} item(s) need immediate attention:`,
+    ``,
+    ...enLines,
+    `⚠️ Please review and take action.`,
+    ``,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    ``,
+    `${icon} *Monthly Key — ${label.ar}*`,
+    `${tasks.length} بند/بنود تحتاج اهتمام فوري:`,
+    ``,
+    ...arLines,
+    `⚠️ يرجى المراجعة واتخاذ الإجراء اللازم.`,
+    ``,
+    `— Monthly Key Bot`,
+  ].join("\n");
 
   return sendToCeo(body);
 }
 
 /**
  * Send a daily summary via WhatsApp (9 PM KSA).
+ * Bilingual: English + Arabic.
  * @param {object} summary - Summary data
  */
 async function sendDailySummary(summary) {
   if (!isConfigured()) return { success: false, error: "Not configured" };
 
-  let body = `📊 *Daily Summary — Monthly Key*\n`;
-  body += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  const enLines = [
+    `📊 *Daily Summary — Monthly Key*`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    ``,
+  ];
+  const arLines = [
+    `📊 *الملخص اليومي — Monthly Key*`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    ``,
+  ];
 
   if (summary.completedToday !== undefined) {
-    body += `✅ Completed today: ${summary.completedToday}\n`;
+    enLines.push(`✅ Completed today: ${summary.completedToday}`);
+    arLines.push(`✅ مكتملة اليوم: ${summary.completedToday}`);
   }
   if (summary.pendingTasks !== undefined) {
-    body += `⏳ Pending tasks: ${summary.pendingTasks}\n`;
+    enLines.push(`⏳ Pending tasks: ${summary.pendingTasks}`);
+    arLines.push(`⏳ مهام معلقة: ${summary.pendingTasks}`);
   }
   if (summary.overdueTasks !== undefined) {
-    body += `🔴 Overdue: ${summary.overdueTasks}\n`;
+    enLines.push(`🔴 Overdue: ${summary.overdueTasks}`);
+    arLines.push(`🔴 متأخرة: ${summary.overdueTasks}`);
   }
   if (summary.upcomingAppointments !== undefined) {
-    body += `📅 Upcoming appointments: ${summary.upcomingAppointments}\n`;
+    enLines.push(`📅 Upcoming appointments: ${summary.upcomingAppointments}`);
+    arLines.push(`📅 مواعيد قادمة: ${summary.upcomingAppointments}`);
   }
   if (summary.upcomingMeetings !== undefined) {
-    body += `📅 Upcoming meetings: ${summary.upcomingMeetings}\n`;
+    enLines.push(`📅 Upcoming meetings: ${summary.upcomingMeetings}`);
+    arLines.push(`📅 اجتماعات قادمة: ${summary.upcomingMeetings}`);
   }
 
-  body += `\n— Monthly Key Bot`;
+  const body = [
+    ...enLines,
+    ``,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    ``,
+    ...arLines,
+    ``,
+    `— Monthly Key Bot`,
+  ].join("\n");
 
   return sendToCeo(body);
 }
 
 /**
  * Send an appointment/meeting reminder via WhatsApp.
+ * Bilingual: English + Arabic.
  * @param {object} event - The appointment or meeting object
  * @param {string} type - "appointment" or "meeting"
  * @param {string} timeLabel - e.g., "1 hour" or "15 minutes"
@@ -178,15 +296,29 @@ async function sendEventReminder(event, type, timeLabel) {
 
   const title = event.title || "Untitled";
   const location = event.location || "";
+  const isAppt = type === "appointment";
+
+  const timeLabelAr = timeLabel === "1 hour" ? "ساعة واحدة"
+    : timeLabel === "15 minutes" ? "15 دقيقة"
+    : timeLabel;
+
   const body = [
-    `⏰ *${type === "appointment" ? "Appointment" : "Meeting"} Reminder*`,
+    `⏰ *${isAppt ? "Appointment" : "Meeting"} Reminder — Monthly Key*`,
     ``,
     `📌 ${title}`,
     `🕐 In ${timeLabel}`,
     location ? `📍 ${location}` : null,
     ``,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    ``,
+    `⏰ *تذكير ${isAppt ? "موعد" : "اجتماع"} — Monthly Key*`,
+    ``,
+    `📌 ${title}`,
+    `🕐 خلال ${timeLabelAr}`,
+    location ? `📍 ${location}` : null,
+    ``,
     `— Monthly Key Bot`,
-  ].filter(Boolean).join("\n");
+  ].filter(l => l !== null).join("\n");
 
   return sendToCeo(body);
 }

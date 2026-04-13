@@ -34,6 +34,23 @@ const HARDCODED_MEMBERS = {
     priority: "top",
     isAdmin: true,
   },
+  // Common mention aliases for CEO (used in task assignee fields)
+  ceo: {
+    name: "Khaled",
+    nameAr: "خالد بن عبدالله",
+    role: "CEO",
+    roleAr: "المدير التنفيذي",
+    priority: "top",
+    isAdmin: true,
+  },
+  administration: {
+    name: "Khaled",
+    nameAr: "خالد بن عبدالله",
+    role: "CEO",
+    roleAr: "المدير التنفيذي",
+    priority: "top",
+    isAdmin: true,
+  },
 
   // ─── Top Management ───────────────────────────────────────
   saq198: {

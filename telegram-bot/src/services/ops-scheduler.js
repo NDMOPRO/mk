@@ -484,12 +484,13 @@ async function checkEscalations() {
     try {
       const whatsappSvc = require('./whatsapp');
       if (whatsappSvc.isConfigured()) {
-        const waDetails = newStaleBlockers.map(t => {
-          const h = Math.round((Date.now() - new Date(t.created_at).getTime()) / (60 * 60 * 1000));
-          return `#${t.id}: ${t.title} (${h}h old${t.assigned_to ? ` — ${t.assigned_to}` : ''})`;
-        }).join('\n');
-        await whatsappSvc.sendCriticalAlert('escalation',
-          `${newStaleBlockers.length} blocker(s) unresolved >24h:\n\n${waDetails}`);
+        const waTasks = newStaleBlockers.map(t => ({
+          id: t.id,
+          title: t.title,
+          assigned_to: t.assigned_to,
+          hoursOld: Math.round((Date.now() - new Date(t.created_at).getTime()) / (60 * 60 * 1000))
+        }));
+        await whatsappSvc.sendCriticalAlert('escalation', waTasks);
       }
     } catch (waErr) {
       console.error('[OpsScheduler] WhatsApp escalation alert failed:', waErr.message);
