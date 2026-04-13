@@ -423,6 +423,14 @@ function initTables() {
       updated_at          TEXT DEFAULT (datetime('now'))
     )
   `);
+
+  // ─── Bot State (for one-time flags) ───────────────────────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS bot_state (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
 }
 
 // ─── Migrations ─────────────────────────────────────────────
@@ -1128,6 +1136,8 @@ module.exports = {
   // Contacts
   addContact, getContactById, getAllContacts, searchContactsByName,
   searchContactsByType, updateContact, deleteContact, updateContactMessageId,
+  // Bot State
+  getBotState, setBotState,
 };
 
 function getAllTasksForSync(chatId) {
@@ -1505,4 +1515,22 @@ function deleteContact(contactId) {
 function updateContactMessageId(contactId, messageId) {
   const d = getDb();
   d.prepare(`UPDATE contacts SET topic_message_id = ? WHERE id = ?`).run(messageId, contactId);
+}
+
+// ═════════════════════════════════════════════════════════════
+// ═══ Bot State ═══════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+
+function getBotState(key) {
+  const d = getDb();
+  const row = d.prepare(`SELECT value FROM bot_state WHERE key = ?`).get(key);
+  return row ? row.value : null;
+}
+
+function setBotState(key, value) {
+  const d = getDb();
+  d.prepare(`
+    INSERT INTO bot_state (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(key, value);
 }

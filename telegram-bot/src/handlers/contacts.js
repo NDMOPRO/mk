@@ -670,4 +670,120 @@ module.exports = {
   setContactsTopicThread,
   getOrCreateContactsTopic,
   postContactCard,
+  postOrEnsurePinnedGuide,
+  postCEOAnnouncement,
 };
+
+// ─── Pinned Guide & CEO Announcement ────────────────────────
+
+async function postOrEnsurePinnedGuide(bot) {
+  try {
+    const threadId = await getOrCreateContactsTopic(bot);
+    if (!threadId) return; // Fallback to general, don't pin there
+
+    // Check if we already posted the guide
+    const existingMsgId = opsDb.getBotState('contacts_guide_msg_id');
+    if (existingMsgId) {
+      // It's already posted. We could try to ensure it's pinned, but Telegram doesn't have an easy
+      // "is pinned" check without fetching the full chat, which can be heavy. We'll just assume it's fine.
+      return;
+    }
+
+    const guideText = `📇 *Contact Management System Guide*
+
+Welcome to the new Operations Contact Directory! This system helps us keep track of all our important contacts (vendors, tenants, technicians, etc.) in one organized place, automatically synced to Google Sheets.
+
+*How to use:*
+• /addcontact — Starts a wizard to add a new contact (Phone number is required!)
+• /contacts — Lists all saved contacts
+• \`/contact search [name]\` — Search by name (e.g., \`/contact search Ahmed\`)
+• \`/contact type [type]\` — Filter by profession (e.g., \`/contact type plumber\`)
+• \`/editcontact #[ID]\` — Edit an existing contact (e.g., \`/editcontact #C1\`)
+• \`/deletecontact #[ID]\` — Delete a contact (Admins only)
+
+*Notes:*
+- You can skip optional fields (like email or notes) by typing "skip" during the wizard.
+- Every contact added here is instantly synced to our Operations Google Sheet.
+
+${DIV}
+
+📇 *دليل نظام إدارة جهات الاتصال*
+
+مرحباً بكم في دليل جهات الاتصال الجديد للعمليات! يساعدنا هذا النظام في تتبع جميع جهات الاتصال المهمة (الموردين، المستأجرين، الفنيين، إلخ) في مكان واحد منظم، مع مزامنة تلقائية مع جداول بيانات جوجل.
+
+*طريقة الاستخدام:*
+• /addcontact — بدء خطوات إضافة جهة اتصال جديدة (رقم الهاتف مطلوب!)
+• /contacts — عرض جميع جهات الاتصال المحفوظة
+• \`/contact search [الاسم]\` — البحث بالاسم (مثال: \`/contact search أحمد\`)
+• \`/contact نوع [النوع]\` — التصفية حسب المهنة (مثال: \`/contact نوع سباك\`)
+• \`/editcontact #[الرقم]\` — تعديل جهة اتصال (مثال: \`/editcontact #C1\`)
+• \`/deletecontact #[الرقم]\` — حذف جهة اتصال (للمسؤولين فقط)
+
+*ملاحظات:*
+- يمكنك تخطي الحقول الاختيارية (مثل البريد الإلكتروني أو الملاحظات) بكتابة "skip" أو "تخطي".
+- يتم مزامنة كل جهة اتصال تضاف هنا فوراً مع جدول بيانات العمليات على جوجل.`;
+
+    const sent = await bot.telegram.sendMessage(OPS_GROUP_ID, guideText, {
+      parse_mode: 'Markdown',
+      message_thread_id: threadId,
+    });
+
+    // Pin the message
+    await bot.telegram.pinChatMessage(OPS_GROUP_ID, sent.message_id, {
+      disable_notification: true,
+    });
+
+    // Save state so we don't post it again
+    opsDb.setBotState('contacts_guide_msg_id', sent.message_id.toString());
+    log.info('Contacts', `Posted and pinned guide message in thread ${threadId}`);
+  } catch (e) {
+    log.error('Contacts', `Failed to post pinned guide: ${e.message}`);
+  }
+}
+
+async function postCEOAnnouncement(bot) {
+  try {
+    // Check if already announced
+    if (opsDb.getBotState('contacts_ceo_announced')) return;
+
+    // Find CEO Update topic thread ID (thread 2)
+    // Or fallback to General
+    const CEO_TOPIC_THREAD = 2; 
+
+    const announcementText = `📢 *CEO Update: New Contact Management System*
+
+Team,
+
+As our operations continue to grow, keeping our contacts organized is more important than ever. I'm excited to announce that our new **Contact Management System** is now live directly within this Telegram group.
+
+You can now easily save, search, and manage all our operational contacts—vendors, tenants, technicians, and partners—using simple commands. Everything is automatically backed up and synced to our Google Sheets.
+
+**Please start using this system today.** Whenever you work with a new technician or vendor, use the /addcontact command to save their details so the entire team can access them when needed.
+
+Let's keep building! 🚀
+
+${DIV}
+
+📢 *تحديث المدير التنفيذي: نظام إدارة جهات الاتصال الجديد*
+
+فريقنا العزيز،
+
+مع استمرار نمو عملياتنا، أصبح تنظيم جهات الاتصال الخاصة بنا أكثر أهمية من أي وقت مضى. يسعدني أن أعلن أن **نظام إدارة جهات الاتصال** الجديد أصبح متاحاً الآن مباشرة داخل هذه المجموعة.
+
+يمكنكم الآن بسهولة حفظ والبحث عن وإدارة جميع جهات الاتصال التشغيلية — الموردين، المستأجرين، الفنيين، والشركاء — باستخدام أوامر بسيطة. يتم نسخ كل شيء احتياطياً ومزامنته تلقائياً مع جداول بيانات جوجل الخاصة بنا.
+
+**يرجى البدء في استخدام هذا النظام من اليوم.** كلما تعاملتم مع فني أو مورد جديد، استخدموا الأمر /addcontact لحفظ بياناته حتى يتمكن الفريق بأكمله من الوصول إليها عند الحاجة.
+
+لنمضي قدماً! 🚀`;
+
+    await bot.telegram.sendMessage(OPS_GROUP_ID, announcementText, {
+      parse_mode: 'Markdown',
+      message_thread_id: CEO_TOPIC_THREAD,
+    });
+
+    opsDb.setBotState('contacts_ceo_announced', 'true');
+    log.info('Contacts', 'Posted CEO announcement for Contact Management System');
+  } catch (e) {
+    log.error('Contacts', `Failed to post CEO announcement: ${e.message}`);
+  }
+}

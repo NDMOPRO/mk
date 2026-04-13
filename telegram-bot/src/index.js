@@ -214,6 +214,8 @@ const {
   hasActiveSession: hasActiveContactSession,
   setContactsTopicThread,
   getOrCreateContactsTopic,
+  postOrEnsurePinnedGuide,
+  postCEOAnnouncement,
 } = require("./handlers/contacts");
 
 // ─── Ops Group ID ─────────────────────────────────────────────
@@ -989,7 +991,7 @@ async function startWebhook() {
     log.info('Boot', 'WhatsApp integration: DISABLED (set TWILIO_* env vars to enable)');
   }
 
-  // 5c. Initialize Contacts topic
+  // 5c. Initialize Contacts topic + post pinned guide + CEO announcement
   try {
     // Check env var first, then try to create
     if (process.env.CONTACTS_TOPIC_THREAD_ID) {
@@ -1003,6 +1005,12 @@ async function startWebhook() {
         log.info('Boot', 'Contacts topic: will use General topic (fallback)');
       }
     }
+
+    // Post and pin the guide in the Contacts topic (idempotent — skips if already posted)
+    await postOrEnsurePinnedGuide(bot);
+
+    // Post one-time CEO announcement in the CEO Update topic (idempotent — skips if already sent)
+    await postCEOAnnouncement(bot);
   } catch (e) {
     log.error('Boot', 'Contacts topic init error', { error: e.message });
   }
