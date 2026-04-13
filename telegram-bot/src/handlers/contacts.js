@@ -94,20 +94,37 @@ function formatContactCard(contact) {
  * Returns the thread_id (message_thread_id) for posting contact cards.
  */
 async function getOrCreateContactsTopic(bot) {
-  // Return cached value if available
+  // 1. Check in-memory cache
   if (contactsTopicThreadId) return contactsTopicThreadId;
 
+  // 2. Check database (bot_state)
+  const savedId = opsDb.getBotState('contacts_topic_thread_id');
+  if (savedId) {
+    const tid = parseInt(savedId);
+    // Verify it still exists by sending a silent action (or just trust it for now)
+    try {
+      // We'll trust the DB ID if it exists. If it fails later, the error handler will catch it.
+      contactsTopicThreadId = tid;
+      return tid;
+    } catch (e) {
+      log.error('Contacts', `Saved topic thread ${tid} is invalid: ${e.message}`);
+    }
+  }
+
+  // 3. Create new topic if none found or valid
   try {
     const result = await bot.telegram.createForumTopic(OPS_GROUP_ID, CONTACTS_TOPIC_NAME, {
       icon_custom_emoji_id: undefined,
     });
     contactsTopicThreadId = result.message_thread_id;
-    log.info('Contacts', `Created contacts topic: thread ${contactsTopicThreadId}`);
+    
+    // Save to DB immediately
+    opsDb.setBotState('contacts_topic_thread_id', contactsTopicThreadId.toString());
+    
+    log.info('Contacts', `Created new contacts topic: thread ${contactsTopicThreadId}`);
     return contactsTopicThreadId;
   } catch (e) {
-    // Topic might already exist or creation failed
     log.error('Contacts', `Could not create contacts topic: ${e.message}`);
-    // Fall back to General topic (null = General)
     return null;
   }
 }
@@ -683,9 +700,10 @@ async function postOrEnsurePinnedGuide(bot) {
 
     // Check if we already posted the guide
     const existingMsgId = opsDb.getBotState('contacts_guide_msg_id');
-    if (existingMsgId) {
-      // It's already posted. We could try to ensure it's pinned, but Telegram doesn't have an easy
-      // "is pinned" check without fetching the full chat, which can be heavy. We'll just assume it's fine.
+    const existingThreadId = opsDb.getBotState('contacts_guide_thread_id');
+
+    if (existingMsgId && existingThreadId === threadId.toString()) {
+      // It's already posted in the CURRENT canonical thread.
       return;
     }
 
@@ -735,6 +753,7 @@ ${DIV}
 
     // Save state so we don't post it again
     opsDb.setBotState('contacts_guide_msg_id', sent.message_id.toString());
+    opsDb.setBotState('contacts_guide_thread_id', threadId.toString());
     log.info('Contacts', `Posted and pinned guide message in thread ${threadId}`);
   } catch (e) {
     log.error('Contacts', `Failed to post pinned guide: ${e.message}`);
