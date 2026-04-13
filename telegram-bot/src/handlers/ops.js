@@ -317,32 +317,46 @@ async function handleOpsTasks(ctx) {
 }
 
 async function handleOpsDone(ctx) {
+  const { Markup } = require("telegraf");
   const threadId = ctx.message?.message_thread_id || null;
   const chatId = ctx.chat.id;
   const text = ctx.message.text || "";
   const args = extractCommandArgs(text, "done");
-  const taskId = parseInt(args, 10);
 
+  // Fix 2: Parse task ID — try parseInt first, then scan for #N pattern
+  let taskId = parseInt(args, 10);
+  if (!taskId || isNaN(taskId)) {
+    const hashMatch = args.match(/#(\d+)/);
+    if (hashMatch) taskId = parseInt(hashMatch[1], 10);
+  }
+
+  // Fix 4 & 5: If still no valid taskId, show pending tasks with inline buttons (same topic only)
   if (!taskId || isNaN(taskId)) {
     const tasks = opsDb.getPendingTasksByThread(chatId, threadId);
     if (tasks.length === 0) {
       const en = "✅ No pending tasks in this topic.";
       const ar = "✅ لا توجد مهام معلقة في هذا الموضوع.";
-      return ctx.reply(getBilingualText(en, ar), { message_thread_id: threadId });
+      return ctx.reply(getBilingualText(en, ar), { message_thread_id: threadId || undefined });
     }
-    
-    let en = `✅ *Complete a task*\n\nUse: \`/done [task number]\`\n\n*Pending:*\n`;
-    let ar = `✅ *إكمال مهمة*\n\nاستخدم: \`/done [رقم المهمة]\`\n\n*المعلقة:*\n`;
-    tasks.forEach(task => { 
+
+    let en = `✅ *Complete a task*\n\n*Pending:*\n`;
+    let ar = `✅ *إكمال مهمة*\n\n*المعلقة:*\n`;
+    const buttons = [];
+    tasks.forEach(task => {
       const line = `⬜ ${task.title} [#${task.id}]\n`;
       en += line; ar += line;
+      buttons.push([Markup.button.callback(`✅ Done #${task.id}: ${task.title.substring(0, 30)}`, `done_${task.id}`)]);
     });
-    return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+    return ctx.reply(getBilingualText(en, ar), {
+      parse_mode: "Markdown",
+      message_thread_id: threadId || undefined,
+      ...Markup.inlineKeyboard(buttons),
+    });
   }
 
   const task = opsDb.getTaskById(taskId);
-  if (!task || task.chat_id !== chatId) return ctx.reply(`❌ Task #${taskId} not found / المهمة غير موجودة`, { message_thread_id: threadId });
-  if (task.status === "done") return ctx.reply(`✅ Task #${taskId} already completed / المهمة مكتملة بالفعل`, { message_thread_id: threadId });
+  if (!task || task.chat_id !== chatId) return ctx.reply(`❌ Task #${taskId} not found / المهمة غير موجودة`, { message_thread_id: threadId || undefined });
+  if (task.status === "done") return ctx.reply(`✅ Task #${taskId} already completed / المهمة مكتملة بالفعل`, { message_thread_id: threadId || undefined });
 
   opsDb.markTaskDone(taskId);
 
@@ -357,7 +371,40 @@ async function handleOpsDone(ctx) {
     }
   }
 
-  await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
+  await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || undefined });
+}
+
+/**
+ * Callback handler for done_TASKID inline buttons
+ */
+async function handleDoneCallback(ctx) {
+  try {
+    const data = ctx.callbackQuery.data;
+    const match = data.match(/^done_(\d+)$/);
+    if (!match) return ctx.answerCbQuery("❌ Invalid action");
+
+    const taskId = parseInt(match[1], 10);
+    const chatId = ctx.chat.id;
+    const task = opsDb.getTaskById(taskId);
+
+    if (!task || task.chat_id !== chatId) {
+      return ctx.answerCbQuery("❌ Task not found");
+    }
+    if (task.status === "done") {
+      return ctx.answerCbQuery("✅ Already completed");
+    }
+
+    opsDb.markTaskDone(taskId);
+
+    const en = `✅ *Task #${taskId} completed!*\n\n~~${task.title}~~\n\n🎉 Well done!`;
+    const ar = `✅ *تم إكمال المهمة #${taskId}!*\n\n~~${task.title}~~\n\n🎉 عمل رائع!`;
+
+    await ctx.answerCbQuery(`✅ Task #${taskId} done!`);
+    await ctx.editMessageText(getBilingualText(en, ar), { parse_mode: "Markdown" });
+  } catch (e) {
+    console.error("[handleDoneCallback] Error:", e.message);
+    await ctx.answerCbQuery("❌ Error completing task").catch(() => {});
+  }
 }
 
 async function handleOpsRemind(ctx) {
@@ -1571,7 +1618,7 @@ async function handleOpsMedia(ctx, openaiClient) {
 // ─── Exports ────────────────────────────────────────────────
 
 module.exports = {
-  handleOpsTask, handleOpsChecklist, handleOpsTasks, handleOpsDone,
+  handleOpsTask, handleOpsChecklist, handleOpsTasks, handleOpsDone, handleDoneCallback,
   handleOpsRemind, handleOpsSummary, handleOpsKpi, handleOpsProperty,
   handleOpsMove, handleOpsHandover, handleOpsMonthlyReport, handleOpsExpense,
   handleOpsExpenses,

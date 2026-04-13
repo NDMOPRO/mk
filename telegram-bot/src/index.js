@@ -122,6 +122,7 @@ const {
   handleOpsChecklist,
   handleOpsTasks,
   handleOpsDone,
+  handleDoneCallback,
   handleOpsRemind,
   handleOpsSummary,
   handleOpsKpi,
@@ -735,6 +736,12 @@ bot.action(/^photo_(approve|reject)_(\d+)$/, safeCallback('cb:photo_review', asy
 bot.action(/^idea_vote_\d+$/, safeCallback('cb:idea_vote', async (ctx) => {
   if (!isOpsGroup(ctx)) return;
   await handleIdeaVoteCallback(ctx);
+}));
+
+// ─── Task Done Callbacks (inline buttons) ────────────────────
+bot.action(/^done_\d+$/, safeCallback('cb:done_task', async (ctx) => {
+  if (!isOpsGroup(ctx)) return;
+  await handleDoneCallback(ctx);
 }));
 
 // ─── Inline Search & Callbacks ────────────────────────────────

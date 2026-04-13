@@ -56,7 +56,7 @@ async function handleOpsRoles(ctx) {
     const dbExtras = dbRoles.filter(r => {
       // Only include DB roles that don't already exist in the static registry
       const uname = (r.username || "").replace(/^@/, "").toLowerCase();
-      return !staticMembers.some(m => m.username.toLowerCase() === uname);
+      return !staticMembers.some(m => (m.username || "").toLowerCase() === uname);
     });
 
     // ── 3. Build role-grouped display ─────────────────────────
@@ -82,7 +82,8 @@ async function handleOpsRoles(ctx) {
     const enLines = ["👥 *Team Roster*", ""];
     for (const m of sorted) {
       const emoji = roleEmoji(m.role);
-      enLines.push(`${emoji} *${m.name}* (@${m.username}) — ${m.role}`);
+      const usernameEn = m.username ? ` (@${m.username})` : ``;
+      enLines.push(`${emoji} *${m.name}*${usernameEn} — ${m.role}`);
     }
     // Append any DB-only extras
     if (dbExtras.length > 0) {
@@ -99,7 +100,8 @@ async function handleOpsRoles(ctx) {
     const arLines = ["👥 *قائمة الفريق*", ""];
     for (const m of sorted) {
       const emoji = roleEmoji(m.role);
-      arLines.push(`${emoji} *${m.nameAr}* (@${m.username}) — ${m.roleAr}`);
+      const usernameAr = m.username ? ` (@${m.username})` : ``;
+      arLines.push(`${emoji} *${m.nameAr}*${usernameAr} — ${m.roleAr}`);
     }
     if (dbExtras.length > 0) {
       arLines.push("");
@@ -203,12 +205,11 @@ async function handleOpsSetRole(ctx) {
       ctx.from.username || ctx.from.first_name || "System"
     );
 
-    // 3. Bilingual success response
-    const en = `✅ *Role updated*\n\n👤 *${escMd(displayName)}* (@${escMd(targetUsername)}) is now *${escMd(role)}*`;
-    const ar = `✅ *تم تحديث الدور*\n\n👤 *${escMd(displayName)}* (@${escMd(targetUsername)}) الآن هو *${escMd(role)}*`;
+    // 3. Bilingual success response (plain text to avoid Markdown escaping issues)
+    const en = `✅ Role updated\n\n👤 ${displayName} (@${targetUsername}) is now ${role}`;
+    const ar = `✅ تم تحديث الدور\n\n👤 ${displayName} (@${targetUsername}) الآن هو ${role}`;
     
     await ctx.reply(getBilingualText(en, ar), { 
-      parse_mode: "Markdown", 
       message_thread_id: threadId || undefined 
     });
 
