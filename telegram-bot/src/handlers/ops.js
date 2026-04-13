@@ -92,7 +92,9 @@ function addToConversation(chatId, threadId, role, content) {
   conversationMemory.set(key, history);
 }
 
-// ─── Utility Functions ──────────────────────────────────────
+/// ─── Utility Functions ──────────────────────────────────────
+// Strip Markdown v1 special chars from user-entered text to prevent Telegram 400 errors
+function safeTxt(s) { return String(s || "").replace(/[_*`\[\]]/g, ""); }
 
 function extractCommandArgs(text, command) {
   if (!text) return "";
