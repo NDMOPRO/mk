@@ -498,43 +498,59 @@ async function handleOpsRemind(ctx) {
 async function handleOpsSummary(ctx) {
   const chatId = ctx.chat.id;
   const threadId = ctx.message?.message_thread_id || null;
-  const allTasks = opsDb.getAllPendingTasks(chatId);
-
-  if (allTasks.length === 0) {
-    const en = `📊 *Task Summary*\n\n✨ No pending tasks. Great work!`;
-    const ar = `📊 *ملخص المهام*\n\n✨ لا توجد مهام معلقة. عمل رائع!`;
-    return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
-  }
-
-  const byTopic = {};
-  for (const task of allTasks) { const key = task.topic_name || "General"; if (!byTopic[key]) byTopic[key] = []; byTopic[key].push(task); }
-
-  const stats = opsDb.getTaskStats(chatId);
-  let en = `📊 *Task Summary*\n📌 ${stats.pending} pending / ${stats.done} done\n\n`;
-  let ar = `📊 *ملخص المهام*\n📌 ${stats.pending} معلقة / ${stats.done} مكتملة\n\n`;
-
-  for (const [topicName, tasks] of Object.entries(byTopic)) {
-    const emoji = getEmojiFromName(topicName);
-    const line = `${emoji} *${topicName}* (${tasks.length}):\n`;
-    en += line; ar += line;
-    tasks.slice(0, 5).forEach((task, i) => { 
-      const assignee = task.assigned_to ? ` → ${safeTxt(task.title)}` : ""; 
-      const tLine = `  ${i + 1}. ⬜ ${safeTxt(task.title)}${assignee} [#${task.id}]\n`;
-      en += tLine; ar += tLine;
-    });
-    if (tasks.length > 5) {
-      en += `  _... and ${tasks.length - 5} more_\n`;
-      ar += `  _... و ${tasks.length - 5} غيرها_\n`;
-    }
-    en += "\n"; ar += "\n";
-  }
-
   try {
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || undefined });
+    const allTasks = opsDb.getAllPendingTasks(chatId);
+    if (allTasks.length === 0) {
+      return ctx.reply(
+        `📊 Task Summary\n\n✨ No pending tasks. Great work!\n━━━━━━━━━━━━━━\n📊 ملخص المهام\n\n✨ لا توجد مهام معلقة. عمل رائع!`,
+        { message_thread_id: threadId || undefined }
+      );
+    }
+    const byTopic = {};
+    for (const task of allTasks) {
+      const key = safeTxt(task.topic_name || "General");
+      if (!byTopic[key]) byTopic[key] = [];
+      byTopic[key].push(task);
+    }
+    const stats = opsDb.getTaskStats(chatId);
+    let lines = [];
+    lines.push(`📊 Task Summary`);
+    lines.push(`📌 ${stats.pending} pending / ${stats.done} done`);
+    lines.push(`━━━━━━━━━━━━━━`);
+    lines.push(`📊 ملخص المهام`);
+    lines.push(`📌 ${stats.pending} معلقة / ${stats.done} مكتملة`);
+    lines.push(``);
+    for (const [topicName, tasks] of Object.entries(byTopic)) {
+      const emoji = getEmojiFromName(topicName);
+      lines.push(`${emoji} ${topicName} (${tasks.length}):`);
+      tasks.slice(0, 5).forEach((task, i) => {
+        const assignee = task.assigned_to ? ` → ${safeTxt(task.assigned_to)}` : "";
+        lines.push(`  ${i + 1}. ⬜ ${safeTxt(task.title)}${assignee} [#${task.id}]`);
+      });
+      if (tasks.length > 5) lines.push(`  ... and ${tasks.length - 5} more`);
+      lines.push(``);
+    }
+    const msg = lines.join("\n");
+    // Split if too long
+    const chunks = [];
+    let current = "";
+    for (const line of lines) {
+      if (current.length + line.length + 1 > 3800) {
+        chunks.push(current);
+        current = line;
+      } else {
+        current += (current ? "\n" : "") + line;
+      }
+    }
+    if (current) chunks.push(current);
+    for (const chunk of chunks) {
+      await ctx.reply(chunk, { message_thread_id: threadId || undefined });
+    }
   } catch (e) {
-    console.error("[handleOpsSummary] Send error:", e.message);
-    const plain = getBilingualText(en, ar).replace(/[*_`]/g, "");
-    await ctx.reply(plain, { message_thread_id: threadId || undefined }).catch(err => console.error("[handleOpsSummary] Plain fallback failed:", err.message));
+    console.error("[handleOpsSummary] CRASH:", e.message, e.stack);
+    try {
+      await ctx.reply(`❌ Summary error: ${e.message}`, { message_thread_id: threadId || undefined });
+    } catch (_) {}
   }
 }
 

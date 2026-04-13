@@ -9,6 +9,7 @@
 
 const v4Db = require("../services/ops-database-v4");
 const opsDb = require("../services/ops-database");
+const { getAllTeamMembers } = require("../team-members");
 
 function getBilingualText(en, ar) {
   return `${en}\n━━━━━━━━━━━━━━\n${ar}`;
@@ -649,25 +650,58 @@ async function handleOpsAvailability(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   try {
     const chatId = ctx.chat.id;
-    const away = v4Db.getAwayMembers(chatId);
-    const available = v4Db.getAvailableMembers(chatId);
-    let en = `👥 *Team Availability*\n\n`;
-    let ar = `👥 *توفر الفريق*\n\n`;
-    if (available.length > 0) {
-      en += `*🟢 Available:*\n`; ar += `*🟢 متاح:*\n`;
-      available.forEach(m => { en += `• ${m.assigned_to}\n`; ar += `• ${m.assigned_to}\n`; });
+    // Get away list from DB (keyed by username)
+    const awayRows = v4Db.getAwayMembers(chatId);
+    const awayUsernames = new Set(awayRows.map(r => (r.username || "").toLowerCase().replace(/^@/, "")));
+    // Use canonical 5 team members as the source of truth
+    const members = getAllTeamMembers();
+    // Deduplicate by name+role (getAllTeamMembers already does this, but be safe)
+    const seen = new Set();
+    const canonical = [];
+    for (const m of members) {
+      const key = `${m.name}|${m.role}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      canonical.push(m);
     }
-    if (away.length > 0) {
-      en += `\n*🔴 Away:*\n`; ar += `\n*🔴 غائب:*\n`;
-      away.forEach(m => { en += `• ${m.username} — ${m.reason || "No reason"}\n`; ar += `• ${m.username} — ${m.reason || "بدون سبب"}\n`; });
+    const availableMembers = [];
+    const awayMembers = [];
+    for (const m of canonical) {
+      const uname = (m.username || "").toLowerCase();
+      const isAway = uname ? awayUsernames.has(uname) : false;
+      if (isAway) {
+        const awayRow = awayRows.find(r => (r.username || "").toLowerCase().replace(/^@/, "") === uname);
+        awayMembers.push({ ...m, reason: awayRow?.reason || null });
+      } else {
+        availableMembers.push(m);
+      }
     }
-    if (available.length === 0 && away.length === 0) {
+    let en = `👥 Team Availability\n\n`;
+    let ar = `👥 توفر الفريق\n\n`;
+    if (availableMembers.length > 0) {
+      en += `🟢 Available:\n`; ar += `🟢 متاح:\n`;
+      availableMembers.forEach(m => {
+        const uStr = m.username ? ` (@${m.username})` : "";
+        en += `• ${m.name}${uStr} — ${m.role}\n`;
+        ar += `• ${m.nameAr || m.name}${uStr} — ${m.roleAr || m.role}\n`;
+      });
+    }
+    if (awayMembers.length > 0) {
+      en += `\n🔴 Away:\n`; ar += `\n🔴 غائب:\n`;
+      awayMembers.forEach(m => {
+        const uStr = m.username ? ` (@${m.username})` : "";
+        en += `• ${m.name}${uStr} — ${m.reason || "No reason"}\n`;
+        ar += `• ${m.nameAr || m.name}${uStr} — ${m.reason || "بدون سبب"}\n`;
+      });
+    }
+    if (availableMembers.length === 0 && awayMembers.length === 0) {
       en += "No team data yet."; ar += "لا توجد بيانات فريق بعد.";
     }
-    await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
+    const msg = `${en}\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n${ar}`;
+    await ctx.reply(msg, { message_thread_id: threadId || undefined });
   } catch (e) {
     console.error("[handleOpsAvailability] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || undefined }).catch(() => {});
   }
 }
 
