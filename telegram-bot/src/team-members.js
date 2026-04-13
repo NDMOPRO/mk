@@ -18,7 +18,7 @@
 const HARDCODED_MEMBERS = {
   // ─── CEO ──────────────────────────────────────────────────
   monthlykey: {
-    name: "Khaled",
+    name: "Khalid",
     nameAr: "خالد بن عبدالله",
     role: "CEO",
     roleAr: "المدير التنفيذي",
@@ -27,7 +27,7 @@ const HARDCODED_MEMBERS = {
   },
   // Alias for the same CEO account
   hobart2007: {
-    name: "Khaled",
+    name: "Khalid",
     nameAr: "خالد بن عبدالله",
     role: "CEO",
     roleAr: "المدير التنفيذي",
@@ -36,7 +36,7 @@ const HARDCODED_MEMBERS = {
   },
   // Common mention aliases for CEO (used in task assignee fields)
   ceo: {
-    name: "Khaled",
+    name: "Khalid",
     nameAr: "خالد بن عبدالله",
     role: "CEO",
     roleAr: "المدير التنفيذي",
@@ -44,7 +44,7 @@ const HARDCODED_MEMBERS = {
     isAdmin: true,
   },
   administration: {
-    name: "Khaled",
+    name: "Khalid",
     nameAr: "خالد بن عبدالله",
     role: "CEO",
     roleAr: "المدير التنفيذي",

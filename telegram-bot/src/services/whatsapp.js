@@ -28,7 +28,7 @@ let twilioClient = null;
 /**
  * Resolve a raw assignee string (may contain multiple @mentions separated by spaces)
  * to a bilingual real name. Returns { en, ar }.
- * e.g. "@ceo @administration" → { en: "Khaled", ar: "خالد بن عبدالله" }
+ * e.g. "@ceo @administration" → { en: "Khalid", ar: "خالد بن عبدالله" }
  * e.g. "@SAQ198"              → { en: "Saad Al Qasem", ar: "سعد القاسم" }
  */
 function resolveAssignee(raw) {
