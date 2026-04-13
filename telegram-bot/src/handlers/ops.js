@@ -236,7 +236,7 @@ async function handleOpsChecklist(ctx) {
   }
 
   const items = argsText.split(/\||\n/).map(s => s.trim()).filter(s => s.length > 0);
-  if (items.length === 0) return ctx.reply("❌ No tasks found / لم يتم العثور على مهام", { message_thread_id: threadId });
+  if (items.length === 0) return ctx.reply(getBilingualText("❌ No tasks found.", "❌ لم يتم العثور على مهام."), { message_thread_id: threadId });
 
   const rawCreatedBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
   const createdBy = normalizeAssignee(rawCreatedBy) || rawCreatedBy;
@@ -366,7 +366,7 @@ async function handleOpsTasks(ctx) {
   } catch (e) {
     console.error("[handleOpsTasks] Fatal error:", e.message, e.stack);
     try {
-      await ctx.reply(`\u274c Error loading tasks: ${e.message}`, { message_thread_id: threadId || undefined });
+      await ctx.reply(getBilingualText(`❌ Error loading tasks: ${e.message}`, `❌ خطأ في تحميل المهام: ${e.message}`), { message_thread_id: threadId || undefined });
     } catch (_) {}
   }
 }
@@ -416,8 +416,8 @@ async function handleOpsDone(ctx) {
   }
 
   const task = opsDb.getTaskById(taskId);
-  if (!task || task.chat_id !== chatId) return ctx.reply(`❌ Task #${taskId} not found / المهمة غير موجودة`, { message_thread_id: threadId || undefined });
-  if (task.status === "done") return ctx.reply(`✅ Task #${taskId} already completed / المهمة مكتملة بالفعل`, { message_thread_id: threadId || undefined });
+  if (!task || task.chat_id !== chatId) return ctx.reply(getBilingualText(`❌ Task #${taskId} not found.`, `❌ المهمة #${taskId} غير موجودة.`), { message_thread_id: threadId || undefined });
+  if (task.status === "done") return ctx.reply(getBilingualText(`✅ Task #${taskId} already completed.`, `✅ المهمة #${taskId} مكتملة بالفعل.`), { message_thread_id: threadId || undefined });
 
   opsDb.markTaskDone(taskId);
 
@@ -492,10 +492,10 @@ async function handleOpsRemind(ctx) {
   if (tomorrowMatch) { timeStr = tomorrowMatch[1]; message = tomorrowMatch[2]; }
   else { const parts = argsText.split(/\s+/); timeStr = parts[0]; message = parts.slice(1).join(" "); }
 
-  if (!message) return ctx.reply("❌ Please specify a message / يرجى تحديد رسالة التذكير", { message_thread_id: threadId });
+  if (!message) return ctx.reply(getBilingualText("❌ Please specify a message.", "❌ يرجى تحديد رسالة التذكير."), { message_thread_id: threadId });
 
   const remindAt = parseReminderTime(timeStr);
-  if (!remindAt) return ctx.reply(`❌ Could not parse time / لم يتم فهم الوقت: \`${timeStr}\``, { parse_mode: "Markdown", message_thread_id: threadId });
+  if (!remindAt) return ctx.reply(getBilingualText(`❌ Could not parse time: \`${timeStr}\``, `❌ لم يتم فهم الوقت: \`${timeStr}\``), { parse_mode: "Markdown", message_thread_id: threadId });
 
   const createdBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name || "Unknown";
   opsDb.addReminder(chatId, threadId, topicInfo.name, message, remindAt, createdBy);
@@ -594,7 +594,7 @@ async function handleOpsSummary(ctx) {
   } catch (e) {
     console.error("[handleOpsSummary] CRASH:", e.message, e.stack);
     try {
-      await ctx.reply(`❌ Summary error: ${e.message}`, { message_thread_id: threadId || undefined });
+      await ctx.reply(getBilingualText(`❌ Summary error: ${e.message}`, `❌ خطأ في الملخص: ${e.message}`), { message_thread_id: threadId || undefined });
     } catch (_) {}
   }
 }
@@ -724,16 +724,16 @@ async function handleOpsMove(ctx) {
   }
 
   const match = argsText.match(/^(\d+)\s+(\S+)$/i);
-  if (!match) return ctx.reply("❌ Format: `/move 5 tech`", { message_thread_id: threadId });
+  if (!match) return ctx.reply(getBilingualText("❌ Format: `/move 5 tech`", "❌ الصيغة: `/move 5 tech`"), { parse_mode: "Markdown", message_thread_id: threadId });
 
   const taskId = parseInt(match[1], 10);
   const targetTopic = match[2].toLowerCase();
   const targetThreadId = TOPIC_SHORTNAMES[targetTopic];
 
-  if (!targetThreadId) return ctx.reply(`❌ Unknown topic: \`${targetTopic}\``, { parse_mode: "Markdown", message_thread_id: threadId });
+  if (!targetThreadId) return ctx.reply(getBilingualText(`❌ Unknown topic: \`${targetTopic}\``, `❌ موضوع غير معروف: \`${targetTopic}\``), { parse_mode: "Markdown", message_thread_id: threadId });
 
   const task = opsDb.getTaskById(taskId);
-  if (!task || task.chat_id !== chatId) return ctx.reply(`❌ Task #${taskId} not found.`, { message_thread_id: threadId });
+  if (!task || task.chat_id !== chatId) return ctx.reply(getBilingualText(`❌ Task #${taskId} not found.`, `❌ المهمة #${taskId} غير موجودة.`), { message_thread_id: threadId });
 
   const targetInfo = getTopicInfo(targetThreadId);
   opsDb.moveTask(taskId, targetThreadId, targetInfo.name);
@@ -872,7 +872,7 @@ async function handleOpsExpense(ctx) {
   }
 
   const match = argsText.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
-  if (!match) return ctx.reply("❌ Format: `/expense 500 AC repair #unit5`", { message_thread_id: threadId });
+  if (!match) return ctx.reply(getBilingualText("❌ Format: `/expense 500 AC repair #unit5`", "❌ الصيغة: `/expense 500 AC repair #unit5`"), { parse_mode: "Markdown", message_thread_id: threadId });
 
   const amount = parseFloat(match[1]);
   const description = match[2].trim();
@@ -921,7 +921,7 @@ async function handleOpsOccupancy(ctx) {
   }
 
   const match = argsText.match(/^(\S+)\s+(occupied|vacant|maintenance)(?:\s+[""]?(.+?)[""]?)?$/i);
-  if (!match) return ctx.reply("❌ Format: `/occupancy unit5 occupied \"Tenant Name\"`", { message_thread_id: threadId });
+  if (!match) return ctx.reply(getBilingualText("❌ Format: `/occupancy unit5 occupied \"Tenant Name\"`", "❌ الصيغة: `/occupancy unit5 occupied \"اسم المستأجر\"`"), { parse_mode: "Markdown", message_thread_id: threadId });
 
   const unitName = match[1].toLowerCase();
   const status = match[2].toLowerCase();
@@ -972,7 +972,7 @@ async function handleOpsSla(ctx) {
     const hours = parseInt(match[1]);
     const topicInfo = getTopicInfo(threadId);
     opsDb.setSlaConfig(chatId, threadId, topicInfo.name, hours);
-    return ctx.reply(`✅ SLA set to ${hours}h for ${topicInfo.name}`, { message_thread_id: threadId });
+    return ctx.reply(getBilingualText(`✅ SLA set to ${hours}h for ${topicInfo.name}`, `✅ تم ضبط اتفاقية مستوى الخدمة إلى ${hours} ساعة لـ ${topicInfo.arName || topicInfo.name}`), { message_thread_id: threadId });
   }
 }
 
@@ -982,10 +982,10 @@ async function handleOpsApprove(ctx) {
   const text = ctx.message.text || "";
   const args = extractCommandArgs(text, "approve");
   const id = parseInt(args);
-  if (isNaN(id)) return ctx.reply("❌ Usage: /approve [id]", { message_thread_id: threadId });
+  if (isNaN(id)) return ctx.reply(getBilingualText("❌ Usage: /approve [id]", "❌ الاستخدام: /approve [الرقم]"), { message_thread_id: threadId });
   const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
   opsDb.decideApproval(id, "approved", user, "Approved via command");
-  ctx.reply(`✅ Approval #${id} approved by ${user}`, { message_thread_id: threadId });
+  ctx.reply(getBilingualText(`✅ Approval #${id} approved by ${user}`, `✅ تمت الموافقة على الطلب #${id} بواسطة ${user}`), { message_thread_id: threadId });
 }
 
 async function handleOpsReject(ctx) {
@@ -994,19 +994,19 @@ async function handleOpsReject(ctx) {
   const text = ctx.message.text || "";
   const args = extractCommandArgs(text, "reject");
   const id = parseInt(args);
-  if (isNaN(id)) return ctx.reply("❌ Usage: /reject [id]", { message_thread_id: threadId });
+  if (isNaN(id)) return ctx.reply(getBilingualText("❌ Usage: /reject [id]", "❌ الاستخدام: /reject [الرقم]"), { message_thread_id: threadId });
   const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
   opsDb.decideApproval(id, "rejected", user, "Rejected via command");
-  ctx.reply(`❌ Approval #${id} rejected by ${user}`, { message_thread_id: threadId });
+  ctx.reply(getBilingualText(`❌ Approval #${id} rejected by ${user}`, `❌ تم رفض الطلب #${id} بواسطة ${user}`), { message_thread_id: threadId });
 }
 
 async function handleOpsDepends(ctx) {
   const threadId = ctx.message?.message_thread_id || null;
   const args = extractCommandArgs(ctx.message.text, "depends");
   const match = args.match(/^(\d+)\s+(\d+)$/);
-  if (!match) return ctx.reply("❌ Usage: /depends [task_id] [depends_on_id]", { message_thread_id: threadId });
+  if (!match) return ctx.reply(getBilingualText("❌ Usage: /depends [task_id] [depends_on_id]", "❌ الاستخدام: /depends [رقم_المهمة] [رقم_المهمة_المعتمد_عليها]"), { message_thread_id: threadId });
   opsDb.addTaskDependency(parseInt(match[1]), parseInt(match[2]));
-  ctx.reply(`✅ Task #${match[1]} now depends on #${match[2]}`, { message_thread_id: threadId });
+  ctx.reply(getBilingualText(`✅ Task #${match[1]} now depends on #${match[2]}`, `✅ المهمة #${match[1]} تعتمد الآن على #${match[2]}`), { message_thread_id: threadId });
 }
 
 async function handleOpsRecurring(ctx) {
@@ -1015,9 +1015,10 @@ async function handleOpsRecurring(ctx) {
   const args = extractCommandArgs(ctx.message.text, "recurring");
   if (!args) {
     const tasks = opsDb.getActiveRecurringTasks(chatId);
-    let msg = "🔄 *Recurring Tasks*\n\n";
-    tasks.forEach(t => msg += `• #${t.id}: ${safeTxt(t.title)} (${t.schedule_type} ${t.schedule_value})\n`);
-    return ctx.reply(msg, { parse_mode: "Markdown", message_thread_id: threadId });
+    let en = "🔄 *Recurring Tasks*\n\n";
+    let ar = "🔄 *المهام المتكررة*\n\n";
+    tasks.forEach(t => { const line = `• #${t.id}: ${safeTxt(t.title)} (${t.schedule_type} ${t.schedule_value})\n`; en += line; ar += line; });
+    return ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId });
   }
 }
 
@@ -1112,7 +1113,7 @@ async function handleOpsMeeting(ctx) {
 
   } catch (e) {
     console.error("[handleOpsMeeting] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId }).catch(() => {});
   }
 }
 
@@ -1122,7 +1123,7 @@ async function handleOpsGsync(ctx) {
 
   try {
     // 1. Send initial status message
-    const statusMsg = await ctx.reply("🔄 *Syncing to Google Sheets...*\nGathering data from local database...", { 
+    const statusMsg = await ctx.reply(getBilingualText("🔄 *Syncing to Google Sheets...*\nGathering data from local database...", "🔄 *جاري المزامنة مع جداول بيانات جوجل...*\nجمع البيانات من قاعدة البيانات المحلية..."), { 
       parse_mode: "Markdown",
       message_thread_id: threadId 
     });
@@ -1379,7 +1380,7 @@ async function handleOpsVoice(ctx, openaiClient) {
     const transcription = await transcribeAudio(openaiClient, tmpFile);
     try { fs.unlinkSync(tmpFile); } catch (e) {}
 
-    if (!transcription) return ctx.reply("🎤 Could not transcribe / تعذر تفريغ الصوت", { message_thread_id: threadId });
+    if (!transcription) return ctx.reply(getBilingualText("🎤 Could not transcribe the voice message.", "🎤 تعذر تفريغ الرسالة الصوتية."), { message_thread_id: threadId });
 
     const msgLang = detectMessageLanguage(transcription);
     opsDb.addMediaLog(chatId, threadId, topicInfo.name, voice.file_id, "voice", { caption: transcription.substring(0, 500), fromUser });
@@ -1423,7 +1424,7 @@ async function handleOpsVoice(ctx, openaiClient) {
     }
   } catch (error) {
     console.error("[Ops] Voice transcription error:", error.message);
-    await ctx.reply("🎤 Error processing voice message / خطأ في معالجة الصوت", { message_thread_id: threadId });
+    await ctx.reply(getBilingualText("🎤 Error processing voice message.", "🎤 خطأ في معالجة الرسالة الصوتية."), { message_thread_id: threadId });
   }
 }
 

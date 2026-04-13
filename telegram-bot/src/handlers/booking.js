@@ -435,7 +435,7 @@ function handleBookingTextInput(ctx) {
 
   const booking = ctx.session.booking;
   const lang = db.getUserLanguage(ctx.chat.id) || "ar";
-  const text = ctx.message.text.trim();
+  const text = (ctx.message?.text || "").trim();
 
   if (booking.step === "check_in") {
     return handleCheckInInput(ctx, text, lang);

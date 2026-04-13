@@ -296,7 +296,7 @@ function handleAlertTextInput(ctx) {
 
   const sub = ctx.session.alertSubscription;
   const lang = db.getUserLanguage(ctx.chat.id) || "ar";
-  const text = ctx.message.text.trim().toLowerCase();
+  const text = (ctx.message?.text || "").trim().toLowerCase();
 
   if (sub.step === "price") {
     return handlePriceInput(ctx, text, lang);

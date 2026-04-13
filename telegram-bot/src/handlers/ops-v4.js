@@ -122,7 +122,7 @@ async function handleOpsRoles(ctx) {
 
   } catch (e) {
     console.error("[handleOpsRoles] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, {
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), {
       message_thread_id: threadId || undefined,
     }).catch(() => {});
   }
@@ -254,7 +254,7 @@ async function handleOpsAudit(ctx) {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsAudit] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -292,7 +292,7 @@ async function handleOpsVerify(ctx) {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsVerify] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -307,7 +307,7 @@ async function handleOpsOnboarding(ctx) {
     const targetUsername = args.startsWith("@") ? args : (ctx.from.username ? `@${ctx.from.username}` : null);
 
     if (!targetUsername) {
-      return ctx.reply("❌ Please specify @user or send without args to view your own checklist.\n\nيرجى تحديد المستخدم أو أرسل بدون وسيطات لعرض قائمتك.", { message_thread_id: threadId || 4 });
+      return ctx.reply(getBilingualText("❌ Please specify @user or send without args to view your own checklist.", "❌ يرجى تحديد المستخدم أو أرسل بدون وسيطات لعرض قائمتك."), { message_thread_id: threadId || 4 });
     }
 
     const checklist = v4Db.getOnboardingProgress(chatId, targetUsername);
@@ -328,7 +328,7 @@ async function handleOpsOnboarding(ctx) {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsOnboarding] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -357,7 +357,7 @@ async function handleOpsTeam(ctx) {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsTeam] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -385,7 +385,7 @@ async function handleOpsPerformance(ctx) {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsPerformance] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -403,7 +403,7 @@ async function handleOpsLeave(ctx) {
     }
 
     const match = args.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})\s+(.+)$/);
-    if (!match) return ctx.reply("❌ Format: `/leave 2026-05-01 2026-05-05 Vacation`", { message_thread_id: threadId || 4 });
+    if (!match) return ctx.reply(getBilingualText("❌ Format: `/leave 2026-05-01 2026-05-05 Vacation`", "❌ الصيغة: `/leave 2026-05-01 2026-05-05 إجازة`"), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
 
     const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
     v4Db.setAway(chatId, ctx.from.id, username, username, match[3], match[2]);
@@ -414,7 +414,7 @@ async function handleOpsLeave(ctx) {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsLeave] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -553,7 +553,7 @@ async function handleOpsPin(ctx) {
     try { await ctx.telegram.pinChatMessage(chatId, msg.message_id, { disable_notification: true }); } catch (e) {}
   } catch (e) {
     console.error("[handleOpsPin] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -627,7 +627,7 @@ async function handleOpsAway(ctx) {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsAway] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -642,7 +642,7 @@ async function handleOpsBack(ctx) {
     await ctx.reply(getBilingualText(en, ar), { parse_mode: "Markdown", message_thread_id: threadId || 4 });
   } catch (e) {
     console.error("[handleOpsBack] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || 4 }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || 4 }).catch(() => {});
   }
 }
 
@@ -701,7 +701,7 @@ async function handleOpsAvailability(ctx) {
     await ctx.reply(msg, { message_thread_id: threadId || undefined });
   } catch (e) {
     console.error("[handleOpsAvailability] Error:", e.message);
-    await ctx.reply(`❌ Error: ${e.message}`, { message_thread_id: threadId || undefined }).catch(() => {});
+    await ctx.reply(getBilingualText(`❌ Error: ${e.message}`, `❌ خطأ: ${e.message}`), { message_thread_id: threadId || undefined }).catch(() => {});
   }
 }
 

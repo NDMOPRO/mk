@@ -86,7 +86,7 @@ async function handleAdminLoginInput(ctx) {
   if (!session) return false;
 
   const chatId = ctx.chat.id;
-  const text = ctx.message.text.trim();
+  const text = (ctx.message?.text || "").trim();
 
   if (session.step === "username") {
     ctx.session.adminLogin = { step: "password", username: text };
@@ -237,7 +237,7 @@ async function sendStatsMessage(ctx) {
 async function handleBroadcast(ctx) {
   if (!requireAdmin(ctx)) return;
 
-  const text = ctx.message.text.replace(/^\/broadcast\s*/, "").trim();
+  const text = (ctx.message?.text || "").replace(/^\/broadcast\s*/, "").trim();
 
   if (!text) {
     await ctx.reply(
