@@ -16,6 +16,8 @@ const log = require("../utils/logger");
 // ─── OpenAI Client ─────────────────────────────────────────────
 const openai = new OpenAI({
   baseUrl: process.env.OPENAI_BASE_URL || process.env.OPENAI_API_BASE || undefined,
+  timeout: 15000,
+  maxRetries: 2,
 });
 
 const MODEL = "gpt-4.1-nano";
@@ -35,12 +37,14 @@ function markTranslated(userId) {
 }
 
 // Clean up stale entries every 5 minutes
-setInterval(() => {
+const _rateLimitCleanup = setInterval(() => {
   const cutoff = Date.now() - RATE_LIMIT_MS * 2;
   for (const [uid, ts] of rateLimitMap) {
     if (ts < cutoff) rateLimitMap.delete(uid);
   }
 }, 5 * 60_000);
+// Allow Node to exit even if this interval is still running
+if (_rateLimitCleanup.unref) _rateLimitCleanup.unref();
 
 // ─── Language Detection ────────────────────────────────────────
 

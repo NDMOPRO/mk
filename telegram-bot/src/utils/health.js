@@ -15,7 +15,10 @@ let _webhookUrl = null;
 let _port = null;
 let _selfPingInterval = null;
 let _webhookCheckInterval = null;
+let _selfPingTimeout = null;
+let _webhookCheckTimeout = null;
 let _consecutiveFailures = 0;
+let _initialized = false;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
@@ -25,6 +28,12 @@ const MAX_CONSECUTIVE_FAILURES = 3;
  * @param {number} port - Express server port
  */
 function init(bot, webhookUrl, port) {
+  // Guard against double initialization (would stack duplicate timers)
+  if (_initialized) {
+    log.warn('Health', 'Health monitor already initialized — skipping duplicate init');
+    return;
+  }
+  _initialized = true;
   _bot = bot;
   _webhookUrl = webhookUrl;
   _port = port;
@@ -32,12 +41,12 @@ function init(bot, webhookUrl, port) {
   // Self-ping every 5 minutes
   _selfPingInterval = setInterval(selfPing, 5 * 60 * 1000);
   // First self-ping after 60 seconds (give server time to start)
-  setTimeout(selfPing, 60 * 1000);
+  _selfPingTimeout = setTimeout(selfPing, 60 * 1000);
 
   // Webhook verification every 10 minutes
   _webhookCheckInterval = setInterval(verifyWebhook, 10 * 60 * 1000);
   // First webhook check after 30 seconds
-  setTimeout(verifyWebhook, 30 * 1000);
+  _webhookCheckTimeout = setTimeout(verifyWebhook, 30 * 1000);
 
   log.info('Health', 'Health monitor initialized', {
     selfPingInterval: '5min',
@@ -57,6 +66,15 @@ function stop() {
     clearInterval(_webhookCheckInterval);
     _webhookCheckInterval = null;
   }
+  if (_selfPingTimeout) {
+    clearTimeout(_selfPingTimeout);
+    _selfPingTimeout = null;
+  }
+  if (_webhookCheckTimeout) {
+    clearTimeout(_webhookCheckTimeout);
+    _webhookCheckTimeout = null;
+  }
+  _initialized = false;
   log.info('Health', 'Health monitor stopped');
 }
 

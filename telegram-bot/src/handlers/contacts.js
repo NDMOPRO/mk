@@ -28,6 +28,19 @@ let contactsTopicThreadId = null;
 
 // In-memory session store for conversational flows (keyed by `chatId:userId`)
 const sessions = {};
+const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+// Clean up abandoned sessions every 5 minutes
+let _sessionCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const key of Object.keys(sessions)) {
+    if (sessions[key].lastActivity && now - sessions[key].lastActivity > SESSION_TTL_MS) {
+      delete sessions[key];
+    }
+  }
+}, 5 * 60 * 1000);
+// Allow Node to exit even if this interval is still running
+if (_sessionCleanupInterval.unref) _sessionCleanupInterval.unref();
 
 function sessionKey(ctx) {
   return `${ctx.chat.id}:${ctx.from.id}`;
@@ -133,7 +146,15 @@ async function getOrCreateContactsTopic(bot) {
  * Set the contacts topic thread ID externally (e.g., from env or config).
  */
 function setContactsTopicThread(threadId) {
-  if (threadId) contactsTopicThreadId = threadId;
+  if (threadId) {
+    contactsTopicThreadId = threadId;
+    // Also persist to DB so restarts without the env var still work
+    try {
+      opsDb.setBotState('contacts_topic_thread_id', threadId.toString());
+    } catch (e) {
+      log.error('Contacts', `Failed to persist topic thread ID to DB: ${e.message}`);
+    }
+  }
 }
 
 // ─── Google Sheets Sync ─────────────────────────────────────
@@ -232,6 +253,7 @@ async function handleAddContact(ctx) {
     step: STEPS.NAME,
     lang,
     data: {},
+    lastActivity: Date.now(),
   };
 
   const prompt = getPrompt(STEPS.NAME, lang);
@@ -274,6 +296,7 @@ async function handleEditContact(ctx) {
     step: STEPS.NAME,
     lang,
     contactId,
+    lastActivity: Date.now(),
     data: {
       name: contact.name,
       phone: contact.phone,
@@ -465,6 +488,9 @@ async function handleContactTextInput(ctx, bot) {
   }
 
   const replyOpts = { parse_mode: 'Markdown', ...(threadId ? { message_thread_id: threadId } : {}) };
+
+  // Refresh TTL on each interaction
+  session.lastActivity = Date.now();
 
   switch (session.step) {
     case STEPS.NAME: {

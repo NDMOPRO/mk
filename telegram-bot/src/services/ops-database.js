@@ -431,6 +431,31 @@ function initTables() {
       value TEXT NOT NULL
     )
   `);
+
+  // ─── Indexes for frequently queried columns ───────────────────
+  const indexes = [
+    'CREATE INDEX IF NOT EXISTS idx_tasks_chat_status ON tasks(chat_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_tasks_chat_thread ON tasks(chat_id, thread_id)',
+    'CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to)',
+    'CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)',
+    'CREATE INDEX IF NOT EXISTS idx_followups_sent ON followups(sent, follow_up_at)',
+    'CREATE INDEX IF NOT EXISTS idx_reminders_sent ON reminders(sent, remind_at)',
+    'CREATE INDEX IF NOT EXISTS idx_vendor_followups_status ON vendor_followups(status, deadline_at)',
+    'CREATE INDEX IF NOT EXISTS idx_media_log_chat_thread ON media_log(chat_id, thread_id)',
+    'CREATE INDEX IF NOT EXISTS idx_sla_alerts_task ON sla_alerts(task_id)',
+    'CREATE INDEX IF NOT EXISTS idx_approvals_chat_status ON approvals(chat_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_scheduled_meetings_status ON scheduled_meetings(status, meeting_datetime)',
+    'CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status, appointment_datetime)',
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON activity_log(timestamp)',
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_chat ON activity_log(chat_id, timestamp)',
+    'CREATE INDEX IF NOT EXISTS idx_task_evidence_task ON task_evidence(task_id)',
+    'CREATE INDEX IF NOT EXISTS idx_contacts_chat ON contacts(chat_id)',
+    'CREATE INDEX IF NOT EXISTS idx_contacts_type ON contacts(contact_type)',
+    'CREATE INDEX IF NOT EXISTS idx_daily_reports_dedup ON daily_reports(chat_id, report_date, report_type)',
+  ];
+  for (const sql of indexes) {
+    try { d.exec(sql); } catch (e) { /* index may already exist */ }
+  }
 }
 
 // ─── Migrations ─────────────────────────────────────────────

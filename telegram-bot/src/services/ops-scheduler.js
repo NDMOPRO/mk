@@ -1165,6 +1165,7 @@ async function checkDailyWeather() {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 let tickCount = 0;
+let tickRunning = false;
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ━━━ Meeting Reminders (30 min + 5 min before) ━━━━━━━━━━━━━━━
@@ -1375,6 +1376,11 @@ async function safeJob(name, fn) {
 }
 
 async function tick() {
+  if (tickRunning) {
+    log.warn('Scheduler', 'Tick skipped — previous tick still running');
+    return;
+  }
+  tickRunning = true;
   try {
     tickCount++;
 
@@ -1414,6 +1420,8 @@ async function tick() {
 
   } catch (error) {
     log.error('Scheduler', 'Tick-level error (outer catch)', { error: error.message });
+  } finally {
+    tickRunning = false;
   }
 }
 
