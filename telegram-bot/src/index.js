@@ -203,6 +203,19 @@ const whatsappService = require("./services/whatsapp");
 // Silent Activity Logger + Smart Photo-Task Matcher
 const activityLogger = require("./services/activity-logger");
 
+// Contact Management System
+const {
+  handleAddContact,
+  handleEditContact,
+  handleDeleteContact,
+  handleContacts,
+  handleContactSearch,
+  handleContactTextInput,
+  hasActiveSession: hasActiveContactSession,
+  setContactsTopicThread,
+  getOrCreateContactsTopic,
+} = require("./handlers/contacts");
+
 // ─── Ops Group ID ─────────────────────────────────────────────
 const OPS_GROUP_ID = -1003967447285;
 
@@ -392,6 +405,13 @@ bot.command("cancel_appointment", safeHandler('ops:cancel_appointment', (ctx) =>
 // Phase 6: WhatsApp Business API Integration
 bot.command("whatsapp",          safeHandler('ops:whatsapp',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleWhatsApp(ctx); }));
 
+// Contact Management System
+bot.command("addcontact",        safeHandler('ops:addcontact',        (ctx) => { if (!isOpsGroup(ctx)) return; return handleAddContact(ctx); }));
+bot.command("contacts",          safeHandler('ops:contacts',          (ctx) => { if (!isOpsGroup(ctx)) return; return handleContacts(ctx); }));
+bot.command("contact",           safeHandler('ops:contact',           (ctx) => { if (!isOpsGroup(ctx)) return; return handleContactSearch(ctx); }));
+bot.command("deletecontact",     safeHandler('ops:deletecontact',     (ctx) => { if (!isOpsGroup(ctx)) return; return handleDeleteContact(ctx); }));
+bot.command("editcontact",       safeHandler('ops:editcontact',       (ctx) => { if (!isOpsGroup(ctx)) return; return handleEditContact(ctx); }));
+
 // ─── Text Message Handler ─────────────────────────────────────
 
 /**
@@ -425,6 +445,16 @@ bot.on("text", safeHandler('on:text', async (ctx) => {
 
     // ── Silent activity logging (never replies) ────────────────
     try { activityLogger.logTextActivity(ctx); } catch (e) {}
+
+    // ── Contact Management: conversational flow routing ─────
+    if (hasActiveContactSession(ctx)) {
+      try {
+        const handled = await handleContactTextInput(ctx, bot);
+        if (handled) return;
+      } catch (e) {
+        log.error('Bot', 'Contact text input error', { error: e.message });
+      }
+    }
 
     // Admin topic guard: block non-admins from posting in the Admin Panel topic (thread 235)
     const msgThreadId = ctx.message?.message_thread_id;
@@ -717,6 +747,11 @@ async function setupBot() {
         { command: "ideas",         description: "Idea board" },
         { command: "brainstorm",    description: "Start brainstorm" },
         { command: "photos",        description: "Property photos" },
+        { command: "addcontact",    description: "Add contact | إضافة جهة اتصال" },
+        { command: "contacts",      description: "List contacts | جهات الاتصال" },
+        { command: "contact",       description: "Search contacts | بحث جهات اتصال" },
+        { command: "editcontact",   description: "Edit contact | تعديل جهة اتصال" },
+        { command: "deletecontact", description: "Delete contact | حذف جهة اتصال" },
       ], { scope: { type: "chat", chat_id: OPS_GROUP_ID } }
     );
 
@@ -954,6 +989,24 @@ async function startWebhook() {
     log.info('Boot', 'WhatsApp integration: DISABLED (set TWILIO_* env vars to enable)');
   }
 
+  // 5c. Initialize Contacts topic
+  try {
+    // Check env var first, then try to create
+    if (process.env.CONTACTS_TOPIC_THREAD_ID) {
+      setContactsTopicThread(parseInt(process.env.CONTACTS_TOPIC_THREAD_ID));
+      log.info('Boot', `Contacts topic: thread ${process.env.CONTACTS_TOPIC_THREAD_ID} (from env)`);
+    } else {
+      const threadId = await getOrCreateContactsTopic(bot);
+      if (threadId) {
+        log.info('Boot', `Contacts topic: thread ${threadId} (created/cached)`);
+      } else {
+        log.info('Boot', 'Contacts topic: will use General topic (fallback)');
+      }
+    }
+  } catch (e) {
+    log.error('Boot', 'Contacts topic init error', { error: e.message });
+  }
+
   // 6. Start health monitor (self-ping + webhook verification)
   healthMonitor.init(bot, WEBHOOK_URL, PORT);
 
@@ -969,6 +1022,7 @@ async function startWebhook() {
     'Health Monitor': true,
     'Channel Posting': true,
     'WhatsApp/Twilio': whatsappService.isConfigured(),
+    'Contacts System': true,
   });
 
   writeHeartbeat();

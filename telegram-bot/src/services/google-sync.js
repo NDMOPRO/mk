@@ -216,6 +216,27 @@ async function getCalendarId() {
   return postToWebhook({ action: "get_calendar_id" });
 }
 
+/**
+ * Sync a single contact to the "Contacts" tab in Google Sheets.
+ * @param {object} contact - Contact data
+ * @param {string} contactAction - 'add', 'update', or 'delete'
+ */
+async function syncContact(contact, contactAction) {
+  return postToWebhook({
+    action: 'sync_contact',
+    contact_action: contactAction,
+    contact,
+  });
+}
+
+/**
+ * Sync all contacts to Google Sheets.
+ * @param {Array} contacts - Array of contact objects
+ */
+async function syncContacts(contacts) {
+  return postToWebhook({ action: 'sync_contacts', contacts });
+}
+
 module.exports = {
   isConfigured,
   setup,
@@ -224,6 +245,8 @@ module.exports = {
   syncExpenses,
   syncOccupancy,
   syncAll,
+  syncContact,
+  syncContacts,
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,

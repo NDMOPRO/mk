@@ -405,6 +405,24 @@ function initTables() {
       FOREIGN KEY (task_id) REFERENCES tasks(id)
     )
   `);
+
+  // ─── Contacts ─────────────────────────────────────────────────
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS contacts (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id             INTEGER NOT NULL,
+      name                TEXT NOT NULL,
+      phone               TEXT NOT NULL,
+      email               TEXT,
+      contact_type        TEXT,
+      notes               TEXT,
+      added_by_username   TEXT,
+      added_by_name       TEXT,
+      topic_message_id    INTEGER,
+      created_at          TEXT DEFAULT (datetime('now')),
+      updated_at          TEXT DEFAULT (datetime('now'))
+    )
+  `);
 }
 
 // ─── Migrations ─────────────────────────────────────────────
@@ -1107,6 +1125,9 @@ module.exports = {
   logActivity, getActivitySince, getTodayActivity,
   // Task Evidence
   addTaskEvidence, getTaskEvidence, getTodayTaskEvidence,
+  // Contacts
+  addContact, getContactById, getAllContacts, searchContactsByName,
+  searchContactsByType, updateContact, deleteContact, updateContactMessageId,
 };
 
 function getAllTasksForSync(chatId) {
@@ -1406,4 +1427,82 @@ function setWhatsAppNotifications(chatId, enabled) {
   } else {
     d.prepare(`INSERT INTO whatsapp_config (chat_id, notifications_on) VALUES (?, ?)`).run(chatId, enabled ? 1 : 0);
   }
+}
+
+// ═════════════════════════════════════════════════════════════
+// ═══ Contacts ═══════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+
+function addContact(chatId, data) {
+  const d = getDb();
+  const result = d.prepare(`
+    INSERT INTO contacts (chat_id, name, phone, email, contact_type, notes, added_by_username, added_by_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    chatId,
+    data.name,
+    data.phone,
+    data.email || null,
+    data.contact_type || null,
+    data.notes || null,
+    data.added_by_username || null,
+    data.added_by_name || null
+  );
+  return result.lastInsertRowid;
+}
+
+function getContactById(contactId) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM contacts WHERE id = ?`).get(contactId);
+}
+
+function getAllContacts(chatId) {
+  const d = getDb();
+  return d.prepare(`SELECT * FROM contacts WHERE chat_id = ? ORDER BY name ASC`).all(chatId);
+}
+
+function searchContactsByName(chatId, query) {
+  const d = getDb();
+  const pattern = `%${query}%`;
+  return d.prepare(`
+    SELECT * FROM contacts
+    WHERE chat_id = ? AND (name LIKE ? COLLATE NOCASE)
+    ORDER BY name ASC
+  `).all(chatId, pattern);
+}
+
+function searchContactsByType(chatId, typeQuery) {
+  const d = getDb();
+  const pattern = `%${typeQuery}%`;
+  return d.prepare(`
+    SELECT * FROM contacts
+    WHERE chat_id = ? AND (contact_type LIKE ? COLLATE NOCASE)
+    ORDER BY name ASC
+  `).all(chatId, pattern);
+}
+
+function updateContact(contactId, data) {
+  const d = getDb();
+  const fields = [];
+  const values = [];
+  if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
+  if (data.phone !== undefined) { fields.push('phone = ?'); values.push(data.phone); }
+  if (data.email !== undefined) { fields.push('email = ?'); values.push(data.email); }
+  if (data.contact_type !== undefined) { fields.push('contact_type = ?'); values.push(data.contact_type); }
+  if (data.notes !== undefined) { fields.push('notes = ?'); values.push(data.notes); }
+  if (data.topic_message_id !== undefined) { fields.push('topic_message_id = ?'); values.push(data.topic_message_id); }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(contactId);
+  d.prepare(`UPDATE contacts SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+}
+
+function deleteContact(contactId) {
+  const d = getDb();
+  d.prepare(`DELETE FROM contacts WHERE id = ?`).run(contactId);
+}
+
+function updateContactMessageId(contactId, messageId) {
+  const d = getDb();
+  d.prepare(`UPDATE contacts SET topic_message_id = ? WHERE id = ?`).run(messageId, contactId);
 }
