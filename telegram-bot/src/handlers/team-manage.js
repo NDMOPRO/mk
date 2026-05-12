@@ -49,6 +49,36 @@ function roleEmoji(role, priority) {
  */
 const PRIORITY_ORDER = { top: 0, high: 1, normal: 2, low: 3 };
 
+function escapeRegExp(text) {
+  return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeMemberNameForDedupe(name, role) {
+  let normalized = String(name || "").toLowerCase();
+  normalized = normalized
+    .replace(/\b(mr|mrs|ms|dr)\.?\b/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ");
+
+  const roleText = String(role || "").toLowerCase().trim();
+  if (roleText) {
+    normalized = normalized.replace(new RegExp(`\\b${escapeRegExp(roleText)}\\b`, "g"), " ");
+  }
+
+  return normalized.replace(/\s+/g, " ").trim();
+}
+
+function sameRoleForDedupe(a, b) {
+  return String(a.role || "").toLowerCase().trim() === String(b.role || "").toLowerCase().trim();
+}
+
+function isDuplicateMemberForTeamDisplay(a, b) {
+  if (!sameRoleForDedupe(a, b)) return false;
+  const nameA = normalizeMemberNameForDedupe(a.name, a.role);
+  const nameB = normalizeMemberNameForDedupe(b.name, b.role);
+  if (!nameA || !nameB) return false;
+  return nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ═══ /team — Clean bilingual team directory ═══════════════════
 // ═══════════════════════════════════════════════════════════════
@@ -67,13 +97,11 @@ async function handleTeam(ctx) {
       });
     }
 
-    // Deduplicate by name+role (e.g., monthlykey + hobart2007 both = CEO)
-    const seen = new Set();
+    // Deduplicate by normalized name+role and light containment matching
+    // (e.g., "Sameh" and "Mr. Sameh CFO" with role "CFO").
     const unique = [];
     for (const m of members) {
-      const key = `${m.name}|${m.role}`;
-      if (!seen.has(key)) {
-        seen.add(key);
+      if (!unique.some((existing) => isDuplicateMemberForTeamDisplay(existing, m))) {
         unique.push(m);
       }
     }

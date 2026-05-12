@@ -15,6 +15,18 @@
 
 // ─── Hardcoded Core Team (always present) ──────────────────
 // Key: lowercase Telegram username (no @)
+const SAMEH_MEMBER = {
+  name: "Sameh",
+  nameAr: "سامح",
+  role: "CFO",
+  roleAr: "المدير المالي",
+  priority: "high",
+  isAdmin: false,
+  username: "abulfadls",
+  telegramFirstName: "Sameh",
+  whatsapp: "+966509463489",
+};
+
 const HARDCODED_MEMBERS = {
   // ─── CEO ──────────────────────────────────────────────────
   monthlykey: {
@@ -78,20 +90,11 @@ const HARDCODED_MEMBERS = {
     whatsapp: "+966531324929",
   },
 
-  // ─── CFO — no Telegram username, matched by first name ────
-  // Telegram first_name: "Sameh"
-  // Special key: __firstname__sameh (used for first-name lookup)
-  __firstname__sameh: {
-    name: "Sameh",
-    nameAr: "سامح",
-    role: "CFO",
-    roleAr: "المدير المالي",
-    priority: "high",
-    isAdmin: false,
-    noUsername: true, // flag: this member has no Telegram username
-    telegramFirstName: "Sameh",
-    whatsapp: "+966509463489",
-  },
+  // ─── CFO — primary username with first-name lookup alias ───
+  // Telegram username: @abulfadls; first_name fallback: "Sameh"
+  // The __firstname__sameh alias is kept for backward-compatible first-name lookup.
+  abulfadls: SAMEH_MEMBER,
+  __firstname__sameh: SAMEH_MEMBER,
 
   // ─── Public Relations Manager ─────────────────────────────
   khaled_841: {
@@ -261,7 +264,7 @@ function resolveByFirstName(firstName) {
   const cleanFirst = firstName.toLowerCase().trim();
 
   for (const [key, member] of Object.entries(TEAM_MEMBERS)) {
-    if (member.noUsername && member.telegramFirstName) {
+    if (member.telegramFirstName) {
       if (member.telegramFirstName.toLowerCase() === cleanFirst) {
         return { username: key, ...member };
       }
@@ -417,7 +420,8 @@ function getAllTeamMembers() {
   const seen = new Set();
   for (const [username, m] of Object.entries(TEAM_MEMBERS)) {
     if (username.startsWith("__firstname__")) {
-      // Include noUsername members (e.g., Sameh) with a special display key
+      // Include legacy first-name-only members, but skip aliases for members that now have a username.
+      if (m.username && TEAM_MEMBERS[m.username]) continue;
       const dedupeKey = `${m.name}|${m.role}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
