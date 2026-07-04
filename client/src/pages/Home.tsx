@@ -505,6 +505,7 @@ export default function Home() {
   const heroRef = useRef<HTMLDivElement>(null);
 
   const featured = trpc.property.featured.useQuery();
+  const publicStats = trpc.property.publicStats.useQuery();
   // Fetch ALL cities so we can show inactive ones as "coming soon" from DB
   const citiesQuery = trpc.cities.all.useQuery({ activeOnly: false });
   // Only show Riyadh as active, Jeddah/Madinah as coming soon
@@ -533,8 +534,12 @@ export default function Home() {
     setLocation(`/search?city=${encodeURIComponent(searchQuery)}`);
   };
 
+  // "Properties Available" is live from the DB (published listings). A CMS override
+  // (stats.properties) wins if set; the marketing fallback shows only when the live
+  // count is unavailable or zero, so the homepage never displays "0 properties".
+  const liveProperties = publicStats.data?.properties;
   const stats = [
-    { value: s("stats.properties", "100+"), labelAr: s("stats.propertiesLabelAr", "عقار متاح"), labelEn: s("stats.propertiesLabelEn", "Properties Available") },
+    { value: s("stats.properties", "") || (liveProperties && liveProperties > 0 ? `${liveProperties}+` : "100+"), labelAr: s("stats.propertiesLabelAr", "عقار متاح"), labelEn: s("stats.propertiesLabelEn", "Properties Available") },
     { value: s("stats.tenants", "200+"), labelAr: s("stats.tenantsLabelAr", "مستأجر سعيد"), labelEn: s("stats.tenantsLabelEn", "Happy Tenants") },
     { value: s("stats.cities", "8+"), labelAr: s("stats.citiesLabelAr", "مدينة"), labelEn: s("stats.citiesLabelEn", "Cities") },
     { value: s("stats.satisfaction", "98%"), labelAr: s("stats.satisfactionLabelAr", "رضا العملاء"), labelEn: s("stats.satisfactionLabelEn", "Satisfaction Rate") },

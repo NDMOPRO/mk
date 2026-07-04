@@ -1214,7 +1214,7 @@ function TenantHiddenTab({ lang, isAr }: { lang: string; isAr: boolean }) {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {hidden.data.map((p: any) => (
                 <div key={p.id} className="relative group">
-                  <PropertyCard property={p} lang={lang} />
+                  <PropertyCard property={p} />
                   <div className="absolute top-2 end-2 z-10">
                     <Button
                       size="sm"

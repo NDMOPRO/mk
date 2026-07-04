@@ -217,8 +217,8 @@ export default function PropertyDetail() {
 
   // Derive location data from the hook (hook is called above, before early returns)
   const locData = locationQuery.data;
-  const lat = locData?.showMap ? locData.lat : (prop.latitude ? Number(prop.latitude) : 24.7136);
-  const lng = locData?.showMap ? locData.lng : (prop.longitude ? Number(prop.longitude) : 46.6753);
+  const lat = locData?.showMap ? (locData.lat ?? 24.7136) : (prop.latitude ? Number(prop.latitude) : 24.7136);
+  const lng = locData?.showMap ? (locData.lng ?? 46.6753) : (prop.longitude ? Number(prop.longitude) : 46.6753);
   // Only show map when we have confirmed data from the server (don't flash map before query loads)
   const showMap = locData?.showMap === true;
   const isApproximate = locData?.visibility === "APPROXIMATE";

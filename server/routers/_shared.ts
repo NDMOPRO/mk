@@ -33,7 +33,7 @@ export { drizzle } from "drizzle-orm/mysql2";
 export { default as mysql } from "mysql2/promise";
 export { eq as eqDrizzle, and as andDrizzle, ne as neDrizzle } from "drizzle-orm";
 export { sanitizeText, sanitizeObject, validateContentType, validateFileExtension, MAX_BASE64_SIZE, MAX_AVATAR_BASE64_SIZE, ALLOWED_IMAGE_TYPES, ALLOWED_UPLOAD_TYPES, capLimit, capOffset, isOwnerOrAdmin, isBookingParticipant } from "../security";
-export { sendTemplateMessage, sendTextMessage, getWhatsAppConfig, formatPhoneForWhatsApp, maskPhone } from "../whatsapp-cloud";
+export { sendTemplateMessage, sendTextMessage, getWhatsAppConfig, formatPhoneForWhatsApp, maskPhone, getWhatsAppRawConfig, saveWhatsAppConfig, testWhatsAppConnection } from "../whatsapp-cloud";
 export { logAudit } from "../audit-log";
 export { sendTaqnyatWhatsAppText, formatPhoneForTaqnyat } from "../taqnyat";
 export { dbIdentity } from "../_core/env";

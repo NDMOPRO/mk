@@ -442,21 +442,16 @@ function InboxTab({ isRtl }: { isRtl: boolean }) {
 
 // ─── Settings Tab ───────────────────────────────────────────────────
 function SettingsTab({ isRtl }: { isRtl: boolean }) {
-  const configQuery = trpc.admin.whatsapp.isConfigured.useQuery();
-  const integrationQuery = trpc.admin.integration.list.useQuery();
-  const updateConfig = trpc.admin.integration.update.useMutation();
-  const testConnection = trpc.admin.integration.testConnection.useMutation();
+  const configQuery = trpc.whatsapp.isConfigured.useQuery();
+  const configDataQuery = trpc.whatsapp.getConfig.useQuery();
+  const updateConfig = trpc.whatsapp.updateConfig.useMutation();
+  const testConnection = trpc.whatsapp.testConnection.useMutation();
 
   const [showSecrets, setShowSecrets] = useState(false);
   const [testing, setTesting] = useState(false);
   const [formData, setFormData] = useState<Record<string, string>>({});
 
-  const whatsappConfig = useMemo(() => {
-    if (!integrationQuery.data) return null;
-    return (integrationQuery.data as any[]).find((i: any) => i.key === "whatsapp");
-  }, [integrationQuery.data]);
-
-  const config = whatsappConfig?.config || {};
+  const config = (configDataQuery.data?.config as Record<string, string>) || {};
   const getValue = (key: string) => formData[key] ?? (config as any)[key] ?? "";
   const maskValue = (val: string) => {
     if (!val || val.length < 8) return "••••••••";
@@ -464,11 +459,12 @@ function SettingsTab({ isRtl }: { isRtl: boolean }) {
   };
 
   const handleSave = async () => {
-    if (!whatsappConfig) return;
+    if (Object.keys(formData).length === 0) return;
     try {
-      await updateConfig.mutateAsync({ key: "whatsapp", config: { ...(config as any), ...formData } });
+      await updateConfig.mutateAsync({ config: formData });
       toast.success(isRtl ? "تم حفظ إعدادات واتساب بنجاح" : "WhatsApp settings saved");
-      integrationQuery.refetch();
+      setFormData({});
+      configDataQuery.refetch();
       configQuery.refetch();
     } catch (e: any) {
       toast.error(e.message);
@@ -478,7 +474,7 @@ function SettingsTab({ isRtl }: { isRtl: boolean }) {
   const handleTest = async () => {
     setTesting(true);
     try {
-      const result = await testConnection.mutateAsync({ key: "whatsapp" });
+      const result = await testConnection.mutateAsync();
       if (result.success) {
         toast.success(isRtl ? "تم الاتصال بواتساب Cloud API بنجاح" : "Connected to WhatsApp Cloud API");
       } else {
@@ -629,9 +625,9 @@ function SendTab({ isRtl }: { isRtl: boolean }) {
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [userSearch, setUserSearch] = useState("");
 
-  const sendMutation = trpc.admin.whatsapp.send.useMutation();
-  const configQuery = trpc.admin.whatsapp.isConfigured.useQuery();
-  const templatesQuery = trpc.admin.whatsapp.templates.useQuery();
+  const sendMutation = trpc.whatsapp.send.useMutation();
+  const configQuery = trpc.whatsapp.isConfigured.useQuery();
+  const templatesQuery = trpc.whatsapp.templates.useQuery();
   const usersQuery = trpc.admin.users.useQuery({ limit: 50, search: userSearch }, { enabled: showUserPicker });
 
   const handleSelectUser = (u: any) => {
@@ -799,10 +795,10 @@ function SendTab({ isRtl }: { isRtl: boolean }) {
 
 // ─── Templates Tab ──────────────────────────────────────────────────
 function TemplatesTab({ isRtl }: { isRtl: boolean }) {
-  const templatesQuery = trpc.admin.whatsapp.templates.useQuery();
-  const createTemplate = trpc.admin.whatsapp.createTemplate.useMutation();
-  const updateTemplate = trpc.admin.whatsapp.updateTemplate.useMutation();
-  const deleteTemplate = trpc.admin.whatsapp.deleteTemplate.useMutation();
+  const templatesQuery = trpc.whatsapp.templates.useQuery();
+  const createTemplate = trpc.whatsapp.createTemplate.useMutation();
+  const updateTemplate = trpc.whatsapp.updateTemplate.useMutation();
+  const deleteTemplate = trpc.whatsapp.deleteTemplate.useMutation();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newTemplate, setNewTemplate] = useState({
@@ -993,12 +989,12 @@ function TemplatesTab({ isRtl }: { isRtl: boolean }) {
 // ─── Logs Tab ───────────────────────────────────────────────────────
 function LogsTab({ isRtl }: { isRtl: boolean }) {
   const [filters, setFilters] = useState({ messageType: "", status: "" });
-  const logsQuery = trpc.admin.whatsapp.list.useQuery({
+  const logsQuery = trpc.whatsapp.list.useQuery({
     limit: 50, offset: 0,
     messageType: filters.messageType || undefined,
     status: filters.status || undefined,
   });
-  const statsQuery = trpc.admin.whatsapp.stats.useQuery();
+  const statsQuery = trpc.whatsapp.stats.useQuery();
 
   const logs = (() => {
     const d = logsQuery.data;
@@ -1125,8 +1121,8 @@ export function SendWhatsAppDialog({ trigger, defaultPhone, defaultName, default
   const [channel, setChannel] = useState<"click_to_chat" | "cloud_api">("click_to_chat");
   const [messageType, setMessageType] = useState("custom");
 
-  const sendMutation = trpc.admin.whatsapp.send.useMutation();
-  const configQuery = trpc.admin.whatsapp.isConfigured.useQuery();
+  const sendMutation = trpc.whatsapp.send.useMutation();
+  const configQuery = trpc.whatsapp.isConfigured.useQuery();
 
   const handleSend = async () => {
     if (!phone || !message) {

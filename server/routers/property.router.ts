@@ -180,6 +180,15 @@ export const propertyRouterDefs = {
         return cacheThrough(CACHE_KEYS.searchResults(hash), CACHE_TTL.SEARCH_RESULTS, () => db.searchProperties(input));
       }),
 
+    // Public homepage stats — live count of publicly-listed (published) properties. Cached.
+    publicStats: publicProcedure
+      .query(async () => {
+        return cacheThrough('property:publicStats', CACHE_TTL.HOMEPAGE_DATA, async () => {
+          const properties = await db.getPropertyCount("published");
+          return { properties };
+        });
+      }),
+
     featured: publicProcedure
       .query(async () => {
         return cacheThrough('property:featured', CACHE_TTL.HOMEPAGE_DATA, async () => {
