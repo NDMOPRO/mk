@@ -138,20 +138,20 @@ export default function AdminPayments() {
             variant="outline"
             size="sm"
             className="gap-2 border-primary/30 hover:bg-primary/10 text-primary"
-            disabled={!data?.entries?.length}
+            disabled={!data?.items?.length}
             onClick={() => {
-              if (!data?.entries?.length) return;
-              const totalAmount = data.entries.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
-              const paidAmount = data.entries.filter((e: any) => e.status === "PAID").reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+              if (!data?.items?.length) return;
+              const totalAmount = data.items.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+              const paidAmount = data.items.filter((e: any) => e.status === "PAID").reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
               exportToExcel({
-                data: data.entries,
+                data: data.items,
                 columns: PAYMENT_COLUMNS,
                 sheetName: lang === "ar" ? "المدفوعات" : "Payments",
                 fileName: lang === "ar" ? "تقرير_المدفوعات" : "Payments_Report",
                 lang,
                 title: lang === "ar" ? "تقرير المدفوعات - المفتاح الشهري" : "Payments Report - Monthly Key",
                 summaryRows: [
-                  { label: lang === "ar" ? "إجمالي السجلات" : "Total Entries", value: data.entries.length },
+                  { label: lang === "ar" ? "إجمالي السجلات" : "Total Entries", value: data.items.length },
                   { label: lang === "ar" ? "إجمالي المبالغ (ر.س)" : "Total Amount (SAR)", value: totalAmount.toLocaleString() },
                   { label: lang === "ar" ? "المبالغ المدفوعة (ر.س)" : "Paid Amount (SAR)", value: paidAmount.toLocaleString() },
                 ],

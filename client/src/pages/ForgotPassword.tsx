@@ -101,8 +101,8 @@ export default function ForgotPassword() {
       setError(lang === "ar" ? "كلمتا المرور غير متطابقتين" : "Passwords do not match");
       return;
     }
-    if (newPassword.length < 12) {
-      setError(lang === "ar" ? "كلمة المرور يجب أن تكون 12 حرفاً على الأقل" : "Password must be at least 12 characters");
+    if (newPassword.length < 8) {
+      setError(lang === "ar" ? "كلمة المرور يجب أن تكون 8 أحرف على الأقل" : "Password must be at least 8 characters");
       return;
     }
     setLoading(true);

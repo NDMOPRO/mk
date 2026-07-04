@@ -401,8 +401,8 @@ export const notificationRouterDefs = {
       .mutation(async ({ ctx, input }) => {
         // Rate limit: 5 contact messages per IP per hour
         const ip = getClientIP(ctx.req);
-        const allowed = await rateLimiter(ip, 'contact_submit', 5, 3600);
-        if (!allowed) {
+        const rl = await rateLimiter.check(`contact:${ip}`, 5, 3600_000);
+        if (!rl.allowed) {
           throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'Too many contact messages. Please try again later.' });
         }
         // Sanitize input

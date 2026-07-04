@@ -284,7 +284,7 @@ export const integrationRouter = router({
       const { getAllIntegrationSettings } = await import('./integration-settings');
       return getAllIntegrationSettings();
     }),
-    update: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS).input(z.object({ integrationKey: z.string(), config: z.record(z.string()), isEnabled: z.boolean() })).mutation(async ({ ctx, input }) => {
+    update: adminWithPermission(PERMISSIONS.MANAGE_SETTINGS).input(z.object({ integrationKey: z.string(), config: z.record(z.string(), z.string()), isEnabled: z.boolean() })).mutation(async ({ ctx, input }) => {
       const writeEnabled = process.env.ENABLE_INTEGRATION_PANEL_WRITE === 'true';
       if (!writeEnabled) return { success: false, error: 'Integration panel write is disabled. Set ENABLE_INTEGRATION_PANEL_WRITE=true to enable.' };
       const { updateIntegrationCredential } = await import('./integration-settings');

@@ -1255,7 +1255,7 @@ export const adminRouterDefs = {
             entityType: 'system',
             entityId: 0,
             userId: ctx.user!.id,
-            userName: auditUserName(ctx),
+            userName: ctx.user?.displayName ?? 'admin',
             changes: { categories: input.categories, results },
           });
         } catch {}
