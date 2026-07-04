@@ -443,20 +443,15 @@ function InboxTab({ isRtl }: { isRtl: boolean }) {
 // ─── Settings Tab ───────────────────────────────────────────────────
 function SettingsTab({ isRtl }: { isRtl: boolean }) {
   const configQuery = trpc.whatsapp.isConfigured.useQuery();
-  const integrationQuery = trpc.admin.integration.list.useQuery();
-  const updateConfig = trpc.admin.integration.update.useMutation();
-  const testConnection = trpc.admin.integration.testConnection.useMutation();
+  const configDataQuery = trpc.whatsapp.getConfig.useQuery();
+  const updateConfig = trpc.whatsapp.updateConfig.useMutation();
+  const testConnection = trpc.whatsapp.testConnection.useMutation();
 
   const [showSecrets, setShowSecrets] = useState(false);
   const [testing, setTesting] = useState(false);
   const [formData, setFormData] = useState<Record<string, string>>({});
 
-  const whatsappConfig = useMemo(() => {
-    if (!integrationQuery.data) return null;
-    return (integrationQuery.data as any[]).find((i: any) => i.key === "whatsapp");
-  }, [integrationQuery.data]);
-
-  const config = whatsappConfig?.config || {};
+  const config = (configDataQuery.data?.config as Record<string, string>) || {};
   const getValue = (key: string) => formData[key] ?? (config as any)[key] ?? "";
   const maskValue = (val: string) => {
     if (!val || val.length < 8) return "••••••••";
@@ -464,11 +459,12 @@ function SettingsTab({ isRtl }: { isRtl: boolean }) {
   };
 
   const handleSave = async () => {
-    if (!whatsappConfig) return;
+    if (Object.keys(formData).length === 0) return;
     try {
-      await updateConfig.mutateAsync({ key: "whatsapp", config: { ...(config as any), ...formData } });
+      await updateConfig.mutateAsync({ config: formData });
       toast.success(isRtl ? "تم حفظ إعدادات واتساب بنجاح" : "WhatsApp settings saved");
-      integrationQuery.refetch();
+      setFormData({});
+      configDataQuery.refetch();
       configQuery.refetch();
     } catch (e: any) {
       toast.error(e.message);
@@ -478,7 +474,7 @@ function SettingsTab({ isRtl }: { isRtl: boolean }) {
   const handleTest = async () => {
     setTesting(true);
     try {
-      const result = await testConnection.mutateAsync({ key: "whatsapp" });
+      const result = await testConnection.mutateAsync();
       if (result.success) {
         toast.success(isRtl ? "تم الاتصال بواتساب Cloud API بنجاح" : "Connected to WhatsApp Cloud API");
       } else {

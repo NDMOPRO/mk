@@ -50,6 +50,69 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
   }
 }
 
+/**
+ * Read the raw stored WhatsApp config from the canonical integration_configs store
+ * (the same source getWhatsAppConfig / the sender use). For the admin Settings tab.
+ * Callers must mask secrets before returning to any client.
+ */
+export async function getWhatsAppRawConfig(): Promise<Record<string, string>> {
+  try {
+    const [row] = await db.select().from(integrationConfigs)
+      .where(eq(integrationConfigs.integrationKey, "whatsapp"));
+    if (!row?.configJson) return {};
+    const parsed = JSON.parse(row.configJson);
+    return (parsed && typeof parsed === "object") ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Merge a partial WhatsApp config into the canonical integration_configs store.
+ * Only the provided keys change; existing values (e.g. an untouched access token)
+ * are preserved, so masked/omitted secret fields never wipe saved credentials.
+ */
+export async function saveWhatsAppConfig(partial: Record<string, string>): Promise<void> {
+  const [row] = await db.select().from(integrationConfigs)
+    .where(eq(integrationConfigs.integrationKey, "whatsapp"));
+  const existing: Record<string, string> = row?.configJson ? (JSON.parse(row.configJson) || {}) : {};
+  const configJson = JSON.stringify({ ...existing, ...partial });
+  if (row) {
+    await db.update(integrationConfigs)
+      .set({ configJson, isEnabled: true, status: "configured" })
+      .where(eq(integrationConfigs.integrationKey, "whatsapp"));
+  } else {
+    await db.insert(integrationConfigs).values({
+      integrationKey: "whatsapp",
+      displayName: "WhatsApp Cloud API",
+      isEnabled: true,
+      status: "configured",
+      configJson,
+    });
+  }
+}
+
+/**
+ * Test the WhatsApp Cloud API connection by querying the phone-number node on the
+ * Meta Graph API — validates the access token + phone number ID without sending a message.
+ */
+export async function testWhatsAppConnection(): Promise<{ success: boolean; error?: string }> {
+  const config = await getWhatsAppConfig();
+  if (!config) {
+    return { success: false, error: "WhatsApp Cloud API is not configured (Phone Number ID and Access Token are required)." };
+  }
+  try {
+    const resp = await fetch(
+      `https://graph.facebook.com/${config.apiVersion}/${config.phoneNumberId}?fields=verified_name,display_phone_number&access_token=${encodeURIComponent(config.accessToken)}`
+    );
+    const body: any = await resp.json().catch(() => ({}));
+    if (resp.ok && !body?.error) return { success: true };
+    return { success: false, error: body?.error?.message || `Graph API returned HTTP ${resp.status}` };
+  } catch (e: any) {
+    return { success: false, error: e?.message || "Connection to WhatsApp Cloud API failed." };
+  }
+}
+
 // ─── Phone Number Formatting ────────────────────────────────────────
 
 export function formatPhoneForWhatsApp(phone: string, defaultCountryCode: string = "+966"): string {

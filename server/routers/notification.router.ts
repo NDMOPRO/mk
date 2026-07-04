@@ -19,6 +19,7 @@ import {
   savePushSubscription, removePushSubscription, sendPushToUser, sendPushBroadcast,
   isPushConfigured, getUserSubscriptionCount,
   sendTemplateMessage, sendTextMessage, getWhatsAppConfig, formatPhoneForWhatsApp, maskPhone,
+  getWhatsAppRawConfig, saveWhatsAppConfig, testWhatsAppConnection,
   getAiResponse, seedDefaultKnowledgeBase,
   getKBSections, getAdminKBForCopilot,
   generateLeaseContractHTML,
@@ -386,6 +387,48 @@ export const notificationRouterDefs = {
         cloudApiEnabled: !!config?.accessToken,
         senderName: config?.senderName || null,
       };
+    }),
+
+    // ─── Cloud API Settings tab (config CRUD + connection test) ───
+    // Secret fields are never returned to the client; only whether they are set.
+    getConfig: adminWithPermission(PERMISSIONS.MANAGE_WHATSAPP).query(async () => {
+      const raw = await getWhatsAppRawConfig();
+      const SECRET_FIELDS = ["accessToken", "webhookVerifyToken", "appSecret"];
+      const config: Record<string, string> = {};
+      const isSet: Record<string, boolean> = {};
+      for (const field of ["phoneNumberId", "businessAccountId", "accessToken", "webhookVerifyToken"]) {
+        const val = raw[field] || "";
+        isSet[field] = !!val;
+        config[field] = SECRET_FIELDS.includes(field) ? "" : val; // never leak secrets
+      }
+      return { config, isSet };
+    }),
+
+    updateConfig: adminWithPermission(PERMISSIONS.MANAGE_WHATSAPP)
+      .input(z.object({ config: z.record(z.string(), z.string()) }))
+      .mutation(async ({ ctx, input }) => {
+        // Drop empty fields so an untouched (masked) secret never wipes a saved value
+        const clean: Record<string, string> = {};
+        for (const [k, v] of Object.entries(input.config)) {
+          if (typeof v === "string" && v.trim() !== "") clean[k] = v.trim();
+        }
+        await saveWhatsAppConfig(clean);
+        try {
+          await logAudit({
+            userId: ctx.user?.id,
+            userName: ctx.user?.displayName || ctx.user?.email || "admin",
+            action: "UPDATE",
+            entityType: "INTEGRATION",
+            entityId: 0,
+            entityLabel: "whatsapp",
+            metadata: { fields: Object.keys(clean) },
+          });
+        } catch {}
+        return { success: true };
+      }),
+
+    testConnection: adminWithPermission(PERMISSIONS.MANAGE_WHATSAPP).mutation(async () => {
+      return testWhatsAppConnection();
     }),
   }),
 
