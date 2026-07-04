@@ -108,7 +108,7 @@ export const authRouterDefs = {
         logAudit({
           userId: ctx.user.id,
           action: 'role_switch',
-          entityType: 'user',
+          entityType: 'USER',
           entityId: ctx.user.id,
           details: { from: ctx.user.role, to: input.role },
         });

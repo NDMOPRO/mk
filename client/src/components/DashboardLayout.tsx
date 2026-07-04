@@ -28,7 +28,7 @@ import {
   AlertTriangle, BarChart3, Settings, MapPin, KeyRound,
   BookOpen, UserCog, Shield, MessageCircle, Database,
   Building2, Inbox, Plug, CalendarCheck, CreditCard, Hotel,
-  Sun, Moon, Languages, FileText, Newspaper, Fingerprint, ToggleLeft, Landmark, Bot, Workflow,
+  Sun, Moon, Languages, FileText, Newspaper, Fingerprint, ToggleLeft, Landmark, Bot, Workflow, Star,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -85,6 +85,7 @@ const menuSections: MenuSection[] = [
     titleKey: "adminMenu.sectionAnalytics",
     items: [
       { icon: BarChart3, labelKey: "adminMenu.analytics", path: "/admin/analytics" },
+      { icon: Star, labelKey: "adminMenu.aiRatings", path: "/admin/ai-ratings" },
     ],
   },
   {

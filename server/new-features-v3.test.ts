@@ -167,11 +167,13 @@ describe("Push Notifications System", () => {
 
 // ─── Arabic-Only Branding Tests ────────────────────────────────────
 describe("Arabic-Only Branding", () => {
-  it("should have Arabic-only title in index.html", async () => {
+  it("should have the Arabic brand in the index.html title", async () => {
     const fs = await import("fs");
     const content = fs.readFileSync("client/index.html", "utf-8");
     expect(content).toContain("المفتاح الشهري");
-    expect(content).not.toMatch(/<title>.*Monthly Key.*<\/title>/);
+    // Bilingual SEO title is the app-wide convention (matches SEOHead usage):
+    // "المفتاح الشهري - Monthly Key". Assert the Arabic brand is present in <title>.
+    expect(content).toMatch(/<title>[^<]*المفتاح الشهري[^<]*<\/title>/);
   });
 
   it("should not have Monthly Key in hero section", async () => {

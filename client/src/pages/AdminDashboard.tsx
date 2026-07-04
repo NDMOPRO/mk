@@ -99,6 +99,7 @@ export default function AdminDashboard() {
   const [approveNotes, setApproveNotes] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; bookingId: number | null }>({ open: false, bookingId: null });
   const [paymentMethod, setPaymentMethod] = useState<string>("cash");
+  const [overrideReason, setOverrideReason] = useState<string>("");
   // User management state
   const [userSearch, setUserSearch] = useState("");
   const [userSearchDebounced, setUserSearchDebounced] = useState("");
@@ -181,6 +182,7 @@ export default function AdminDashboard() {
       utils.admin.stats.invalidate();
       setConfirmDialog({ open: false, bookingId: null });
       setPaymentMethod("cash");
+      setOverrideReason("");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -498,9 +500,9 @@ export default function AdminDashboard() {
           <TabsContent value="properties">
             {properties.isLoading ? (
               <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-20 w-full" />)}</div>
-            ) : properties.data && properties.data.length > 0 ? (
+            ) : properties.data && properties.data.items.length > 0 ? (
               <div className="space-y-3">
-                {properties.data.map((p: any) => (
+                {properties.data.items.map((p: any) => (
                   <Card key={p.id}>
                     <CardContent className="p-4 flex items-center justify-between">
                       <div className="flex-1">
@@ -736,7 +738,7 @@ export default function AdminDashboard() {
       </Dialog>
 
       {/* Confirm Payment Dialog */}
-      <Dialog open={confirmDialog.open} onOpenChange={(open) => { setConfirmDialog({ open, bookingId: open ? confirmDialog.bookingId : null }); if (!open) setPaymentMethod("cash"); }}>
+      <Dialog open={confirmDialog.open} onOpenChange={(open) => { setConfirmDialog({ open, bookingId: open ? confirmDialog.bookingId : null }); if (!open) { setPaymentMethod("cash"); setOverrideReason(""); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{lang === "ar" ? "تأكيد استلام الدفع" : "Confirm Payment Received"}</DialogTitle>
@@ -760,6 +762,15 @@ export default function AdminDashboard() {
                 <SelectItem value="paypal">{lang === "ar" ? "PayPal" : "PayPal"}</SelectItem>
               </SelectContent>
             </Select>
+            <label className="text-sm font-medium">
+              {lang === "ar" ? "سبب التأكيد اليدوي (للتدقيق)" : "Override reason (for audit)"}
+            </label>
+            <Textarea
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              placeholder={lang === "ar" ? "اذكر سبب تأكيد الدفع يدوياً (10 أحرف على الأقل)..." : "Explain why you are confirming this payment manually (min 10 characters)..."}
+              rows={2}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDialog({ open: false, bookingId: null })}>
@@ -772,10 +783,11 @@ export default function AdminDashboard() {
                   confirmPayment.mutate({
                     bookingId: confirmDialog.bookingId,
                     paymentMethod: paymentMethod as "paypal" | "cash" | "bank_transfer",
+                    reason: overrideReason.trim(),
                   });
                 }
               }}
-              disabled={confirmPayment.isPending}
+              disabled={confirmPayment.isPending || overrideReason.trim().length < 10}
             >
               {confirmPayment.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               <CreditCard className="h-4 w-4" />

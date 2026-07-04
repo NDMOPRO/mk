@@ -11,6 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { adminProcedure, adminWithPermission, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { PERMISSIONS } from "./permissions";
 import * as finance from "./finance-registry";
+import * as db from "./db";
 import * as occupancy from "./occupancy";
 import * as renewal from "./renewal";
 import { isBreakglassAdmin } from "./breakglass";
@@ -404,7 +405,7 @@ export const financeRouter = router({
       .input(z.object({ bookingId: z.number() }))
       .query(async ({ ctx, input }) => {
         // Verify the user is a participant in this booking (tenant/landlord) or admin
-        const booking = await finance.getLedgerEntryByBookingId(input.bookingId);
+        const booking = await db.getBookingById(input.bookingId);
         if (booking && !isBookingParticipant(ctx.user!, { tenantId: (booking as any).tenantId || 0, landlordId: (booking as any).landlordId || 0 }) && ctx.user!.role !== 'admin') {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'You are not authorized to check this booking\'s renewal eligibility' });
         }

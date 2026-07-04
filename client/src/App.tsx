@@ -129,6 +129,7 @@ function Router() {
         <Route path="/admin/kyc" component={AdminKYC} />
         <Route path="/admin/feature-flags" component={AdminFeatureFlags} />
         <Route path="/admin/audit-log" component={AdminAuditLog} />
+        <Route path="/admin/ai-ratings" component={AdminAIRatings} />
         <Route path="/admin/cms" component={AdminCMS} />
         {/* Admin dashboard catch-all (must be LAST among /admin routes) */}
         <Route path="/admin" component={AdminDashboard} />

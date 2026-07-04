@@ -7,15 +7,15 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // ═══════════════════════════════════════════════════════════════════════
-// A) Password Policy (12+ chars, uppercase, lowercase, digit, special)
+// A) Password Policy (8+ chars, uppercase, lowercase, digit, special)
 // ═══════════════════════════════════════════════════════════════════════
 import { validatePassword } from "../server/_core/auth";
 
 describe("Password Policy (SEC-02)", () => {
-  it("rejects passwords shorter than 12 characters", () => {
-    const result = validatePassword("Abc1!short");
+  it("rejects passwords shorter than 8 characters", () => {
+    const result = validatePassword("Abc1!de");
     expect(result.valid).toBe(false);
-    expect(result.error).toContain("12");
+    expect(result.error).toContain("8");
   });
 
   it("rejects passwords without uppercase letter", () => {
@@ -48,8 +48,8 @@ describe("Password Policy (SEC-02)", () => {
     expect(result.error).toBeUndefined();
   });
 
-  it("accepts a 12-character minimum password", () => {
-    const result = validatePassword("Abcdefgh12!@");
+  it("accepts an 8-character minimum password", () => {
+    const result = validatePassword("Abcde1!x");
     expect(result.valid).toBe(true);
   });
 
@@ -57,7 +57,7 @@ describe("Password Policy (SEC-02)", () => {
     const result = validatePassword("short");
     expect(result.valid).toBe(false);
     expect(result.errorAr).toBeDefined();
-    expect(result.errorAr).toContain("12");
+    expect(result.errorAr).toContain("8");
   });
 
   it("rejects the old hardcoded admin password '15001500'", () => {

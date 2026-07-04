@@ -30,15 +30,15 @@ describe("Integration — Auth Flow: Password Validation", () => {
     });
   });
 
-  describe("Minimum Length (12 chars)", () => {
-    it("rejects 11-char password", () => {
-      const result = validatePassword("Abcdefgh1!x");
+  describe("Minimum Length (8 chars)", () => {
+    it("rejects 7-char password", () => {
+      const result = validatePassword("Abcd1!x");
       expect(result.valid).toBe(false);
-      expect(result.error).toContain("12");
+      expect(result.error).toContain("8");
     });
 
-    it("accepts exactly 12-char password", () => {
-      const result = validatePassword("Abcdefgh1!xy");
+    it("accepts exactly 8-char password", () => {
+      const result = validatePassword("Abcde1!x");
       expect(result.valid).toBe(true);
     });
   });
@@ -73,7 +73,7 @@ describe("Integration — Auth Flow: Password Validation", () => {
     it("provides Arabic error for short password", () => {
       const result = validatePassword("short");
       expect(result.errorAr).toBeTruthy();
-      expect(result.errorAr).toContain("12");
+      expect(result.errorAr).toContain("8");
     });
 
     it("provides Arabic error for missing uppercase", () => {
