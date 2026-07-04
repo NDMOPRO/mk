@@ -21,7 +21,7 @@ import { generateHomepageOG, generatePropertyOG, invalidateCache as invalidateOG
 import { getDb } from "../db";
 import { properties, integrationConfigs } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
-import { reloadS3Client, getStorageMode } from "../storage";
+import { reloadS3Client, getStorageMode, extractStorageKey, storageGetObject } from "../storage";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -574,6 +574,20 @@ async function startServer() {
       const blockedPatterns = [/^127\./, /^10\./, /^172\.(1[6-9]|2[0-9]|3[01])\./, /^192\.168\./, /^169\.254\./, /^0\./, /^localhost$/i, /^\[::1\]$/];
       if (blockedPatterns.some(p => p.test(parsedUrl.hostname))) {
         return res.status(403).json({ error: "Blocked address" });
+      }
+      // If this is our own R2/S3 object, serve it via authenticated GetObject. The public
+      // r2.dev URL returns 403 when the bucket's public access is off/throttled; fetching
+      // with our S3 credentials bypasses that so photos keep loading. Falls through to a
+      // plain fetch if it isn't ours or the authenticated read fails (e.g. public access on).
+      const storageKey = extractStorageKey(url);
+      if (storageKey) {
+        const obj = await storageGetObject(storageKey);
+        if (obj) {
+          res.setHeader("Content-Type", obj.contentType.startsWith("image/") ? obj.contentType : "image/jpeg");
+          res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+          res.send(obj.body);
+          return;
+        }
       }
       const response = await fetch(url);
       if (!response.ok) {
