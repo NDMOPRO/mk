@@ -19,8 +19,12 @@ export function normalizeImageUrl(url: string | null | undefined): string {
   }
   // Already a relative path (e.g. /assets/...) — pass through
   if (url.startsWith("/")) return url;
-  // R2 public URL — pass through (already publicly accessible)
-  if (url.includes(".r2.dev/")) return url;
+  // R2 URL — route through our authenticated image proxy. The public r2.dev URL can
+  // return 403 when the bucket's public access is disabled/throttled; the proxy fetches
+  // the object with our S3 credentials so images load regardless of public-access state.
+  if (url.includes(".r2.dev/")) {
+    return `/api/img-proxy?url=${encodeURIComponent(url)}`;
+  }
   // CloudFront URL — pass through (already publicly accessible)
   if (url.includes(".cloudfront.net/")) return url;
   // External URL (Unsplash, etc.) → proxy through our server to avoid hotlink blocking

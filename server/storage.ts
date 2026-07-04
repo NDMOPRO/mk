@@ -384,3 +384,54 @@ export function generateUniqueKey(prefix: string, extension: string): string {
   const random = crypto.randomBytes(8).toString("hex");
   return `${prefix}/${timestamp}-${random}.${extension.replace(/^\./, "")}`;
 }
+
+/**
+ * If `url` points to our configured object storage (the S3_PUBLIC_BASE_URL host or any
+ * *.r2.dev public dev URL), return the object key; otherwise null (e.g. Unsplash URLs).
+ * Keys are returned decoded and may legitimately contain spaces.
+ */
+export function extractStorageKey(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const base = (process.env.S3_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+    if (base) {
+      const b = new URL(base);
+      if (u.hostname === b.hostname) {
+        let key = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
+        const basePath = b.pathname.replace(/^\/+|\/+$/g, "");
+        if (basePath && key.startsWith(basePath + "/")) key = key.slice(basePath.length + 1);
+        return key || null;
+      }
+    }
+    if (u.hostname.endsWith(".r2.dev")) {
+      return decodeURIComponent(u.pathname.replace(/^\/+/, "")) || null;
+    }
+  } catch {
+    /* not a valid URL */
+  }
+  return null;
+}
+
+/**
+ * Fetch an object's bytes via authenticated S3 GetObject. Works even when the bucket's
+ * public access is disabled/throttled (the r2.dev public URL returns 403) — used by the
+ * image proxy so property photos keep loading regardless of public-access state.
+ * The key is used as-is (only traversal is stripped) because keys may contain spaces.
+ */
+export async function storageGetObject(
+  rawKey: string
+): Promise<{ body: Buffer; contentType: string } | null> {
+  const s3 = getS3Client();
+  if (!s3 || !_s3Config) return null;
+  const key = rawKey.replace(/\0/g, "").replace(/\.\.\//g, "").replace(/^\/+/, "");
+  if (!key) return null;
+  try {
+    const res = await s3.send(new GetObjectCommand({ Bucket: _s3Config.bucket, Key: key }));
+    const bytes = await res.Body?.transformToByteArray();
+    if (!bytes) return null;
+    return { body: Buffer.from(bytes), contentType: res.ContentType || "image/jpeg" };
+  } catch (err) {
+    console.error("[Storage] GetObject failed for key:", key, (err as Error).message);
+    return null;
+  }
+}
