@@ -442,12 +442,13 @@ export async function getDb() {
           else console.warn(`[Database] Verification migration note:`, e?.message?.substring(0, 120));
         }
       }
-      // Backfill: existing isVerified=true users get both channels marked
-      try {
-        await _pool.execute(`UPDATE users SET emailVerified=true, phoneVerified=true, emailVerifiedAt=updatedAt, phoneVerifiedAt=updatedAt WHERE isVerified=true AND emailVerified=false`);
-      } catch (e: any) {
-        console.warn("[Database] Verification backfill note:", e?.message?.substring(0, 120));
-      }
+      // No verification backfill here. It used to run on every startup and
+      // marked BOTH email and phone verified for any user with the legacy
+      // isVerified flag, which a single-channel registration OTP sets
+      // (server/_core/auth.ts). Restarting the server therefore verified
+      // emails nobody had confirmed and bypassed the payment verification
+      // gate. The one-time backfill for pre-0025 users lives in migration
+      // 0025 and only touches users with no verification timestamps.
       // Auto-migrate: KYC tables (migration 0025)
       try {
         await _pool.execute(`CREATE TABLE IF NOT EXISTS kyc_requests (
