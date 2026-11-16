@@ -79,17 +79,24 @@ export async function sitemapHandler(req: Request, res: Response): Promise<void>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${allPages
-  .map(
-    (page) => `  <url>
-    <loc>${BASE_URL}${page.loc}</loc>
+  .flatMap((page) => {
+    // Arabic lives at the plain URL, English at the same path with ?lang=en.
+    // Each language gets its own <url> entry listing both alternates.
+    const xmlEscape = (s: string) => s.replace(/&/g, "&amp;");
+    const ar = xmlEscape(`${BASE_URL}${page.loc}`);
+    const en = xmlEscape(`${BASE_URL}${page.loc}${page.loc.includes("?") ? "&" : "?"}lang=en`);
+    return [ar, en].map(
+      (loc) => `  <url>
+    <loc>${loc}</loc>
     <lastmod>${page.lastmod || today}</lastmod>
     <changefreq>${page.changefreq}</changefreq>
     <priority>${page.priority}</priority>
-    <xhtml:link rel="alternate" hreflang="ar" href="${BASE_URL}${page.loc}" />
-    <xhtml:link rel="alternate" hreflang="en" href="${BASE_URL}${page.loc}" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="${BASE_URL}${page.loc}" />
+    <xhtml:link rel="alternate" hreflang="ar" href="${ar}" />
+    <xhtml:link rel="alternate" hreflang="en" href="${en}" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="${ar}" />
   </url>`
-  )
+    );
+  })
   .join("\n")}
 </urlset>`;
 

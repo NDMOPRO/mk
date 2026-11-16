@@ -1141,6 +1141,17 @@ const I18nContext = createContext<I18nContextType | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>(() => {
+    // ?lang=en / ?lang=ar in the URL wins, so hreflang links and shared
+    // links open in the right language; otherwise use the saved choice.
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("lang");
+      if (fromUrl === "en" || fromUrl === "ar") {
+        localStorage.setItem("monthlykey-lang", fromUrl);
+        return fromUrl as Language;
+      }
+    } catch {
+      // ignore: storage or URL unavailable
+    }
     const saved = localStorage.getItem("monthlykey-lang");
     return (saved === "en" ? "en" : "ar") as Language;
   });

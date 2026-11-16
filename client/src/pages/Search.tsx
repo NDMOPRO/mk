@@ -547,7 +547,12 @@ export default function Search() {
                 )}
                 {city && (
                   <Badge variant="secondary" className="gap-1">
-                    <MapPin className="h-3 w-3" /> {city}
+                    <MapPin className="h-3 w-3" />{" "}
+                    {(() => {
+                      // city is the lowercase English key (e.g. "riyadh"); show the localized name.
+                      const c = cities.find(x => x.city.toLowerCase() === city);
+                      return c ? (lang === "ar" ? c.cityAr : c.city) : city;
+                    })()}
                     <X className="h-3 w-3 cursor-pointer" onClick={() => setCity("")} />
                   </Badge>
                 )}
