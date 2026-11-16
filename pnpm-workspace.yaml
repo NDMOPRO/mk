@@ -1,11 +1,4 @@
-packages:
-  # Existing MonthlyKey app stays at root for Railway compatibility
-  
-  # New platform packages
-  - "packages/*"
-  
-  # New platform services
-  - "services/*"
-  
-  # New platform web apps
-  - "apps/*"
+# Single-package repository: the deployed app lives at the root.
+# The unfinished multi-service platform (apps/, services/, packages/) was
+# moved off main; it is preserved on branch archive/pre-cleanup-2026-11.
+packages: []
