@@ -195,23 +195,21 @@ export async function getMoyasarConfigStatus(): Promise<{
 
 export interface CreateMoyasarPaymentParams {
   bookingId: number;
+  /** The DUE ledger entry (invoice) this payment settles. */
+  ledgerId: number;
   amount: number; // in SAR (will be converted to halalah)
   description: string;
   descriptionAr?: string;
   callbackUrl: string;
-  source: {
-    type: "creditcard" | "applepay" | "googlepay";
-    // For creditcard (mada): token from Moyasar.js
-    token?: string;
-    // For applepay: payment data from Apple Pay session
-    paymentData?: any;
-  };
+  /** Card token created in the browser with the publishable key (POST /v1/tokens). */
+  cardToken: string;
   metadata?: Record<string, string>;
 }
 
 /**
- * Creates a Moyasar payment via their API.
- * Also creates a payment_ledger entry with status=DUE.
+ * Creates a Moyasar card payment from a browser-created card token and links
+ * it to the existing ledger entry (invoice), so the webhook can find and
+ * settle that entry by providerRef. Card details never reach this server.
  */
 export async function createMoyasarPayment(params: CreateMoyasarPaymentParams) {
   const settings = await getMoyasarSettings();
@@ -231,7 +229,7 @@ export async function createMoyasarPayment(params: CreateMoyasarPaymentParams) {
     currency: settings.currency,
     description: params.description,
     callback_url: params.callbackUrl,
-    source: params.source,
+    source: { type: "token", token: params.cardToken },
     metadata: {
       bookingId: String(params.bookingId),
       ...params.metadata,
@@ -253,24 +251,24 @@ export async function createMoyasarPayment(params: CreateMoyasarPaymentParams) {
     console.error("[Moyasar] Payment creation failed:", data);
     throw new Error(data.message || "Payment creation failed");
   }
-  
-  // Create ledger entry with status=DUE
-  const pool = getPool();
-  if (pool) {
-    await pool.query(
-      `INSERT INTO payment_ledger (bookingId, type, direction, amount, currency, status, provider, providerRef, paymentMethod, notes, createdAt, updatedAt)
-       VALUES (?, 'RENT', 'IN', ?, ?, 'PENDING', 'moyasar', ?, ?, ?, NOW(), NOW())`,
-      [
-        params.bookingId,
-        params.amount.toFixed(2),
-        settings.currency,
-        data.id,
-        params.source.type === "applepay" ? "APPLE_PAY" : params.source.type === "googlepay" ? "GOOGLE_PAY" : "MADA_CARD",
-        params.description,
-      ]
-    );
+  if (data.status === "failed") {
+    throw new Error(data.source?.message || "Card payment was declined");
   }
   
+  // Link the payment to the invoice. A FAILED invoice goes back to DUE for
+  // this new attempt; the webhook then settles it by providerRef.
+  const pool = getPool();
+  if (!pool) throw new Error("Database not available");
+  const [result] = await pool.query<import("mysql2").ResultSetHeader>(
+    `UPDATE payment_ledger
+        SET provider = 'moyasar', providerRef = ?, paymentMethod = 'MADA_CARD', status = 'DUE', updatedAt = NOW()
+      WHERE id = ? AND status IN ('DUE', 'FAILED')`,
+    [data.id, params.ledgerId]
+  );
+  if (result.affectedRows !== 1) {
+    console.error(`[Moyasar] Payment ${data.id} created but ledger #${params.ledgerId} could not be linked`);
+    throw new Error("Payment could not be linked to the invoice. Contact support with reference " + data.id);
+  }
   return {
     paymentId: data.id,
     status: data.status, // "initiated", "paid", "failed"
@@ -285,16 +283,19 @@ export async function createMoyasarPayment(params: CreateMoyasarPaymentParams) {
  * Verifies Moyasar webhook signature using HMAC-SHA256.
  * Returns true if signature is valid.
  */
+function safeEqual(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
 function verifyMoyasarSignature(payload: string, signature: string, secret: string): boolean {
   if (!secret || !signature) return false;
   const expected = crypto
     .createHmac("sha256", secret)
     .update(payload)
     .digest("hex");
-  return crypto.timingSafeEqual(
-    Buffer.from(signature, "hex"),
-    Buffer.from(expected, "hex")
-  );
+  return safeEqual(signature.toLowerCase(), expected);
 }
 
 /**
@@ -305,69 +306,84 @@ export async function handleMoyasarWebhookVerified(req: Request, res: Response) 
   try {
     const settings = await getMoyasarSettings();
     
-    // Verify webhook signature
-    const signature = req.headers["x-moyasar-signature"] as string || "";
-    const rawBody = JSON.stringify(req.body);
-    
+    const body = req.body || {};
+
+    // Moyasar sends { id, type, secret_token, live, data: <payment> }; older
+    // callers (and our tests) post the payment itself, signed with an HMAC
+    // header. Accept either, but only when it proves it knows the secret.
+    const isEvent = typeof body.type === "string" && body.data && typeof body.data === "object";
+    if (isEvent && body.type === "webhook_verification") {
+      return res.status(200).json({ received: true });
+    }
     if (settings.webhookSecret) {
-      const isValid = verifyMoyasarSignature(rawBody, signature, settings.webhookSecret);
-      if (!isValid) {
-        console.warn("[Moyasar Webhook] Invalid signature");
+      const signature = (req.headers["x-moyasar-signature"] as string) || "";
+      const tokenOk = typeof body.secret_token === "string" && safeEqual(body.secret_token, settings.webhookSecret);
+      const signatureOk = !!signature && verifyMoyasarSignature(JSON.stringify(body), signature, settings.webhookSecret);
+      if (!tokenOk && !signatureOk) {
+        console.warn("[Moyasar Webhook] Invalid signature or secret token");
         return res.status(401).json({ error: "Invalid signature" });
       }
     } else {
-      console.warn("[Moyasar Webhook] No webhook secret configured — skipping signature verification");
+      console.warn("[Moyasar Webhook] No webhook secret configured — relying on the API lookup below");
     }
-    
-    const { id, status, amount, source, metadata } = req.body;
-    
-    if (!id || !status) {
+
+    const paymentId: string | undefined = isEvent ? body.data.id : body.id;
+    if (!paymentId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
-    
+
+    // Never trust the webhook body for money: read the payment from Moyasar
+    // with the secret key and use its status, amount and currency.
+    const verified = await fetchMoyasarPaymentStatus(paymentId);
+    if (!verified) {
+      // 5xx makes Moyasar retry later.
+      return res.status(502).json({ error: "Could not verify payment with Moyasar" });
+    }
+    const { status, amount, source } = verified;
+    const metadata = verified.metadata;
+
     const pool = getPool();
     if (!pool) return res.status(500).json({ error: "Database not available" });
-    
+
     // Find ledger entry by providerRef
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT * FROM payment_ledger WHERE providerRef = ? AND provider = 'moyasar'",
-      [id]
+      [paymentId]
     );
-    
+
     if (!rows[0]) {
-      console.log(`[Moyasar Webhook] No ledger entry found for ref: ${id}`);
+      console.log(`[Moyasar Webhook] No ledger entry found for ref: ${paymentId}`);
       return res.status(200).json({ received: true, matched: false });
     }
-    
+
     const ledgerEntry = rows[0];
-    
+
     // ── Idempotency guard: if ledger is already PAID/REFUNDED, skip ──
     if (ledgerEntry.status === "PAID" || ledgerEntry.status === "REFUNDED") {
       console.log(`[Moyasar Webhook] Ledger #${ledgerEntry.id} already ${ledgerEntry.status} — idempotent skip`);
       return res.status(200).json({ received: true, matched: true, alreadyProcessed: true, currentStatus: ledgerEntry.status });
     }
-    
-    // ── Amount validation: webhook amount (halalah) must match ledger amount (SAR) ──
-    if (amount !== undefined && status === "paid") {
-      const webhookAmountSAR = Number(amount) / 100; // Moyasar sends halalah
+
+    // ── Amount validation: Moyasar amount (SAR) must match ledger amount ──
+    if (status === "paid") {
       const ledgerAmountSAR = Number(ledgerEntry.amount);
-      if (Math.abs(webhookAmountSAR - ledgerAmountSAR) > 0.01) {
-        console.error(`[Moyasar Webhook] Amount mismatch! Webhook: ${webhookAmountSAR} SAR, Ledger: ${ledgerAmountSAR} SAR. Refusing to mark PAID.`);
-        return res.status(200).json({ received: true, matched: true, error: "amount_mismatch", webhookAmount: webhookAmountSAR, ledgerAmount: ledgerAmountSAR });
+      if (Math.abs(amount - ledgerAmountSAR) > 0.01) {
+        console.error(`[Moyasar Webhook] Amount mismatch! Moyasar: ${amount} SAR, Ledger: ${ledgerAmountSAR} SAR. Refusing to mark PAID.`);
+        return res.status(200).json({ received: true, matched: true, error: "amount_mismatch", webhookAmount: amount, ledgerAmount: ledgerAmountSAR });
       }
     }
-    
+
     // ── Currency validation ──
-    const webhookCurrency = req.body.currency?.toUpperCase();
-    if (webhookCurrency && webhookCurrency !== "SAR") {
-      console.error(`[Moyasar Webhook] Currency mismatch! Expected SAR, got ${webhookCurrency}`);
+    if (verified.currency && verified.currency.toUpperCase() !== "SAR") {
+      console.error(`[Moyasar Webhook] Currency mismatch! Expected SAR, got ${verified.currency}`);
       return res.status(200).json({ received: true, matched: true, error: "currency_mismatch" });
     }
-    
+
     // Map Moyasar status to our ledger status
     let newStatus: string;
     switch (status) {
       case "paid":
+      case "captured":
         newStatus = "PAID";
         break;
       case "failed":
@@ -393,7 +409,7 @@ export async function handleMoyasarWebhookVerified(req: Request, res: Response) 
     await updateLedgerStatusSafe(ledgerEntry.id, newStatus, {
       paymentMethod,
       provider: "moyasar",
-      providerRef: id,
+      providerRef: paymentId,
       paidAt: newStatus === "PAID" ? new Date() : undefined,
       webhookVerified: true,
     });
@@ -482,7 +498,9 @@ export async function fetchMoyasarPaymentStatus(paymentRef: string): Promise<{
   id: string;
   status: string;
   amount: number;
+  currency?: string;
   source: any;
+  metadata?: Record<string, string>;
 } | null> {
   const settings = await getMoyasarSettings();
   if (!settings.secretKey) return null;
@@ -499,7 +517,9 @@ export async function fetchMoyasarPaymentStatus(paymentRef: string): Promise<{
       id: data.id,
       status: data.status,
       amount: data.amount / 100,
+      currency: data.currency,
       source: data.source,
+      metadata: data.metadata,
     };
   } catch {
     return null;
