@@ -250,6 +250,10 @@ export const RATE_LIMITS = {
  * Get client IP from request
  */
 export function getClientIP(req: { headers: Record<string, string | string[] | undefined>; ip?: string; socket?: { remoteAddress?: string } }): string {
+  // Railway's edge overwrites X-Real-IP and X-Forwarded-For with the real
+  // client address, so callers cannot spoof them to dodge rate limits.
+  const realIp = req.headers['x-real-ip'];
+  if (typeof realIp === 'string' && realIp.trim()) return realIp.trim();
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
   if (Array.isArray(forwarded)) return forwarded[0];

@@ -36,13 +36,19 @@ export const bookingRouterDefs = {
   booking: router({
     create: protectedProcedure
       .input(z.object({
-        propertyId: z.number(),
-        moveInDate: z.string(),
-        moveOutDate: z.string(),
-        durationMonths: z.number(),
-        tenantNotes: z.string().optional(),
+        propertyId: z.number().int().positive(),
+        moveInDate: z.string().refine((v) => !isNaN(Date.parse(v)), "Invalid move-in date"),
+        moveOutDate: z.string().refine((v) => !isNaN(Date.parse(v)), "Invalid move-out date"),
+        durationMonths: z.number().int().min(1).max(60),
+        tenantNotes: z.string().max(2000).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        if (Date.parse(input.moveOutDate) <= Date.parse(input.moveInDate)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Move-out date must be after move-in date' });
+        }
+        if (Date.parse(input.moveInDate) < Date.now() - 24 * 60 * 60 * 1000) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Move-in date is in the past' });
+        }
         const prop = await db.getPropertyById(input.propertyId);
         if (!prop) throw new TRPCError({ code: 'NOT_FOUND', message: 'Property not found' });
 
@@ -245,6 +251,17 @@ export const bookingRouterDefs = {
         const booking = await db.getBookingById(input.id);
         if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
         if (booking.landlordId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: 'FORBIDDEN', message: 'Unauthorized' });
+        // Only a pending request can be approved or rejected, and a paid or
+        // finished booking cannot be cancelled from here (admins use the
+        // admin booking tools, which also handle invoices and refunds).
+        const allowedFrom: Record<string, string[]> = {
+          approved: ['pending'],
+          rejected: ['pending'],
+          cancelled: ['pending', 'approved'],
+        };
+        if (!allowedFrom[input.status].includes(booking.status)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `Cannot change a ${booking.status} booking to ${input.status}` });
+        }
         await db.updateBooking(input.id, {
           status: input.status,
           rejectionReason: input.rejectionReason,

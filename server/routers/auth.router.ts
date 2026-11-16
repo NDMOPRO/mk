@@ -40,6 +40,13 @@ function sanitizeUser<T extends Record<string, any>>(user: T | null | undefined)
   return safe as Omit<T, 'passwordHash' | 'recoveryEmail'>;
 }
 
+// Profile image/document links must be our own uploads or https URLs, never
+// javascript:/data: links.
+const safeUrl = z.string().max(1000).refine(
+  (v) => v === "" || v.startsWith("/uploads/") || /^https:\/\//i.test(v),
+  "Invalid URL",
+);
+
 export const authRouterDefs = {
   auth: router({
     me: publicProcedure.query(opts => sanitizeUser(opts.ctx.user)),
@@ -59,25 +66,25 @@ export const authRouterDefs = {
     }),
     updateProfile: protectedProcedure
       .input(z.object({
-        name: z.string().optional(),
-        nameAr: z.string().optional(),
-        phone: z.string().optional(),
-        whatsapp: z.string().optional(),
+        name: z.string().max(255).optional(),
+        nameAr: z.string().max(255).optional(),
+        phone: z.string().max(255).optional(),
+        whatsapp: z.string().max(255).optional(),
         userType: z.enum(["saudi", "resident", "visitor"]).optional(),
-        nationalId: z.string().optional(),
-        residentNo: z.string().optional(),
-        passportNo: z.string().optional(),
-        nationality: z.string().optional(),
-        nationalityAr: z.string().optional(),
-        dateOfBirth: z.string().optional(),
-        address: z.string().optional(),
-        addressAr: z.string().optional(),
-        emergencyContact: z.string().optional(),
-        emergencyContactName: z.string().optional(),
-        idDocumentUrl: z.string().optional(),
-        avatarUrl: z.string().optional(),
-        bio: z.string().optional(),
-        bioAr: z.string().optional(),
+        nationalId: z.string().max(255).optional(),
+        residentNo: z.string().max(255).optional(),
+        passportNo: z.string().max(255).optional(),
+        nationality: z.string().max(255).optional(),
+        nationalityAr: z.string().max(255).optional(),
+        dateOfBirth: z.string().max(255).optional(),
+        address: z.string().max(2000).optional(),
+        addressAr: z.string().max(2000).optional(),
+        emergencyContact: z.string().max(255).optional(),
+        emergencyContactName: z.string().max(255).optional(),
+        idDocumentUrl: safeUrl.optional(),
+        avatarUrl: safeUrl.optional(),
+        bio: z.string().max(2000).optional(),
+        bioAr: z.string().max(2000).optional(),
         recoveryEmail: z.string().email().optional(),
         preferredLang: z.enum(["ar", "en"]).optional(),
       }))
@@ -87,6 +94,12 @@ export const authRouterDefs = {
         // Calculate profile completion
         const fields = ['name','phone','whatsapp','nationalId','nationality','address','emergencyContact','avatarUrl'];
         const user = await db.getUserById(ctx.user.id);
+        // A new phone number has not been verified yet.
+        if (input.phone !== undefined && user && input.phone !== user.phone) {
+          profileData.phoneVerified = false;
+          profileData.phoneVerifiedAt = null;
+          profileData.isVerified = false;
+        }
         const merged = { ...user, ...profileData };
         const filled = fields.filter(f => !!(merged as any)[f]).length;
         profileData.profileCompletionPct = Math.round((filled / fields.length) * 100);

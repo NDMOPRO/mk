@@ -189,8 +189,8 @@ describe("Booking Router", () => {
     await expect(
       caller.booking.create({
         propertyId: 999,
-        moveInDate: "2026-04-01",
-        moveOutDate: "2026-10-01",
+        moveInDate: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10),
+        moveOutDate: new Date(Date.now() + 190 * 864e5).toISOString().slice(0, 10),
         durationMonths: 6,
       })
     ).rejects.toThrow("Property not found");
