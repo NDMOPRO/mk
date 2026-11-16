@@ -606,8 +606,10 @@ export function registerAuthRoutes(app: Express) {
           : await db.getUserByEmail(destination);
 
         if (user) {
-          // Mark user as verified after OTP confirmation (legacy field)
-          await db.updateUserProfile(user.id, { isVerified: true } as any);
+          // isVerified is set by the sync block above, and only once BOTH
+          // email and phone are verified. It used to be forced to true here
+          // after a single-channel registration OTP, so the "Verified" badge
+          // and the startup backfill treated half-verified users as verified.
 
           // Auto-login after verification with configurable TTL
           const updatedUser = await db.getUserById(user.id);
