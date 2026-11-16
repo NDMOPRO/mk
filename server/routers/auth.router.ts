@@ -34,7 +34,7 @@ import {
 // Extracted from server/routers.ts — DO NOT modify procedure names/shapes
 
 /** Strip passwordHash (and any other sensitive fields) before returning user to client */
-function sanitizeUser<T extends Record<string, any>>(user: T | null): Omit<T, 'passwordHash' | 'recoveryEmail'> | null {
+function sanitizeUser<T extends Record<string, any>>(user: T | null | undefined): Omit<T, 'passwordHash' | 'recoveryEmail'> | null {
   if (!user) return null;
   const { passwordHash, recoveryEmail, ...safe } = user;
   return safe as Omit<T, 'passwordHash' | 'recoveryEmail'>;
@@ -107,10 +107,10 @@ export const authRouterDefs = {
         // Log role change for audit trail
         logAudit({
           userId: ctx.user.id,
-          action: 'role_switch',
+          action: 'ROLE_SWITCH',
           entityType: 'USER',
           entityId: ctx.user.id,
-          details: { from: ctx.user.role, to: input.role },
+          metadata: { from: ctx.user.role, to: input.role },
         });
         await db.updateUserRole(ctx.user.id, input.role);
         return { success: true };

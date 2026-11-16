@@ -306,7 +306,7 @@ export const cmsRouterDefs = {
         const pool = (await import('../db')).getPool();
         if (!pool) return { items: [], total: 0 };
         const conditions: string[] = [];
-        const params: unknown[] = [];
+        const params: (string | number)[] = [];
         if (input.folder) { conditions.push('folder = ?'); params.push(input.folder); }
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
         const offset = (input.page - 1) * input.limit;

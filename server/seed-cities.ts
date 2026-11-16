@@ -1,4 +1,4 @@
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { cities, districts, roles } from "../drizzle/schema";
 import { eq, sql } from "drizzle-orm";
@@ -178,7 +178,7 @@ export async function seedCitiesAndDistricts() {
   }
 }
 
-async function seedDefaultRoles(db: ReturnType<typeof drizzle>) {
+async function seedDefaultRoles(db: MySql2Database) {
   try {
     const defaultRoles = [
       {
@@ -313,7 +313,7 @@ async function seedDefaultRoles(db: ReturnType<typeof drizzle>) {
  * Only adds districts that don't already exist (checked by nameAr + city).
  * All new districts are added as inactive (isActive: false).
  */
-async function seedAdditionalDistricts(db: ReturnType<typeof drizzle>) {
+async function seedAdditionalDistricts(db: MySql2Database) {
   try {
     // Get city IDs
     const allCities = await db.select().from(cities);

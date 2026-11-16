@@ -508,6 +508,7 @@ export const adminRouterDefs = {
           pricingSource: input.pricingSource || 'PROPERTY',
           locationSource: input.locationSource || 'MANUAL',
         } as any);
+        if (id == null) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database not available' });
         await sharedDb.insert(auditLog).values({
           userId: ctx.user.id,
           userName: ctx.user.displayName ?? 'admin',
@@ -749,7 +750,7 @@ export const adminRouterDefs = {
         });
         // Un-void DUE/PENDING ledger entries (restore them from VOID back to DUE)
         try {
-          const { getPool } = await import('../finance-registry.js');
+          const { getPool } = await import('../db.js');
           const pool = getPool();
           if (pool) {
             await pool.execute(
@@ -814,7 +815,7 @@ export const adminRouterDefs = {
     calculateRefund: adminWithPermission(PERMISSIONS.MANAGE_PAYMENTS)
       .input(z.object({ bookingId: z.number() }))
       .query(async ({ input }) => {
-        const booking = await db.getBookingById(input.id);
+        const booking = await db.getBookingById(input.bookingId);
         if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
         // Get all PAID ledger entries for this booking
         let ledgerEntries: any[] = [];
@@ -888,7 +889,7 @@ export const adminRouterDefs = {
         let refundLedgerId: number | undefined;
         try {
           const { createLedgerEntry } = await import('../finance-registry.js');
-          refundLedgerId = await createLedgerEntry({
+          ({ id: refundLedgerId } = await createLedgerEntry({
             bookingId: input.bookingId,
             unitId: (booking as any).unitId || undefined,
             unitNumber: undefined,
@@ -905,7 +906,7 @@ export const adminRouterDefs = {
             dueAt: new Date(),
             createdBy: ctx.user?.id,
             notes: `REFUND: ${input.reason} (recorded by ${ctx.user?.name || ctx.user?.email || 'admin'})`,
-          });
+          }));
         } catch (e) {
           throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `Failed to create refund ledger entry: ${(e as Error).message}` });
         }
@@ -1252,11 +1253,11 @@ export const adminRouterDefs = {
         try {
           await logAudit({
             action: 'PURGE_TEST_DATA',
-            entityType: 'system',
+            entityType: 'SYSTEM',
             entityId: 0,
-            userId: ctx.user!.id,
-            userName: ctx.user?.displayName ?? 'admin',
-            changes: { categories: input.categories, results },
+            userId: ctx.user.id,
+            userName: ctx.user.displayName ?? 'admin',
+            metadata: { categories: input.categories, results },
           });
         } catch {}
 

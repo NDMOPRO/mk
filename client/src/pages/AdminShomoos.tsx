@@ -61,7 +61,9 @@ export default function AdminShomoos() {
   const checkInMut = trpc.integration.shomoos.checkIn.useMutation({
     onSuccess: (r) => {
       if (r.success) {
-        toast.success(isAr ? `تم إرسال تسجيل الوصول بنجاح. المرجع: ${r.shomoosRefId || "—"}` : `Check-in submitted successfully. Ref: ${r.shomoosRefId || "—"}`);
+        // Error branches of the endpoint return no reference ID.
+        const ref = ("shomoosRefId" in r && r.shomoosRefId) || "—";
+        toast.success(isAr ? `تم إرسال تسجيل الوصول بنجاح. المرجع: ${ref}` : `Check-in submitted successfully. Ref: ${ref}`);
       } else {
         toast.error(r.error || (isAr ? "فشل إرسال تسجيل الوصول" : "Check-in submission failed"));
       }

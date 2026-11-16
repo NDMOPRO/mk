@@ -2650,7 +2650,7 @@ function MoyasarStatusIndicator() {
 }
 
 /* ─── Cities Management Component ─── */
-function CitiesManagement({ lang, dir, isRtl }: { lang: string; dir: string; isRtl: boolean }) {
+function CitiesManagement({ lang, isRtl }: { lang: string; isRtl: boolean }) {
   const citiesQuery = trpc.cities.all.useQuery({ activeOnly: false });
   const toggleMutation = trpc.cities.toggle.useMutation({
     onSuccess: () => { toast.success(lang === "ar" ? "تم التحديث" : "Updated"); citiesQuery.refetch(); },

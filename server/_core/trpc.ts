@@ -53,14 +53,18 @@ export const adminProcedure = t.procedure.use(
 export function adminWithPermission(permission: PermissionKey) {
   return adminProcedure.use(
     t.middleware(async ({ ctx, next }) => {
-      const allowed = await hasPermission(ctx.user!.id, permission);
+      // adminProcedure has already rejected anonymous and non-admin users.
+      const user = ctx.user;
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: NOT_ADMIN_ERR_MSG });
+      const allowed = await hasPermission(user.id, permission);
       if (!allowed) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: `ليس لديك صلاحية: ${permission}`,
         });
       }
-      return next({ ctx });
+      // Pass the non-null user on, so handlers can use ctx.user without `!`.
+      return next({ ctx: { ...ctx, user } });
     }),
   );
 }

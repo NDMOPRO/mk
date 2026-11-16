@@ -281,15 +281,15 @@ test("PaymentPage does NOT finalize payment on redirect", () => {
 
 console.log("\n📋 4. Ledger Entry Creation on Payment Init");
 
-test("createMoyasarPayment creates ledger entry with PENDING status", () => {
+test("createMoyasarPayment links the payment to the existing invoice", () => {
   const moyasarCode = fs.readFileSync(
     path.resolve(__dirname, "../moyasar.ts"),
     "utf-8"
   );
   
-  // Should insert into payment_ledger with PENDING status
-  assert(moyasarCode.includes("payment_ledger"), "Should reference payment_ledger table");
-  assert(moyasarCode.includes("'PENDING'"), "Should set initial status to PENDING");
+  // Should attach providerRef to the DUE invoice instead of inserting a new row
+  assert(moyasarCode.includes("UPDATE payment_ledger"), "Should update the invoice in payment_ledger");
+  assert(moyasarCode.includes("providerRef = ?"), "Should store the Moyasar payment id as providerRef");
   assert(moyasarCode.includes("'moyasar'"), "Should set provider to 'moyasar'");
 });
 

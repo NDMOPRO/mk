@@ -1,4 +1,5 @@
 import SEOHead from "@/components/SEOHead";
+import type { Property } from "@shared/types";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -119,7 +120,7 @@ export default function AdminPropertyEdit() {
   // Form state
   const [form, setForm] = useState({
     titleEn: "", titleAr: "", descriptionEn: "", descriptionAr: "",
-    propertyType: "apartment" as string,
+    propertyType: "apartment" as Property["propertyType"],
     city: "", cityAr: "", district: "", districtAr: "",
     address: "", addressAr: "",
     googleMapsUrl: "",
@@ -469,7 +470,7 @@ export default function AdminPropertyEdit() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>{isAr ? "نوع العقار" : "Property Type"}</Label>
-                    <Select value={form.propertyType} onValueChange={v => setForm(p => ({ ...p, propertyType: v }))}>
+                    <Select value={form.propertyType} onValueChange={v => setForm(p => ({ ...p, propertyType: v as Property["propertyType"] }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="apartment">{isAr ? "شقة" : "Apartment"}</SelectItem>

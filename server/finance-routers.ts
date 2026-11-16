@@ -667,7 +667,11 @@ export const financeRouter = router({
         const { getLedgerEntry } = await import("./finance-registry");
         const ledger = await getLedgerEntry(input.ledgerId);
         if (!ledger) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ledger entry not found' });
-        if (ledger.status !== 'DUE') throw new TRPCError({ code: 'BAD_REQUEST', message: `Ledger status is ${ledger.status}, expected DUE` });
+        if (ledger.status !== 'DUE' && ledger.status !== 'FAILED') throw new TRPCError({ code: 'BAD_REQUEST', message: `Ledger status is ${ledger.status}, expected DUE` });
+        // Only card payments (tokenized in the browser) are implemented.
+        // Apple Pay and Google Pay need a wallet session on the page first.
+        if (input.sourceType !== 'creditcard') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Apple Pay and Google Pay are not available yet. / Apple Pay و Google Pay غير متاحة حالياً.' });
+        if (!input.token?.startsWith('token_')) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Missing card token' });
         
         // Validate booking status = approved
         const booking = ledger.bookingId ? await db.getBookingById(ledger.bookingId) : null;
@@ -712,13 +716,11 @@ export const financeRouter = router({
         const { createMoyasarPayment } = await import("./moyasar");
         return createMoyasarPayment({
           bookingId: booking.id,
+          ledgerId: ledger.id,
           amount: Number(ledger.amount), // Ledger amount is the source of truth (validated against snapshot)
           description: `Rent payment for booking #${booking.id} - Invoice ${ledger.invoiceNumber}`,
           callbackUrl: input.callbackUrl,
-          source: {
-            type: input.sourceType,
-            token: input.token,
-          },
+          cardToken: input.token,
           metadata: {
             bookingId: String(booking.id),
             ledgerId: String(ledger.id),

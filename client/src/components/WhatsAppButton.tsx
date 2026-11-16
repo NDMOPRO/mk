@@ -121,7 +121,8 @@ export default function WhatsAppButton({
 
   // Merge auto-fetched data with explicit props
   const effectiveName = propertyName || (autoProperty.data ? (lang === "ar" ? autoProperty.data.titleAr : autoProperty.data.titleEn) : "");
-  const effectiveCity = city || (autoProperty.data ? (lang === "ar" ? autoProperty.data.cityAr : autoProperty.data.city) : "");
+  // A property without a city must not put the word "null" in the message.
+  const effectiveCity = city || (autoProperty.data ? (lang === "ar" ? autoProperty.data.cityAr : autoProperty.data.city) : "") || "";
   const effectiveId = propertyId || propertyIdFromUrl || "";
   const effectiveUrl = propertyUrl || window.location.href;
 

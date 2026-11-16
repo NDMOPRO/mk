@@ -122,7 +122,18 @@ export default function PaymentPage() {
 
   const monthlyRent = Number(b.monthlyRent);
   const totalAmount = Number(b.totalAmount);
-  const methods = methodsQuery.data?.methods || [];
+  // Apple Pay and Google Pay need a wallet session on this page, which is not
+  // built yet, so only methods that can actually complete are offered.
+  const methods = (methodsQuery.data?.methods || []).filter(
+    (m) => m.key !== "apple_pay" && m.key !== "google_pay"
+  );
+  const publishableKey = methodsQuery.data?.moyasarPublishableKey ?? null;
+  // The invoice this payment settles: an unpaid entry, preferring the one for
+  // the full booking amount.
+  const ledgerEntries: { id: number; status: string; direction?: string; amount: string | number }[] =
+    (b as any).ledgerEntries ?? [];
+  const payable = ledgerEntries.filter((e) => (e.status === "DUE" || e.status === "FAILED") && e.direction !== "OUT");
+  const invoice = payable.find((e) => Math.abs(Number(e.amount) - totalAmount) < 0.01) ?? payable[0];
 
   const handlePay = async () => {
     if (!selectedMethod) {
@@ -154,43 +165,61 @@ export default function PaymentPage() {
       return;
     }
 
-    // Moyasar payment
+    // Moyasar card payment. The card is tokenized directly with Moyasar using
+    // the publishable key, so card details never reach our server; the server
+    // then charges the token for the invoice amount and returns the 3-D Secure
+    // page. The payment is confirmed only by Moyasar's webhook.
     if (method.provider === "moyasar") {
+      if (!invoice) {
+        toast.error(lang === "ar" ? "لا توجد فاتورة مستحقة لهذا الحجز. تواصل مع الإدارة." : "No invoice is due for this booking. Contact admin.");
+        return;
+      }
+      if (!publishableKey) {
+        toast.error(lang === "ar" ? "الدفع الإلكتروني غير مفعّل حالياً." : "Online payment is not configured.");
+        return;
+      }
+      const number = cardNumber.replace(/\s/g, "");
+      const [mm, yy] = cardExpiry.split("/");
+      const month = Number(mm);
+      const year = Number(yy);
+      if (!cardName.trim() || number.length < 12 || !(month >= 1 && month <= 12) || !(yy?.length === 2) || cardCvc.length < 3) {
+        toast.error(lang === "ar" ? "يرجى إدخال بيانات البطاقة كاملة وصحيحة" : "Please enter complete, valid card details");
+        return;
+      }
+
       setProcessing(true);
       try {
-        let sourceType: "creditcard" | "applepay" | "googlepay" = "creditcard";
-        if (selectedMethod === "apple_pay") sourceType = "applepay";
-        else if (selectedMethod === "google_pay") sourceType = "googlepay";
-
-        if (sourceType === "creditcard") {
-          if (!cardNumber || !cardName || !cardExpiry || !cardCvc) {
-            toast.error(lang === "ar" ? "يرجى إدخال بيانات البطاقة كاملة" : "Please fill in all card details");
-            setProcessing(false);
-            return;
-          }
+        const tokenRes = await fetch("https://api.moyasar.com/v1/tokens", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Basic ${btoa(publishableKey + ":")}`,
+          },
+          body: JSON.stringify({ name: cardName.trim(), number, month, year, cvc: cardCvc, save_only: true }),
+        });
+        const token = await tokenRes.json().catch(() => ({}));
+        if (!tokenRes.ok || typeof token.id !== "string") {
+          const detail = token?.errors ? Object.values(token.errors).flat().join(" ") : token?.message;
+          throw new Error(detail || (lang === "ar" ? "تعذّر التحقق من البطاقة" : "Card could not be verified"));
         }
 
-        const callbackUrl = `${window.location.origin}/payment-callback/${bookingId}`;
-
         const result = await createPaymentMutation.mutateAsync({
-          bookingId,
-          amount: totalAmount,
-          description: lang === "ar" ? `دفع حجز #${bookingId}` : `Booking #${bookingId} payment`,
-          callbackUrl,
-          sourceType,
+          ledgerId: invoice.id,
+          callbackUrl: `${window.location.origin}/payment-callback/${bookingId}`,
+          sourceType: "creditcard",
+          token: token.id,
         });
 
-        // Moyasar returns transactionUrl for 3DS redirect (mada cards)
         if (result.transactionUrl) {
+          // 3-D Secure page; Moyasar returns the customer to the callback URL.
           window.location.href = result.transactionUrl;
-        } else if (result.status === "paid" || result.status === "initiated") {
-          // For Apple Pay / Google Pay that complete instantly
+        } else if (result.status === "paid") {
           setLocation(`/payment-callback/${bookingId}?id=${result.paymentId}&status=${result.status}`);
         } else {
           toast.error(lang === "ar" ? "فشل إنشاء عملية الدفع" : "Failed to create payment");
         }
       } catch (err: any) {
-        toast.error(err.message || (lang === "ar" ? "حدث خطأ أثناء الدفع" : "Payment error occurred"));
+        toast.error(err?.message || (lang === "ar" ? "حدث خطأ أثناء الدفع" : "Payment error occurred"));
       } finally {
         setProcessing(false);
       }

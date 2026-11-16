@@ -202,6 +202,11 @@ export const bookings = mysqlTable("bookings", {
       hideInsuranceFromTenant: boolean;
     };
     currency: string;
+    // Added by snapshot v2 (server/routers/booking.router.ts); optional
+    // because older bookings were stored without them.
+    amountHalalah?: number;
+    roundingRule?: string;
+    snapshotVersion?: number;
   }>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

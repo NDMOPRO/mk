@@ -38,7 +38,7 @@ function verifyHmacSha256(
 }
 
 // Helper: activate renewal extension if payment was for a renewal
-async function tryActivateRenewalExtension(pool: any, ledgerEntryId: number) {
+async function tryActivateRenewalExtension(pool: import("mysql2/promise").Pool, ledgerEntryId: number) {
   const [extRows] = await pool.query<RowDataPacket[]>(
     "SELECT id FROM booking_extensions WHERE ledgerEntryId = ? AND status = 'PAYMENT_PENDING'",
     [ledgerEntryId]
