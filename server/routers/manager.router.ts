@@ -147,7 +147,7 @@ export const managerRouterDefs = {
       .query(async ({ input }) => {
         const manager = await db.getManagerByToken(input.token);
         if (!manager) return null;
-        return manager;
+        return db.omitManagerSecrets(manager);
       }),
     // Agent self-service: update own profile by token
     updateSelfProfile: publicProcedure
