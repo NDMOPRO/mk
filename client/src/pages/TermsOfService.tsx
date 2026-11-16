@@ -15,7 +15,7 @@ export default function TermsOfService() {
   const arContent = `
 # الشروط والأحكام
 
-**آخر تحديث:** ${new Date().toLocaleDateString("ar-SA")}
+**آخر تحديث:** ١٨ مارس ٢٠٢٦م
 
 مرحباً بك في منصة ${siteName} ("المنصة"). باستخدامك للمنصة فإنك توافق على الالتزام بهذه الشروط والأحكام. يرجى قراءتها بعناية قبل استخدام خدماتنا.
 
@@ -163,7 +163,7 @@ export default function TermsOfService() {
   const enContent = `
 # Terms and Conditions
 
-**Last Updated:** ${new Date().toLocaleDateString("en-US")}
+**Last Updated:** March 18, 2026
 
 Welcome to ${siteName} ("the Platform"). By using the Platform, you agree to be bound by these Terms and Conditions. Please read them carefully before using our services.
 

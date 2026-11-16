@@ -15,7 +15,7 @@ export default function PrivacyPolicy() {
   const arContent = `
 # سياسة الخصوصية وحماية البيانات الشخصية
 
-**آخر تحديث:** ${new Date().toLocaleDateString("ar-SA")}
+**آخر تحديث:** ١٨ مارس ٢٠٢٦م
 
 تلتزم منصة ${siteName} ("المنصة"، "نحن") بحماية خصوصية مستخدميها وبياناتهم الشخصية وفقاً لنظام حماية البيانات الشخصية الصادر بالمرسوم الملكي رقم (م/19) وتاريخ 9/2/1443هـ ("النظام") ولائحته التنفيذية الصادرة عن الهيئة السعودية للبيانات والذكاء الاصطناعي (سدايا).
 
@@ -165,7 +165,7 @@ export default function PrivacyPolicy() {
   const enContent = `
 # Privacy Policy and Personal Data Protection
 
-**Last Updated:** ${new Date().toLocaleDateString("en-US")}
+**Last Updated:** March 18, 2026
 
 ${siteName} ("the Platform", "we", "us") is committed to protecting the privacy and personal data of its users in accordance with the Personal Data Protection Law (PDPL) issued by Royal Decree No. (M/19) dated 9/2/1443H and its Implementing Regulations issued by the Saudi Data and Artificial Intelligence Authority (SDAIA).
 
