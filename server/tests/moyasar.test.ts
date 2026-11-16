@@ -402,21 +402,22 @@ test("CI guardrail script exists and is executable", () => {
 
 console.log("\n📋 7. Admin Settings Structure");
 
+function readAdminSettings(): string {
+  // The settings page is split into client/src/pages/admin-settings/*.
+  const dir = path.resolve(__dirname, "../../client/src/pages/admin-settings");
+  return [path.resolve(__dirname, "../../client/src/pages/AdminSettings.tsx"), ...fs.readdirSync(dir).map((f) => path.join(dir, f))]
+    .map((f) => fs.readFileSync(f, "utf-8")).join("\n");
+}
+
 test("AdminSettings.tsx contains Moyasar section", () => {
-  const settingsCode = fs.readFileSync(
-    path.resolve(__dirname, "../../client/src/pages/AdminSettings.tsx"),
-    "utf-8"
-  );
+  const settingsCode = readAdminSettings();
   
   assert(settingsCode.includes("Moyasar") || settingsCode.includes("moyasar"), 
     "AdminSettings should contain Moyasar section");
 });
 
 test("AdminSettings has toggles for mada, Apple Pay, Google Pay", () => {
-  const settingsCode = fs.readFileSync(
-    path.resolve(__dirname, "../../client/src/pages/AdminSettings.tsx"),
-    "utf-8"
-  );
+  const settingsCode = readAdminSettings();
   
   assert(settingsCode.includes("mada") || settingsCode.includes("Mada"), "Should have mada toggle");
   assert(settingsCode.includes("Apple Pay") || settingsCode.includes("apple_pay"), "Should have Apple Pay toggle");
@@ -424,10 +425,7 @@ test("AdminSettings has toggles for mada, Apple Pay, Google Pay", () => {
 });
 
 test("AdminSettings has Moyasar key fields", () => {
-  const settingsCode = fs.readFileSync(
-    path.resolve(__dirname, "../../client/src/pages/AdminSettings.tsx"),
-    "utf-8"
-  );
+  const settingsCode = readAdminSettings();
   
   assert(settingsCode.includes("Publishable") || settingsCode.includes("publishable"), "Should have publishable key field");
   assert(settingsCode.includes("Secret") || settingsCode.includes("secret"), "Should have secret key field");
@@ -435,10 +433,7 @@ test("AdminSettings has Moyasar key fields", () => {
 });
 
 test("AdminSettings has Test/Live mode selector", () => {
-  const settingsCode = fs.readFileSync(
-    path.resolve(__dirname, "../../client/src/pages/AdminSettings.tsx"),
-    "utf-8"
-  );
+  const settingsCode = readAdminSettings();
   
   assert(
     (settingsCode.includes("Test") || settingsCode.includes("test")) &&

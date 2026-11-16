@@ -165,7 +165,7 @@ describe("Legal Compliance - Saudi Regulations", () => {
   describe("AdminSettings - Legal Fields", () => {
     it("should have licence fields in AdminSettings CMS", async () => {
       const fs = await import("fs");
-      const adminContent = fs.readFileSync("./client/src/pages/AdminSettings.tsx", "utf-8");
+      const adminContent = ["./client/src/pages/AdminSettings.tsx", ...fs.readdirSync("./client/src/pages/admin-settings").map((f) => `./client/src/pages/admin-settings/${f}`)].map((f) => fs.readFileSync(f, "utf-8")).join("\n");
       
       expect(adminContent).toContain("legal.tourismLicence");
       expect(adminContent).toContain("legal.crNumber");
@@ -175,7 +175,7 @@ describe("Legal Compliance - Saudi Regulations", () => {
 
     it("should have Arabic labels for licence fields", async () => {
       const fs = await import("fs");
-      const adminContent = fs.readFileSync("./client/src/pages/AdminSettings.tsx", "utf-8");
+      const adminContent = ["./client/src/pages/AdminSettings.tsx", ...fs.readdirSync("./client/src/pages/admin-settings").map((f) => `./client/src/pages/admin-settings/${f}`)].map((f) => fs.readFileSync(f, "utf-8")).join("\n");
       
       expect(adminContent).toContain("رقم ترخيص وزارة السياحة");
       expect(adminContent).toContain("رقم السجل التجاري");
