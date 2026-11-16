@@ -180,14 +180,14 @@ describe("Collections Schema", () => {
 
   it("should have auto-migration for hidden_properties table", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("hidden_properties");
     expect(db).toContain("CREATE TABLE IF NOT EXISTS hidden_properties");
   });
 
   it("should have auto-migration for property_enquiries table", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("property_enquiries");
     expect(db).toContain("CREATE TABLE IF NOT EXISTS property_enquiries");
   });
@@ -199,43 +199,43 @@ describe("Collections Schema", () => {
 describe("Collections DB Functions", () => {
   it("should export hideProperty function", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("export async function hideProperty");
   });
 
   it("should export unhideProperty function", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("export async function unhideProperty");
   });
 
   it("should export isPropertyHidden function", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("export async function isPropertyHidden");
   });
 
   it("should export getUserHiddenProperties function", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("export async function getUserHiddenProperties");
   });
 
   it("should export createPropertyEnquiry function", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("export async function createPropertyEnquiry");
   });
 
   it("should export getUserEnquiries function", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("export async function getUserEnquiries");
   });
 
   it("should export getPropertyEnquiries function", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("export async function getPropertyEnquiries");
   });
 });
