@@ -3,9 +3,10 @@ FAST TARGETED CLEANUP
 Only scans known ranges where messages exist (340-950).
 Uses 3-second timeout instead of 15.
 """
+import os
 import urllib.request, json, time, re
 
-TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 BOT_ID = 8729034252
 

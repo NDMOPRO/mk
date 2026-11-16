@@ -3,9 +3,10 @@ Targeted thread scanner — checks message IDs 1-500 in the group.
 Uses copyMessage to detect existence, then forwardMessage to get sender info.
 Immediately deletes any copies made.
 """
+import os
 import urllib.request, json, time
 
-TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 
 def api(method, params):

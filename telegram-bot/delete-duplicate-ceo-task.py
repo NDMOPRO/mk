@@ -1,6 +1,7 @@
+import os
 import urllib.request, json, time
 
-TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 THREAD_MARKETING = 11
 

@@ -7,9 +7,10 @@ For each message that exists:
   - If sender is the bot AND the message is in General (no thread_id), deletes it
   - Never deletes messages from real users
 """
+import os
 import urllib.request, json, time, re
 
-TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 BOT_ID = 8729034252  # @monthlykey_bot
 

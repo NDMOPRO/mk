@@ -5,9 +5,10 @@ deleteMessage only succeeds on bot-sent messages (or messages in groups where bo
 We protect the known PINNED IDs by skipping them.
 This is much faster than forwarding since we don't need to identify the sender.
 """
+import os
 import urllib.request, json, time, re, sys
 
-TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 
 # These are the ONLY messages we keep — one professional pin per topic + CEO task

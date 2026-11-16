@@ -4,10 +4,11 @@ Send and pin the full operating rules message in Topic 00.
 Uses HTML parse mode to avoid MarkdownV2 escaping issues.
 """
 
+import os
 import requests
 import time
 
-BOT_TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 TOPIC_00_ID = 3   # 00 — Rules & Channel Guide
 API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"

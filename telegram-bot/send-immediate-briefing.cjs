@@ -7,7 +7,7 @@ const { Telegraf } = require("telegraf");
 const Database = require("better-sqlite3");
 const path = require("path");
 
-const TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84";
+const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -1003967447285;
 const THREAD_CEO_UPDATE = 4;
 const THREAD_PRIORITIES = 15;

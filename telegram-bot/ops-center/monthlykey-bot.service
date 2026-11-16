@@ -12,7 +12,8 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-Environment=BOT_TOKEN=8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84
+# BOT_TOKEN is read from this file (not committed): BOT_TOKEN=<token>
+EnvironmentFile=/etc/monthlykey-bot.env
 Environment=CHAT_ID=-1003967447285
 
 [Install]

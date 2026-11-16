@@ -4,12 +4,13 @@ Monthly Key | Daily Operations HQ — Topic Setup Script
 Creates all 13 required forum topics and pins the rules in Topic 00.
 """
 
+import os
 import requests
 import json
 import time
 import sys
 
-BOT_TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
