@@ -1,16 +1,47 @@
 -- Migration 0023: Maps location fields + geocode cache
--- 1) Add location metadata columns to properties
-ALTER TABLE `properties` ADD COLUMN `locationSource` ENUM('MANUAL','GEOCODE','PIN') DEFAULT NULL;
+-- Idempotent: every ALTER is guarded by an information_schema check, so this
+-- file is a no-op where the object already exists (production, where these
+-- were added at runtime) and creates it where it does not (new databases).
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'properties' AND column_name = 'locationSource') = 0, 'ALTER TABLE `properties` ADD COLUMN `locationSource` ENUM(''MANUAL'',''GEOCODE'',''PIN'') DEFAULT NULL', 'DO 0');
 --> statement-breakpoint
-ALTER TABLE `properties` ADD COLUMN `locationVisibility` ENUM('EXACT','APPROXIMATE','HIDDEN') NOT NULL DEFAULT 'APPROXIMATE';
+PREPARE mk_stmt FROM @mk_sql;
 --> statement-breakpoint
-ALTER TABLE `properties` ADD COLUMN `placeId` varchar(255) DEFAULT NULL;
+EXECUTE mk_stmt;
 --> statement-breakpoint
-ALTER TABLE `properties` ADD COLUMN `geocodeProvider` varchar(20) DEFAULT NULL;
+DEALLOCATE PREPARE mk_stmt;
 --> statement-breakpoint
-ALTER TABLE `properties` ADD COLUMN `geocodeLastCheckedAt` timestamp DEFAULT NULL;
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'properties' AND column_name = 'locationVisibility') = 0, 'ALTER TABLE `properties` ADD COLUMN `locationVisibility` ENUM(''EXACT'',''APPROXIMATE'',''HIDDEN'') NOT NULL DEFAULT ''APPROXIMATE''', 'DO 0');
 --> statement-breakpoint
--- 2) Create geocode_cache table for cost protection
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'properties' AND column_name = 'placeId') = 0, 'ALTER TABLE `properties` ADD COLUMN `placeId` varchar(255) DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'properties' AND column_name = 'geocodeProvider') = 0, 'ALTER TABLE `properties` ADD COLUMN `geocodeProvider` varchar(20) DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'properties' AND column_name = 'geocodeLastCheckedAt') = 0, 'ALTER TABLE `properties` ADD COLUMN `geocodeLastCheckedAt` timestamp DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `geocode_cache` (
   `id` int AUTO_INCREMENT NOT NULL,
   `addressHash` varchar(64) NOT NULL,
@@ -26,11 +57,10 @@ CREATE TABLE IF NOT EXISTS `geocode_cache` (
   CONSTRAINT `geocode_cache_hash_provider` UNIQUE(`addressHash`, `provider`)
 );
 --> statement-breakpoint
--- 3) Index for fast cache lookups
-CREATE INDEX `idx_geocode_cache_hash` ON `geocode_cache` (`addressHash`);
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'geocode_cache' AND index_name = 'idx_geocode_cache_hash') = 0, 'CREATE INDEX `idx_geocode_cache_hash` ON `geocode_cache` (`addressHash`)', 'DO 0');
 --> statement-breakpoint
--- 4) Expand audit_log entityType for MAPS
-ALTER TABLE `audit_log` MODIFY COLUMN `entityType` ENUM('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','MAPS','GEOCODE') NOT NULL;
+PREPARE mk_stmt FROM @mk_sql;
 --> statement-breakpoint
--- 5) Expand audit_log action for GEOCODE, PIN_SET
-ALTER TABLE `audit_log` MODIFY COLUMN `action` ENUM('CREATE','UPDATE','ARCHIVE','RESTORE','DELETE','LINK_BEDS24','UNLINK_BEDS24','PUBLISH','UNPUBLISH','CONVERT','TEST','ENABLE','DISABLE','GEOCODE','PIN_SET','OVERRIDE') NOT NULL;
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;

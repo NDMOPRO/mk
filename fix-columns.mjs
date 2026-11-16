@@ -78,21 +78,7 @@ async function main() {
       console.log('[FixColumns] \u23ed geocode_cache index already exists or error:', err.message);
     }
 
-    // Expand audit_log entityType for MAPS/GEOCODE
-    try {
-      await conn.execute("ALTER TABLE `audit_log` MODIFY COLUMN `entityType` ENUM('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','MAPS','GEOCODE') NOT NULL");
-      console.log('[FixColumns] \u2705 audit_log entityType expanded');
-    } catch (err) {
-      console.log('[FixColumns] \u23ed audit_log entityType already expanded or error:', err.message);
-    }
-
-    // Expand audit_log action for GEOCODE/PIN_SET/OVERRIDE
-    try {
-      await conn.execute("ALTER TABLE `audit_log` MODIFY COLUMN `action` ENUM('CREATE','UPDATE','ARCHIVE','RESTORE','DELETE','LINK_BEDS24','UNLINK_BEDS24','PUBLISH','UNPUBLISH','CONVERT','TEST','ENABLE','DISABLE','GEOCODE','PIN_SET','OVERRIDE') NOT NULL");
-      console.log('[FixColumns] \u2705 audit_log action expanded');
-    } catch (err) {
-      console.log('[FixColumns] \u23ed audit_log action already expanded or error:', err.message);
-    }
+    // audit_log action/entityType are VARCHAR since migration 0026 (no ENUM rewrites).
 
     // ─── Repair broken image URLs ─────────────────────────────────────────
     // Strip old Railway domain prefixes from photo URLs, leaving only /uploads/...
