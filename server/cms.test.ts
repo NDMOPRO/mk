@@ -246,4 +246,27 @@ describe("Public Settings API", () => {
     expect(typeof settings).toBe("object");
     expect(settings).not.toBeNull();
   });
+
+  it("credentials are hidden from public and non-admin users, shown to admins", async () => {
+    const adminCaller = appRouter.createCaller(createAdminCtx());
+    await adminCaller.siteSettings.update({
+      settings: {
+        "ai.apiKey": "sk-test-secret",
+        "moyasar.secretKey": "sk_test_x",
+        "moyasar.publishableKey": "pk_test_x",
+        "site.nameAr": "المفتاح الشهري",
+      },
+    });
+    for (const ctx of [createPublicCtx(), createUserCtx()]) {
+      const caller = appRouter.createCaller(ctx);
+      const s = (await caller.siteSettings.getAll()) as Record<string, string>;
+      expect(s["ai.apiKey"]).toBeUndefined();
+      expect(s["moyasar.secretKey"]).toBeUndefined();
+      expect(s["moyasar.publishableKey"]).toBe("pk_test_x");
+      expect(s["site.nameAr"]).toBe("المفتاح الشهري");
+      expect((await caller.siteSettings.get({ key: "ai.apiKey" })).value).toBeNull();
+    }
+    const a = (await adminCaller.siteSettings.getAll()) as Record<string, string>;
+    expect(a["ai.apiKey"]).toBe("sk-test-secret");
+  });
 });

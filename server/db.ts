@@ -1817,17 +1817,30 @@ export async function updateBookingPayment(bookingId: number, data: {
 }
 
 // ─── Property Managers ─────────────────────────────────────────────
+/**
+ * Remove the self-service edit token from a property-manager row.
+ * Manager rows are returned by public endpoints (listings, profiles);
+ * the token lets anyone edit the manager's phone/WhatsApp, so it must
+ * never leave the server.
+ */
+export function omitManagerSecrets<T extends Record<string, any> | null | undefined>(m: T): T {
+  if (!m) return m;
+  const { editToken: _t, editTokenExpiresAt: _e, ...rest } = m as any;
+  return rest as T;
+}
+
 export async function getAllPropertyManagers() {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(propertyManagers).where(eq(propertyManagers.isActive, true));
+  const rows = await db.select().from(propertyManagers).where(eq(propertyManagers.isActive, true));
+  return rows.map(omitManagerSecrets);
 }
 
 export async function getPropertyManagerById(id: number) {
   const db = await getDb();
   if (!db) return null;
   const result = await db.select().from(propertyManagers).where(eq(propertyManagers.id, id)).limit(1);
-  return result[0] || null;
+  return omitManagerSecrets(result[0] || null);
 }
 
 export async function getPropertyManagerByProperty(propertyId: number) {
@@ -1885,6 +1898,8 @@ export async function getManagerByToken(token: string) {
   if (!db) return null;
   const result = await db.select().from(propertyManagers).where(eq(propertyManagers.editToken, token)).limit(1);
   const manager = result[0] || null;
+  // Tokens without an expiry (created before expiry existed) are invalid.
+  if (manager && !manager.editTokenExpiresAt) return null;
   // Check token expiry (24h)
   if (manager && manager.editTokenExpiresAt) {
     if (new Date() > new Date(manager.editTokenExpiresAt)) {
@@ -1900,7 +1915,7 @@ export async function getManagerByEmail(email: string) {
   const db = await getDb();
   if (!db) return null;
   const result = await db.select().from(propertyManagers).where(eq(propertyManagers.email, email)).limit(1);
-  return result[0] || null;
+  return omitManagerSecrets(result[0] || null);
 }
 
 export async function setManagerEditToken(managerId: number, token: string) {
@@ -1940,7 +1955,7 @@ export async function getAllManagersWithCounts() {
     const props = await db.select({ id: properties.id, titleEn: properties.titleEn }).from(properties).where(inArray(properties.id, propIds));
     propMap = new Map(props.map(p => [p.id, p.titleEn]));
   }
-  return managers.map(m => {
+  return managers.map(omitManagerSecrets).map(m => {
     const mAssignments = allAssignments.filter(a => a.managerId === m.id);
     return {
       ...m,
@@ -1965,7 +1980,7 @@ export async function getPropertyManagersForProperties(propertyIds: number[]) {
   const result = new Map<number, any>();
   for (const a of assignments) {
     const mgr = managerMap.get(a.managerId);
-    if (mgr) result.set(a.propertyId, mgr);
+    if (mgr) result.set(a.propertyId, omitManagerSecrets(mgr));
   }
   return result;
 }

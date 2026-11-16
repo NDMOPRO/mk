@@ -32,14 +32,24 @@ import {
 // Domain: cms
 // Extracted from server/routers.ts — DO NOT modify procedure names/shapes
 
+// Settings whose values are credentials. They are returned only to admins;
+// everyone else (the public site) gets them stripped. Publishable keys and
+// public business details (IBAN, CR, VAT number) are intentionally public.
+const SECRET_SETTING_KEY = /(secret|api_?key|password|passwd|token|private_?key|access_?key)/i;
+export const isSecretSettingKey = (key: string) =>
+  SECRET_SETTING_KEY.test(key) && !/publishable/i.test(key);
+
 export const cmsRouterDefs = {
   siteSettings: router({
-    getAll: publicProcedure.query(async () => {
-      return cacheThrough(CACHE_KEYS.settings(), CACHE_TTL.SETTINGS, () => db.getAllSettings());
+    getAll: publicProcedure.query(async ({ ctx }) => {
+      const all = await cacheThrough(CACHE_KEYS.settings(), CACHE_TTL.SETTINGS, () => db.getAllSettings());
+      if (ctx.user?.role === "admin") return all;
+      return Object.fromEntries(Object.entries(all).filter(([k]) => !isSecretSettingKey(k)));
     }),
     get: publicProcedure
       .input(z.object({ key: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        if (isSecretSettingKey(input.key) && ctx.user?.role !== "admin") return { value: null };
         return { value: await cacheThrough(CACHE_KEYS.settingsSingle(input.key), CACHE_TTL.SETTINGS, () => db.getSetting(input.key)) };
       }),
     update: adminWithPermission(PERMISSIONS.MANAGE_CMS)
