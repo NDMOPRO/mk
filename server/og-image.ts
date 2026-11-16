@@ -9,7 +9,7 @@
  * Arabic text is rendered via system Noto Sans Arabic font.
  * Images are cached in-memory with configurable TTL.
  */
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 import path from "path";
 import fs from "fs";
 
@@ -116,7 +116,7 @@ export async function generateHomepageOG(): Promise<Buffer> {
   if (cached) return cached;
 
   // Load logo — try SVG first, then PNG fallback
-  let logoComposite: sharp.OverlayOptions[] = [];
+  let logoComposite: OverlayOptions[] = [];
   const logoSize = 160;
   try {
     const svgPath = getLogoSvgPath();
@@ -340,7 +340,7 @@ export async function generatePropertyOG(prop: PropertyOGData): Promise<Buffer> 
   if (prop.sizeSqm) highlights.push(`${prop.sizeSqm} م²`);
   const highlightText = highlights.join("  ●  ");
 
-  let logoComposite: sharp.OverlayOptions[] = [];
+  let logoComposite: OverlayOptions[] = [];
   try {
     const svgPath = getLogoSvgPath();
     const pngPath = getLogoPngPath();
