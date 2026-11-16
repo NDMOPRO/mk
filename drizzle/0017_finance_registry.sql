@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS `buildings` (
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+--> statement-breakpoint
 
 -- ─── Units ──────────────────────────────────────────────────────────
 -- unitStatus does NOT include OCCUPIED — occupancy is derived from bookings/Beds24
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS `units` (
   INDEX `idx_units_propertyId` (`propertyId`),
   INDEX `idx_units_unitNumber` (`unitNumber`)
 );
+--> statement-breakpoint
 
 -- ─── Beds24 Mapping (critical safety table) ─────────────────────────
 -- UNIQUE constraints prevent double-mapping:
@@ -71,6 +73,7 @@ CREATE TABLE IF NOT EXISTS `beds24_map` (
   INDEX `idx_beds24_propertyId` (`beds24PropertyId`),
   INDEX `idx_beds24_connectionType` (`connectionType`)
 );
+--> statement-breakpoint
 
 -- ─── Payment Ledger (immutable, audit-grade) ────────────────────────
 -- Ledger rows are append-only. PAID amounts MUST NOT be edited.
@@ -113,6 +116,7 @@ CREATE TABLE IF NOT EXISTS `payment_ledger` (
   INDEX `idx_ledger_bookingId` (`bookingId`),
   INDEX `idx_ledger_parentLedgerId` (`parentLedgerId`)
 );
+--> statement-breakpoint
 
 -- ─── Booking Extensions (safe renewal workflow) ─────────────────────
 -- Extensions for Beds24-controlled units require admin approval + beds24ChangeNote.
@@ -138,6 +142,7 @@ CREATE TABLE IF NOT EXISTS `booking_extensions` (
   INDEX `idx_ext_unitId` (`unitId`),
   INDEX `idx_ext_status` (`status`)
 );
+--> statement-breakpoint
 
 -- ─── Unit Daily Status (occupancy snapshots) ────────────────────────
 -- source includes UNKNOWN for Beds24-controlled units without data
@@ -155,6 +160,7 @@ CREATE TABLE IF NOT EXISTS `unit_daily_status` (
   INDEX `idx_daily_unitId` (`unitId`),
   UNIQUE KEY `uq_daily_date_unit` (`date`, `unitId`)
 );
+--> statement-breakpoint
 
 -- ─── Payment Method Settings ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `payment_method_settings` (
@@ -170,6 +176,7 @@ CREATE TABLE IF NOT EXISTS `payment_method_settings` (
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+--> statement-breakpoint
 
 -- ─── Seed default payment methods ───────────────────────────────────
 INSERT IGNORE INTO `payment_method_settings` (`methodKey`, `displayName`, `displayNameAr`, `provider`, `isEnabled`, `sortOrder`) VALUES
@@ -180,12 +187,61 @@ INSERT IGNORE INTO `payment_method_settings` (`methodKey`, `displayName`, `displ
   ('tamara', 'Tamara (BNPL)', 'تمارا (اشتر الآن وادفع لاحقاً)', 'tamara', false, 5),
   ('bank_transfer', 'Bank Transfer', 'تحويل بنكي', 'manual', false, 6),
   ('cash', 'Cash', 'نقداً', 'manual', false, 7);
+--> statement-breakpoint
 
 -- ─── Add columns to existing bookings table (safe, additive) ────────
-ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `beds24BookingId` varchar(100) DEFAULT NULL;
-ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `source` enum('BEDS24','LOCAL') DEFAULT 'LOCAL';
-ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `renewalsUsed` int DEFAULT 0;
-ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `maxRenewals` int DEFAULT 1;
-ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `renewalWindowDays` int DEFAULT 14;
-ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `buildingId` int DEFAULT NULL;
-ALTER TABLE `bookings` ADD COLUMN IF NOT EXISTS `unitId` int DEFAULT NULL;
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'beds24BookingId') = 0, 'ALTER TABLE `bookings` ADD COLUMN `beds24BookingId` varchar(100) DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'source') = 0, 'ALTER TABLE `bookings` ADD COLUMN `source` enum(''BEDS24'',''LOCAL'') DEFAULT ''LOCAL''', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'renewalsUsed') = 0, 'ALTER TABLE `bookings` ADD COLUMN `renewalsUsed` int DEFAULT 0', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'maxRenewals') = 0, 'ALTER TABLE `bookings` ADD COLUMN `maxRenewals` int DEFAULT 1', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'renewalWindowDays') = 0, 'ALTER TABLE `bookings` ADD COLUMN `renewalWindowDays` int DEFAULT 14', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'buildingId') = 0, 'ALTER TABLE `bookings` ADD COLUMN `buildingId` int DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'unitId') = 0, 'ALTER TABLE `bookings` ADD COLUMN `unitId` int DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;

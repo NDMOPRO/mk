@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * fix-columns.mjs — Safely add missing columns to production DB
- * Runs BEFORE drizzle-kit migrate to fix columns that migrations failed to add.
- * Each ALTER TABLE is wrapped in a try/catch so duplicate column errors are ignored.
+ * fix-columns.mjs — data repairs run by start.sh before migrations.
+ * Schema changes (columns, tables, indexes) live in drizzle/ migrations;
+ * this file only repairs data (old Railway domains in stored photo URLs).
  */
 import mysql from 'mysql2/promise';
 
@@ -12,73 +12,11 @@ if (!url) {
   process.exit(0);
 }
 
-const fixes = [
-  { table: 'properties', column: 'googleMapsUrl', definition: 'text DEFAULT NULL' },
-  { table: 'property_submissions', column: 'googleMapsUrl', definition: 'text DEFAULT NULL' },
-  { table: 'properties', column: 'locationSource', definition: "ENUM('MANUAL','GEOCODE','PIN') DEFAULT NULL" },
-  { table: 'properties', column: 'locationVisibility', definition: "ENUM('EXACT','APPROXIMATE','HIDDEN') NOT NULL DEFAULT 'APPROXIMATE'" },
-  { table: 'properties', column: 'placeId', definition: 'varchar(255) DEFAULT NULL' },
-  { table: 'properties', column: 'geocodeProvider', definition: 'varchar(20) DEFAULT NULL' },
-  { table: 'properties', column: 'geocodeLastCheckedAt', definition: 'timestamp DEFAULT NULL' },
-];
-
 async function main() {
   let conn;
   try {
     conn = await mysql.createConnection(url);
     console.log('[FixColumns] Connected to database');
-
-    for (const fix of fixes) {
-      try {
-        await conn.execute(`ALTER TABLE \`${fix.table}\` ADD COLUMN \`${fix.column}\` ${fix.definition}`);
-        console.log(`[FixColumns] ✅ Added ${fix.column} to ${fix.table}`);
-      } catch (err) {
-        if (err.errno === 1060) {
-          // ER_DUP_FIELDNAME — column already exists
-          console.log(`[FixColumns] ⏭ ${fix.column} already exists in ${fix.table}`);
-        } else {
-          console.error(`[FixColumns] ❌ Failed to add ${fix.column} to ${fix.table}:`, err.message);
-        }
-      }
-    }
-
-    // Create geocode_cache table if it doesn't exist
-    try {
-      await conn.execute(`
-        CREATE TABLE IF NOT EXISTS \`geocode_cache\` (
-          \`id\` int AUTO_INCREMENT NOT NULL,
-          \`addressHash\` varchar(64) NOT NULL,
-          \`provider\` varchar(20) NOT NULL DEFAULT 'google',
-          \`lat\` decimal(10,7) NOT NULL,
-          \`lng\` decimal(10,7) NOT NULL,
-          \`placeId\` varchar(255) DEFAULT NULL,
-          \`formattedAddress\` text DEFAULT NULL,
-          \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          \`expiresAt\` timestamp NOT NULL,
-          \`hitCount\` int NOT NULL DEFAULT 0,
-          CONSTRAINT \`geocode_cache_id\` PRIMARY KEY(\`id\`),
-          CONSTRAINT \`geocode_cache_hash_provider\` UNIQUE(\`addressHash\`, \`provider\`)
-        )
-      `);
-      console.log('[FixColumns] \u2705 geocode_cache table ensured');
-    } catch (err) {
-      if (err.errno === 1050) {
-        console.log('[FixColumns] \u23ed geocode_cache table already exists');
-      } else {
-        console.error('[FixColumns] \u274c Failed to create geocode_cache:', err.message);
-      }
-    }
-
-    // Add index on geocode_cache
-    try {
-      await conn.execute('CREATE INDEX `idx_geocode_cache_hash` ON `geocode_cache` (`addressHash`)');
-      console.log('[FixColumns] \u2705 geocode_cache index created');
-    } catch (err) {
-      // Index may already exist
-      console.log('[FixColumns] \u23ed geocode_cache index already exists or error:', err.message);
-    }
-
-    // audit_log action/entityType are VARCHAR since migration 0026 (no ENUM rewrites).
 
     // ─── Repair broken image URLs ─────────────────────────────────────────
     // Strip old Railway domain prefixes from photo URLs, leaving only /uploads/...

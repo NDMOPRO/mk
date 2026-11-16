@@ -1,7 +1,10 @@
 -- Add phone/email verification columns to users
 ALTER TABLE `users` ADD COLUMN `phoneVerified` boolean DEFAULT false;
+--> statement-breakpoint
 ALTER TABLE `users` ADD COLUMN `emailVerified` boolean DEFAULT false;
+--> statement-breakpoint
 ALTER TABLE `users` ADD COLUMN `verificationStatus` enum('pending','phone_verified','email_verified','fully_verified') DEFAULT 'pending';
+--> statement-breakpoint
 
 -- OTP codes table
 CREATE TABLE `otp_codes` (
@@ -18,7 +21,9 @@ CREATE TABLE `otp_codes` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `otp_codes_id` PRIMARY KEY(`id`)
 );
+--> statement-breakpoint
 
 -- Index for fast lookups
 CREATE INDEX `idx_otp_destination_purpose` ON `otp_codes` (`destination`, `purpose`);
+--> statement-breakpoint
 CREATE INDEX `idx_otp_expires` ON `otp_codes` (`expiresAt`);

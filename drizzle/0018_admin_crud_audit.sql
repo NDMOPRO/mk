@@ -3,14 +3,35 @@
 -- ADDITIVE ONLY — no destructive changes.
 
 -- ─── Add isArchived to buildings ────────────────────────────────────
-ALTER TABLE `buildings` ADD COLUMN IF NOT EXISTS `isArchived` boolean NOT NULL DEFAULT false;
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'buildings' AND column_name = 'isArchived') = 0, 'ALTER TABLE `buildings` ADD COLUMN `isArchived` boolean NOT NULL DEFAULT false', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
 
 -- ─── Add isArchived to units ────────────────────────────────────────
-ALTER TABLE `units` ADD COLUMN IF NOT EXISTS `isArchived` boolean NOT NULL DEFAULT false;
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'units' AND column_name = 'isArchived') = 0, 'ALTER TABLE `units` ADD COLUMN `isArchived` boolean NOT NULL DEFAULT false', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
 
 -- ─── Unique constraint: one unit_number per building ────────────────
 -- Prevents duplicate apartment numbers within the same building
-CREATE UNIQUE INDEX IF NOT EXISTS `uq_building_unitNumber` ON `units` (`buildingId`, `unitNumber`);
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'units' AND index_name = 'uq_building_unitNumber') = 0, 'CREATE UNIQUE INDEX `uq_building_unitNumber` ON `units` (`buildingId`, `unitNumber`)', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
 
 -- ─── Audit Log ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `audit_log` (
