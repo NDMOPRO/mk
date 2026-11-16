@@ -5,6 +5,7 @@ import {
   db, cache, cacheThrough, CACHE_TTL, CACHE_KEYS,
   generateLeaseContractHTML,
   calculateBookingTotal, parseCalcSettings,
+  isBookingParticipant,
 } from "./_shared";
 
 // Domain: lease
@@ -14,7 +15,11 @@ export const leaseRouterDefs = {
   lease: router({
     generate: protectedProcedure
       .input(z.object({ bookingId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        // The contract contains both parties' names, phones and emails.
+        const booking = await db.getBookingById(input.bookingId);
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        if (!isBookingParticipant(ctx.user, booking)) throw new TRPCError({ code: 'FORBIDDEN', message: 'Access denied' });
         const { html, data } = await generateLeaseContractHTML(input.bookingId);
         return { html, contractNumber: data.contractNumber };
       }),
