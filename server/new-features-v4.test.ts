@@ -228,7 +228,7 @@ describe("Featured Cities", () => {
 
   it("should have getFeaturedCities helper in db.ts", async () => {
     const fs = await import("fs");
-    const db = fs.readFileSync("server/db.ts", "utf-8");
+    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
     expect(db).toContain("getFeaturedCities");
   });
 });
