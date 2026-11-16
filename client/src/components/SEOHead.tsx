@@ -54,7 +54,11 @@ export default function SEOHead({
         ? "المفتاح الشهري - المنصة الرائدة للتأجير الشهري في المملكة العربية السعودية"
         : "Monthly Key - The leading monthly rental platform in Saudi Arabia");
 
-    const url = `${BASE_URL}${path}`;
+    // Arabic is the default language at the plain URL; English is served
+    // at the same path with ?lang=en (read by I18nProvider).
+    const urlAr = `${BASE_URL}${path}`;
+    const urlEn = `${urlAr}${urlAr.includes("?") ? "&" : "?"}lang=en`;
+    const url = lang === "en" ? urlEn : urlAr;
     const ogImage = image || `${BASE_URL}/api/og/homepage.png`;
     const ogImageAlt = imageAlt || (lang === "ar" ? "المفتاح الشهري" : "Monthly Key");
 
@@ -125,9 +129,9 @@ export default function SEOHead({
     setLink("canonical")(url);
 
     // Hreflang
-    setLink("alternate", "hreflang", "ar")(url);
-    setLink("alternate", "hreflang", "en")(url);
-    setLink("alternate", "hreflang", "x-default")(url);
+    setLink("alternate", "hreflang", "ar")(urlAr);
+    setLink("alternate", "hreflang", "en")(urlEn);
+    setLink("alternate", "hreflang", "x-default")(urlAr);
 
     // JSON-LD structured data
     const existingJsonLd = document.querySelectorAll('script[data-seo-head="true"]');
