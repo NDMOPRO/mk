@@ -29,6 +29,14 @@ import {
   parseCookieHeader,
 } from "./_shared";
 
+/** Amount the tenant owes for a booking: frozen grand total, else totalAmount. */
+function bookingAmountDue(booking: { priceBreakdown?: unknown; totalAmount?: string | null }): number {
+  const pb = booking.priceBreakdown as { grandTotal?: number } | null | undefined;
+  if (pb && typeof pb.grandTotal === "number") return pb.grandTotal;
+  return Number(booking.totalAmount ?? 0);
+}
+
+
 // Domain: payment
 // Extracted from server/routers.ts — DO NOT modify procedure names/shapes
 
@@ -69,7 +77,10 @@ export const paymentRouterDefs = {
 
     byBooking: protectedProcedure
       .input(z.object({ bookingId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        const booking = await db.getBookingById(input.bookingId);
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        if (!isBookingParticipant(ctx.user, booking)) throw new TRPCError({ code: 'FORBIDDEN', message: 'Access denied' });
         return db.getPaymentsByBooking(input.bookingId);
       }),
     // PayPal integration
@@ -90,13 +101,22 @@ export const paymentRouterDefs = {
         description: z.string(),
         origin: z.string(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        // Only the tenant pays, and the amount comes from the booking,
+        // never from the client (input.amount is kept for API compatibility).
+        const booking = await db.getBookingById(input.bookingId);
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        if (booking.tenantId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the tenant can pay for this booking' });
+        const amount = bookingAmountDue(booking);
+        if (!(amount > 0)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Booking has no amount due' });
+        // Return URLs use the configured site URL, not a client-supplied origin.
+        const origin = (ENV.publicUrl || input.origin).replace(/\/+$/, "");
         const result = await createPayPalOrder({
           bookingId: input.bookingId,
-          amount: input.amount,
+          amount,
           description: input.description,
-          returnUrl: `${input.origin}/payment/success?bookingId=${input.bookingId}`,
-          cancelUrl: `${input.origin}/payment/cancel?bookingId=${input.bookingId}`,
+          returnUrl: `${origin}/payment/success?bookingId=${input.bookingId}`,
+          cancelUrl: `${origin}/payment/cancel?bookingId=${input.bookingId}`,
         });
         await db.updateBookingPayment(input.bookingId, {
           paypalOrderId: result.orderId,
@@ -109,8 +129,22 @@ export const paymentRouterDefs = {
         orderId: z.string(),
         bookingId: z.number(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const booking = await db.getBookingById(input.bookingId);
+        if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
+        if (!isBookingParticipant(ctx.user, booking)) throw new TRPCError({ code: 'FORBIDDEN', message: 'Access denied' });
+        // The order must be the one created for this booking.
+        const existing = await db.getPaymentsByBooking(input.bookingId);
+        if (!existing.some(p => p.paypalOrderId === input.orderId)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Order does not belong to this booking' });
+        }
         const result = await capturePayPalOrder(input.orderId);
+        // Never mark a booking paid for less than it owes (amounts are
+        // comparable only when PayPal is configured in SAR).
+        const { currency } = await getPayPalSettings();
+        if (result.status === "COMPLETED" && currency === "SAR" && Number(result.amount) + 0.01 < bookingAmountDue(booking)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Captured amount is less than the amount due' });
+        }
         if (result.status === "COMPLETED") {
           await db.updateBookingPayment(input.bookingId, {
             paypalOrderId: input.orderId,
