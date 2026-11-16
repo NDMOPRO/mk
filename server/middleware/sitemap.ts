@@ -8,7 +8,7 @@
  */
 import type { Request, Response } from "express";
 import { getDb } from "../db";
-import { properties, cities } from "../../drizzle/schema";
+import { properties } from "../../drizzle/schema";
 import { eq, desc, or } from "drizzle-orm";
 
 const BASE_URL = "https://monthlykey.com";
@@ -18,7 +18,7 @@ export async function sitemapHandler(req: Request, res: Response): Promise<void>
     const db = await getDb();
 
     // Static pages — only public, indexable routes
-    const staticPages = [
+    const staticPages: Array<{ loc: string; changefreq: string; priority: string; lastmod?: string }> = [
       { loc: "/", changefreq: "daily", priority: "1.0" },
       { loc: "/search", changefreq: "daily", priority: "0.9" },
       { loc: "/map", changefreq: "weekly", priority: "0.7" },
@@ -31,7 +31,7 @@ export async function sitemapHandler(req: Request, res: Response): Promise<void>
 
     // Dynamic pages: published + active properties
     let propertyPages: Array<{ loc: string; changefreq: string; priority: string; lastmod?: string }> = [];
-    let cityPages: Array<{ loc: string; changefreq: string; priority: string }> = [];
+    let cityPages: Array<{ loc: string; changefreq: string; priority: string; lastmod?: string }> = [];
 
     if (db) {
       try {
@@ -39,6 +39,7 @@ export async function sitemapHandler(req: Request, res: Response): Promise<void>
           .select({ 
             id: properties.id, 
             updatedAt: properties.updatedAt,
+            city: properties.city,
           })
           .from(properties)
           .where(
@@ -57,13 +58,15 @@ export async function sitemapHandler(req: Request, res: Response): Promise<void>
           lastmod: p.updatedAt ? new Date(p.updatedAt).toISOString().split("T")[0] : undefined,
         }));
 
-        const allCities = await db
-          .select({ id: cities.id, slug: cities.nameEn })
-          .from(cities)
-          .limit(100);
-
-        cityPages = allCities.map((c) => ({
-          loc: `/search?city=${c.id}`,
+        // The search page filters by the lowercase English city name
+        // (/search?city=riyadh), not the numeric id. List only cities that
+        // actually have published properties, so "coming soon" cities and
+        // empty result pages are not submitted to search engines.
+        const citiesWithListings = new Set(
+          allProperties.map((p) => (p.city || "").trim().toLowerCase()).filter(Boolean)
+        );
+        cityPages = Array.from(citiesWithListings).map((slug) => ({
+          loc: `/search?city=${encodeURIComponent(slug)}`,
           changefreq: "weekly",
           priority: "0.7",
         }));
