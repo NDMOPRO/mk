@@ -26,10 +26,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 # ── Configuration ────────────────────────────────────────────────────────────
-BOT_TOKEN = os.environ.get(
-    "BOT_TOKEN",
-    "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
-)
+BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID   = int(os.environ.get("CHAT_ID", "-1003967447285"))
 API_BASE  = f"https://api.telegram.org/bot{BOT_TOKEN}"
 

@@ -9,9 +9,10 @@ For every message sent by the bot:
   - Everything else from the bot: DELETE it
 NEVER delete messages from real users.
 """
+import os
 import urllib.request, json, time, re, sys
 
-TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 BOT_ID = 8729034252
 

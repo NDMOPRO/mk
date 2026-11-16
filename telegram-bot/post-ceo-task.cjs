@@ -1,6 +1,6 @@
 const https = require('https');
 
-const TOKEN = '8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84';
+const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -1003967447285;
 const THREAD_MARKETING = 11;
 

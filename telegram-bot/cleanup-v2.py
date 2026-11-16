@@ -3,9 +3,10 @@ TOTAL CLEANUP v2 — Simpler, more reliable
 Scans IDs 1-1000, deletes all bot messages except pinned ones.
 Writes results directly to file.
 """
+import os
 import urllib.request, json, time, re, sys
 
-TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 BOT_ID = 8729034252
 

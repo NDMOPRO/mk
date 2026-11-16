@@ -1,6 +1,7 @@
 const https = require('https');
 
-const RAILWAY_TOKEN = 'b8fe8375-77b5-4975-b361-b639bf82b4b2';
+const RAILWAY_TOKEN = process.env.RAILWAY_TOKEN;
+if (!RAILWAY_TOKEN) { console.error('Set RAILWAY_TOKEN in the environment'); process.exit(1); }
 const SERVICE_ID = '65ced2fe-8683-47a9-84ff-aa2285961b78';
 const ENV_ID = '562cd5f6-f4c5-442e-8ba9-7293c5f1d2a4';
 

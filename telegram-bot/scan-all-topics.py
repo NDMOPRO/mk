@@ -8,12 +8,13 @@ The bot's own user ID can be used as destination for copyMessage.
 We'll scan IDs 1-500 across the group.
 """
 
+import os
 import urllib.request
 import json
 import time
 import sys
 
-TOKEN = "8729034252:AAFzfZIDrquCNjoI1lrZKVCh6x9iH9hZL84"
+TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = -1003967447285
 
 # Known topic thread IDs
