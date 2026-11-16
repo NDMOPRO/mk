@@ -1,37 +1,102 @@
--- Migration 0025: Verification granular fields, KYC readiness, integration credentials
--- All changes are ADDITIVE: new columns have defaults, new tables use CREATE IF NOT EXISTS.
--- Existing data is NOT modified except the backfill of emailVerified/phoneVerified for
--- users who already have isVerified=true.
--- Root admin records are explicitly protected: no ALTER on role, isVerified, or permissions.
-
--- ─── 1. Granular verification columns on users ─────────────────────
-ALTER TABLE `users` ADD COLUMN `emailVerified` boolean DEFAULT false;
-ALTER TABLE `users` ADD COLUMN `phoneVerified` boolean DEFAULT false;
-ALTER TABLE `users` ADD COLUMN `emailVerifiedAt` timestamp NULL DEFAULT NULL;
-ALTER TABLE `users` ADD COLUMN `phoneVerifiedAt` timestamp NULL DEFAULT NULL;
-
--- ─── 2. KYC columns on users ───────────────────────────────────────
-ALTER TABLE `users` ADD COLUMN `kycStatus` ENUM('none','pending','submitted','verified','rejected','expired') DEFAULT 'none';
-ALTER TABLE `users` ADD COLUMN `kycVerifiedAt` timestamp NULL DEFAULT NULL;
-ALTER TABLE `users` ADD COLUMN `kycLevel` varchar(20) DEFAULT NULL;
-ALTER TABLE `users` ADD COLUMN `kycProvider` varchar(50) DEFAULT NULL;
-ALTER TABLE `users` ADD COLUMN `kycProviderRef` varchar(255) DEFAULT NULL;
-ALTER TABLE `users` ADD COLUMN `kycRejectionReason` varchar(100) DEFAULT NULL;
-
--- ─── 3. Break-glass admin flag (cached from env for frontend) ──────
-ALTER TABLE `users` ADD COLUMN `isBreakglassAdmin` boolean DEFAULT false;
-
--- ─── 4. Backfill: existing verified users get both channels marked ──
--- This is a pragmatic decision: users who were isVerified=true under the old
--- single-flag system are treated as having verified both channels.
+-- Migration 0025: verification fields, KYC tables, integration credentials.
+-- audit_log enum changes moved to 0026 (audit_log columns become VARCHAR).
+-- Idempotent: every ALTER is guarded by an information_schema check, so this
+-- file is a no-op where the object already exists (production, where these
+-- were added at runtime) and creates it where it does not (new databases).
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'emailVerified') = 0, 'ALTER TABLE `users` ADD COLUMN `emailVerified` boolean DEFAULT false', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'phoneVerified') = 0, 'ALTER TABLE `users` ADD COLUMN `phoneVerified` boolean DEFAULT false', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'emailVerifiedAt') = 0, 'ALTER TABLE `users` ADD COLUMN `emailVerifiedAt` timestamp NULL DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'phoneVerifiedAt') = 0, 'ALTER TABLE `users` ADD COLUMN `phoneVerifiedAt` timestamp NULL DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'kycStatus') = 0, 'ALTER TABLE `users` ADD COLUMN `kycStatus` ENUM(''none'',''pending'',''submitted'',''verified'',''rejected'',''expired'') DEFAULT ''none''', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'kycVerifiedAt') = 0, 'ALTER TABLE `users` ADD COLUMN `kycVerifiedAt` timestamp NULL DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'kycLevel') = 0, 'ALTER TABLE `users` ADD COLUMN `kycLevel` varchar(20) DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'kycProvider') = 0, 'ALTER TABLE `users` ADD COLUMN `kycProvider` varchar(50) DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'kycProviderRef') = 0, 'ALTER TABLE `users` ADD COLUMN `kycProviderRef` varchar(255) DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'kycRejectionReason') = 0, 'ALTER TABLE `users` ADD COLUMN `kycRejectionReason` varchar(100) DEFAULT NULL', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
+SET @mk_sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'isBreakglassAdmin') = 0, 'ALTER TABLE `users` ADD COLUMN `isBreakglassAdmin` boolean DEFAULT false', 'DO 0');
+--> statement-breakpoint
+PREPARE mk_stmt FROM @mk_sql;
+--> statement-breakpoint
+EXECUTE mk_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE mk_stmt;
+--> statement-breakpoint
 UPDATE `users`
-SET `emailVerified` = true,
-    `phoneVerified` = true,
-    `emailVerifiedAt` = `updatedAt`,
-    `phoneVerifiedAt` = `updatedAt`
-WHERE `isVerified` = true;
-
--- ─── 5. KYC Requests table ─────────────────────────────────────────
+SET `emailVerified` = true, `phoneVerified` = true,
+    `emailVerifiedAt` = `updatedAt`, `phoneVerifiedAt` = `updatedAt`
+WHERE `isVerified` = true AND `emailVerified` = false
+  AND `emailVerifiedAt` IS NULL AND `phoneVerifiedAt` IS NULL;
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `kyc_requests` (
   `id` int AUTO_INCREMENT PRIMARY KEY,
   `userId` int NOT NULL,
@@ -52,8 +117,7 @@ CREATE TABLE IF NOT EXISTS `kyc_requests` (
   INDEX `idx_kyc_userId` (`userId`),
   INDEX `idx_kyc_status` (`status`)
 );
-
--- ─── 6. KYC Documents table ────────────────────────────────────────
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `kyc_documents` (
   `id` int AUTO_INCREMENT PRIMARY KEY,
   `kycRequestId` int NOT NULL,
@@ -70,8 +134,7 @@ CREATE TABLE IF NOT EXISTS `kyc_documents` (
   INDEX `idx_kycdoc_requestId` (`kycRequestId`),
   INDEX `idx_kycdoc_userId` (`userId`)
 );
-
--- ─── 7. Integration Credentials table (encrypted secrets) ──────────
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `integration_credentials` (
   `id` int AUTO_INCREMENT PRIMARY KEY,
   `integrationKey` varchar(50) NOT NULL UNIQUE,
@@ -85,8 +148,3 @@ CREATE TABLE IF NOT EXISTS `integration_credentials` (
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
-
--- ─── 8. Extend audit_log enums ─────────────────────────────────────
--- MySQL requires redefining the full ENUM to add values.
-ALTER TABLE `audit_log` MODIFY COLUMN `action` ENUM('CREATE','UPDATE','ARCHIVE','RESTORE','DELETE','LINK_BEDS24','UNLINK_BEDS24','PUBLISH','UNPUBLISH','CONVERT','TEST','ENABLE','DISABLE','SEND','APPROVE','REJECT','REVIEW') NOT NULL;
-ALTER TABLE `audit_log` MODIFY COLUMN `entityType` ENUM('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','WHATSAPP_MESSAGE','WHATSAPP_TEMPLATE','KYC_REQUEST','INTEGRATION_CREDENTIAL','FEATURE_FLAG','USER_VERIFICATION') NOT NULL;

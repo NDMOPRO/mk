@@ -854,8 +854,8 @@ export const auditLog = mysqlTable("audit_log", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId"),
   userName: varchar("userName", { length: 255 }),
-  action: mysqlEnum("action", ["CREATE", "UPDATE", "ARCHIVE", "RESTORE", "DELETE", "LINK_BEDS24", "UNLINK_BEDS24", "PUBLISH", "UNPUBLISH", "CONVERT", "TEST", "ENABLE", "DISABLE", "SEND", "APPROVE", "REJECT", "REVIEW"]).notNull(),
-  entityType: mysqlEnum("entityType", ["BUILDING", "UNIT", "BEDS24_MAP", "LEDGER", "EXTENSION", "PAYMENT_METHOD", "PROPERTY", "SUBMISSION", "INTEGRATION", "WHATSAPP_MESSAGE", "WHATSAPP_TEMPLATE", "KYC_REQUEST", "INTEGRATION_CREDENTIAL", "FEATURE_FLAG", "USER_VERIFICATION"]).notNull(),
+  action: varchar("action", { length: 50 }).notNull(), // values: AuditAction in server/audit-log.ts
+  entityType: varchar("entityType", { length: 50 }).notNull(), // values: AuditEntityType in server/audit-log.ts
   entityId: int("entityId").notNull(),
   entityLabel: varchar("entityLabel", { length: 255 }),
   changes: json("changes").$type<Record<string, { old: unknown; new: unknown }>>(),

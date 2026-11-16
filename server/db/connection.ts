@@ -187,8 +187,8 @@ export async function getDb() {
           id int AUTO_INCREMENT PRIMARY KEY,
           userId int,
           userName varchar(255),
-          action enum('CREATE','UPDATE','ARCHIVE','RESTORE','DELETE','LINK_BEDS24','UNLINK_BEDS24','PUBLISH','UNPUBLISH','CONVERT','TEST','ENABLE','DISABLE','SEND') NOT NULL,
-          entityType enum('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','WHATSAPP_MESSAGE','WHATSAPP_TEMPLATE') NOT NULL,
+          action varchar(50) NOT NULL,
+          entityType varchar(50) NOT NULL,
           entityId int NOT NULL,
           entityLabel varchar(255),
           changes json,
@@ -379,21 +379,8 @@ export async function getDb() {
       for (const mig of beds24BookingMigrations) {
         try { await _pool.execute(mig); } catch (e: any) { /* column already exists */ }
       }
-      // Auto-migrate: extend audit_log ENUMs for WhatsApp
-      const auditMigrations = [
-        `ALTER TABLE audit_log MODIFY COLUMN action ENUM('CREATE','UPDATE','ARCHIVE','RESTORE','DELETE','LINK_BEDS24','UNLINK_BEDS24','PUBLISH','UNPUBLISH','CONVERT','TEST','ENABLE','DISABLE','SEND') NOT NULL`,
-        `ALTER TABLE audit_log MODIFY COLUMN entityType ENUM('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','WHATSAPP_MESSAGE','WHATSAPP_TEMPLATE') NOT NULL`,
-      ];
-      for (const migSql of auditMigrations) {
-        try {
-          await _pool.execute(migSql);
-        } catch (e: any) {
-          // Ignore if already has the values
-          if (!e?.message?.includes('Duplicate')) {
-            console.warn("[Database] audit_log migration note:", e?.message?.substring(0, 100));
-          }
-        }
-      }
+      // audit_log.action / entityType are VARCHAR since migration 0026:
+      // no ENUM rewrites at startup (they conflicted and dropped audit rows).
        // Auto-migrate: ensure cms_content_versions table exists
       try {
         await _pool.execute(`CREATE TABLE IF NOT EXISTS cms_content_versions (
@@ -572,13 +559,6 @@ export async function getDb() {
       } catch (e: any) {
         if (e?.code === 'ER_DUP_FIELDNAME' || e?.errno === 1060) { /* already exists */ }
         else console.warn("[Database] editTokenExpiresAt migration note:", e?.message?.substring(0, 120));
-      }
-      // Auto-migrate: extend audit_log enums (migration 0025)
-      try {
-        await _pool.execute(`ALTER TABLE audit_log MODIFY COLUMN action ENUM('CREATE','UPDATE','ARCHIVE','RESTORE','DELETE','LINK_BEDS24','UNLINK_BEDS24','PUBLISH','UNPUBLISH','CONVERT','TEST','ENABLE','DISABLE','SEND','APPROVE','REJECT','REVIEW') NOT NULL`);
-        await _pool.execute(`ALTER TABLE audit_log MODIFY COLUMN entityType ENUM('BUILDING','UNIT','BEDS24_MAP','LEDGER','EXTENSION','PAYMENT_METHOD','PROPERTY','SUBMISSION','INTEGRATION','WHATSAPP_MESSAGE','WHATSAPP_TEMPLATE','KYC_REQUEST','INTEGRATION_CREDENTIAL','FEATURE_FLAG','USER_VERIFICATION','USER') NOT NULL`);
-      } catch (e: any) {
-        console.warn("[Database] audit_log enum extension note:", e?.message?.substring(0, 120));
       }
       // Auto-migrate: ensure platformSettings table exists (for feature flags)
       try {
