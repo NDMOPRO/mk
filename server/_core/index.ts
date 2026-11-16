@@ -247,9 +247,13 @@ async function startServer() {
   });
 
   // ─── Image Loading Test Page ──────────────────────────────────────
+  // Debug page: lists property photo URLs (including unpublished properties)
+  // and writes titles into HTML unescaped, so it must not be public.
   app.get("/api/test-images", async (_req, res) => {
+    if (process.env.NODE_ENV === "production") return res.status(404).end();
     const { getPool } = await import("../db");
     const pool = getPool();
+    if (!pool) return res.status(503).send("Database not available");
     const [rows] = await pool.execute("SELECT id, titleEn, photos FROM properties WHERE photos IS NOT NULL LIMIT 3");
     const props = (rows as any[]).map(r => ({
       id: r.id,

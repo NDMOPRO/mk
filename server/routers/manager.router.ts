@@ -282,7 +282,7 @@ export const managerRouterDefs = {
         const pool = (await import('../db')).getPool();
         if (!pool) return { items: [], total: 0 };
         const conditions: string[] = [];
-        const params: unknown[] = [];
+        const params: (string | number)[] = [];
         if (input.entityType) { conditions.push('entityType = ?'); params.push(input.entityType); }
         if (input.action) { conditions.push('action = ?'); params.push(input.action); }
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

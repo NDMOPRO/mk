@@ -1,4 +1,5 @@
 import SEOHead from "@/components/SEOHead";
+import type { Property } from "@shared/types";
 import { useState, useRef, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
@@ -251,7 +252,7 @@ function PropertyWizard({ open, onClose, editId, onSuccess }: {
 
   const [form, setForm] = useState({
     titleEn: "", titleAr: "", descriptionEn: "", descriptionAr: "",
-    propertyType: "apartment" as const,
+    propertyType: "apartment" as Property["propertyType"],
     city: "", cityAr: "", district: "", districtAr: "",
     address: "", addressAr: "",
     latitude: "", longitude: "", googleMapsUrl: "",
@@ -513,7 +514,7 @@ function PropertyWizard({ open, onClose, editId, onSuccess }: {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium">{isAr ? "نوع العقار" : "Property Type"}</Label>
-                  <Select value={form.propertyType} onValueChange={v => setForm(p => ({ ...p, propertyType: v as any }))}>
+                  <Select value={form.propertyType} onValueChange={v => setForm(p => ({ ...p, propertyType: v as Property["propertyType"] }))}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {Object.entries(propertyTypeLabels).map(([k, v]) => (

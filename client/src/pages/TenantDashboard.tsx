@@ -392,7 +392,7 @@ export default function TenantDashboard() {
               <div className="space-y-3">
                 {payments.data.map((p) => (
                   <Card key={p.id} className={`${ /* UI Fix [5] — Visually dim cancelled/refunded payments */
-                    p.status === 'cancelled' || p.status === 'refunded' ? 'opacity-60 border-red-900/40 bg-red-950/10' : ''}`}>
+                    p.status === 'failed' || p.status === 'refunded' ? 'opacity-60 border-red-900/40 bg-red-950/10' : ''}`}>
                     <CardContent className="p-4 flex items-center justify-between payment-row">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap badge-row">
@@ -404,7 +404,7 @@ export default function TenantDashboard() {
                         </div>
                       </div>
                       <div className={`font-bold shrink-0 ms-4 ${ /* UI Fix [2] — Strikethrough for cancelled/refunded */
-                        p.status === 'cancelled' || p.status === 'refunded' ? 'text-zinc-500 line-through text-sm' : 'text-primary'}`}><span className="currency-amount">{Number(p.amount).toLocaleString()}</span> {t("payment.sar")}</div>
+                        p.status === 'failed' || p.status === 'refunded' ? 'text-zinc-500 line-through text-sm' : 'text-primary'}`}><span className="currency-amount">{Number(p.amount).toLocaleString()}</span> {t("payment.sar")}</div>
                     </CardContent>
                   </Card>
                 ))}

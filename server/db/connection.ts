@@ -1,6 +1,6 @@
 // Database access: connection, startup schema changes, transactions.
 import { eq, and, desc, asc, like, gte, lte, inArray, sql, or } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import {
   InsertUser, users,
@@ -32,7 +32,9 @@ import {
 } from "../../drizzle/schema";
 import { ENV } from '../_core/env';
 
-let _db: ReturnType<typeof drizzle> | null = null;
+// `ReturnType<typeof drizzle>` resolves to the callback-API overload, which
+// does not match a mysql2/promise pool; MySql2Database is the right type.
+let _db: MySql2Database | null = null;
 
 let _pool: mysql.Pool | null = null;
 export async function getDb() {
@@ -62,7 +64,7 @@ export function getPool() { return _pool; }
  * Usage: await withTransaction(async (tx) => { ... });
  */
 export async function withTransaction<T>(
-  fn: (tx: ReturnType<typeof drizzle>) => Promise<T>
+  fn: (tx: MySql2Database) => Promise<T>
 ): Promise<T> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

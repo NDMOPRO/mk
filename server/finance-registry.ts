@@ -7,6 +7,7 @@
  */
 import { getPool } from "./db";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import type { Unit } from "../drizzle/schema";
 
 // ─── Invoice Number Generator ───────────────────────────────────────
 export function generateInvoiceNumber(type: string): string {
@@ -221,7 +222,7 @@ export async function createLedgerEntry(data: {
   buildingId?: number; unitId?: number; unitNumber?: string; propertyDisplayName?: string;
   type: string; direction?: string; amount: string; currency?: string;
   status?: string; paymentMethod?: string; provider?: string; providerRef?: string;
-  dueAt?: Date; notes?: string; notesAr?: string; createdBy?: number;
+  dueAt?: Date; paidAt?: Date; notes?: string; notesAr?: string; createdBy?: number;
 }): Promise<{ id: number; invoiceNumber: string }> {
   const pool = getPool();
   if (!pool) throw new Error("Database not available");
@@ -229,14 +230,14 @@ export async function createLedgerEntry(data: {
   const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO payment_ledger (invoiceNumber, bookingId, beds24BookingId, customerId, guestName, guestEmail, guestPhone,
      buildingId, unitId, unitNumber, propertyDisplayName, type, direction, amount, currency, status,
-     paymentMethod, provider, providerRef, dueAt, notes, notesAr, createdBy)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     paymentMethod, provider, providerRef, dueAt, paidAt, notes, notesAr, createdBy)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [invoiceNumber, data.bookingId || null, data.beds24BookingId || null,
      data.customerId || null, data.guestName || null, data.guestEmail || null, data.guestPhone || null,
      data.buildingId || null, data.unitId || null, data.unitNumber || null, data.propertyDisplayName || null,
      data.type, data.direction || "IN", data.amount, data.currency || "SAR",
      data.status || "DUE", data.paymentMethod || null, data.provider || null, data.providerRef || null,
-     data.dueAt || null, data.notes || null, data.notesAr || null, data.createdBy || null]
+     data.dueAt || null, data.paidAt || null, data.notes || null, data.notesAr || null, data.createdBy || null]
   );
   return { id: result.insertId, invoiceNumber };
 }
@@ -627,7 +628,15 @@ export async function getUnitFinanceDetails(unitId: number) {
       coverImageUrl = photos[0];
     }
   } catch {}
-  const unit = { ...rawUnit, coverImageUrl, propertyPhotos: undefined };
+  // Row shape: units.* plus the joined building/property columns above.
+  const { propertyPhotos: _photos, ...unitRow } = rawUnit as unknown as Unit & {
+    buildingName: string | null;
+    buildingNameAr: string | null;
+    propertyPhotos: unknown;
+    propertyTitleEn: string | null;
+    propertyTitleAr: string | null;
+  };
+  const unit = { ...unitRow, coverImageUrl };
 
   // Ledger entries for this unit
   const [ledgerRows] = await pool.query<RowDataPacket[]>(
@@ -854,7 +863,8 @@ export async function getAvailableUnitsForLinking(currentPropertyId?: number) {
  * Returns the first matching unit or null.
  */
 export async function getLinkedUnitByPropertyId(propertyId: number) {
-  const pool = await getPool();
+  const pool = getPool();
+  if (!pool) throw new Error("Database not available");
   const [rows] = await pool.query(
     `SELECT * FROM units WHERE propertyId = ? AND isArchived = false LIMIT 1`,
     [propertyId]
@@ -866,7 +876,8 @@ export async function getLinkedUnitByPropertyId(propertyId: number) {
  * Get all payment_ledger entries linked to a specific booking.
  */
 export async function getLedgerByBookingId(bookingId: number) {
-  const pool = await getPool();
+  const pool = getPool();
+  if (!pool) throw new Error("Database not available");
   const [rows] = await pool.query(
     `SELECT id, invoiceNumber, bookingId, unitId, unitNumber, propertyDisplayName,
             type, direction, amount, currency, status, paymentMethod, provider,

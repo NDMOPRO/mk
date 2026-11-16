@@ -95,7 +95,11 @@ function getCacheKey(days: number): string {
 
 // ── GA4 Data API client ──
 async function createGA4Client(serviceAccountJson: string) {
-  // Dynamic import to avoid hard dependency if package not installed
+  // Optional dependency: '@google-analytics/data' is not installed, so this
+  // import fails at runtime and the GA4 report is unavailable until it is
+  // added (pnpm add @google-analytics/data), at which point this directive
+  // must be removed.
+  // @ts-expect-error optional dependency, not installed
   const { BetaAnalyticsDataClient } = await import('@google-analytics/data');
   
   let credentials: any;

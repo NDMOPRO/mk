@@ -362,7 +362,6 @@ export function MapView({
         const map = new google.maps.Map(mapDiv, {
           center: { lat: initialCenter.lat, lng: initialCenter.lng },
           zoom: initialZoom,
-          language: "ar",
           gestureHandling: "greedy",
           mapTypeControl: false,
           streetViewControl: false,

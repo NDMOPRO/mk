@@ -440,7 +440,7 @@ export default function AdminManagers() {
                   <SelectValue placeholder={lang === "ar" ? "اختر عقاراً..." : "Choose a property..."} />
                 </SelectTrigger>
                 <SelectContent>
-                  {(properties.data?.items ?? properties.data ?? []).map((p: any) => (
+                  {(Array.isArray(properties.data) ? properties.data : properties.data?.items ?? []).map((p: any) => (
                     <SelectItem key={p.id} value={String(p.id)}>
                       #{p.id} - {lang === "ar" ? (p.titleAr || p.title) : p.title}
                     </SelectItem>

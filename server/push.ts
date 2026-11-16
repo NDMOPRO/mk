@@ -1,17 +1,13 @@
 import webpush from "web-push";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { pushSubscriptions } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { ENV } from "./_core/env";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+let _db: MySql2Database | null = null;
 function getDb() {
-  if (!_db) {
-    const pool = mysql.createPool(ENV.databaseUrl);
-    _db = drizzle(pool);
-  }
-  return _db;
+  return (_db ??= drizzle(mysql.createPool(ENV.databaseUrl)));
 }
 
 // ─── Push Notification Helper ────────────────────────────────────────
