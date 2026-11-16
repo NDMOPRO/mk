@@ -3,3 +3,5 @@ logs/
 data/bot.db-wal
 data/bot.db-shm
 .env
+
+__pycache__/

@@ -25,7 +25,9 @@ Pushing to `main` deploys both.
 
 ## Not deployed
 
-`apps/`, `services/` and `packages/` are a separate, unfinished platform (pnpm workspace). The deployed app does not import them. `telegram-miniapp/` and `tg-client/` are also not deployed.
+`tg-client/` **is** deployed: the website serves it as the Telegram Mini App on `tg.monthlykey.com`.
+
+An unfinished multi-service platform (`apps/`, `services/`, `packages/`, `telegram-miniapp/`, `docker-compose.yml`), its tests, and one-off Telegram maintenance scripts were removed from `main` because nothing deployed uses them. They are preserved unchanged on the branch **`archive/pre-cleanup-2026-11`**.
 
 ## Commands
 
