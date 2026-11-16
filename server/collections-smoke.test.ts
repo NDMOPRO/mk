@@ -178,18 +178,16 @@ describe("Collections Schema", () => {
     expect(schema).toContain("export type InsertPropertyEnquiry");
   });
 
-  it("should have auto-migration for hidden_properties table", async () => {
+  it("should create the hidden_properties table in a migration", async () => {
     const fs = await import("fs");
-    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
-    expect(db).toContain("hidden_properties");
-    expect(db).toContain("CREATE TABLE IF NOT EXISTS hidden_properties");
+    const sql = fs.readFileSync("drizzle/0027_runtime_schema_to_migrations.sql", "utf-8");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS hidden_properties");
   });
 
-  it("should have auto-migration for property_enquiries table", async () => {
+  it("should create the property_enquiries table in a migration", async () => {
     const fs = await import("fs");
-    const db = fs.readdirSync("server/db").map((f) => fs.readFileSync(`server/db/${f}`, "utf-8")).join("\n");
-    expect(db).toContain("property_enquiries");
-    expect(db).toContain("CREATE TABLE IF NOT EXISTS property_enquiries");
+    const sql = fs.readFileSync("drizzle/0027_runtime_schema_to_migrations.sql", "utf-8");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS property_enquiries");
   });
 });
 

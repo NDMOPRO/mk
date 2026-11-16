@@ -55,8 +55,12 @@ if npx drizzle-kit migrate 2>&1; then
   echo "[Migrate] Migrations completed successfully"
 else
   MIGRATE_EXIT=$?
-  echo "[Migrate] Migration exited with code $MIGRATE_EXIT"
-  echo "[Migrate] This may mean migrations were already applied (safe) or failed (check logs)"
+  # Migrations are the only source of schema changes (the app no longer
+  # alters tables at startup), so a failure must stop this deploy. Railway
+  # keeps the previous deployment serving until this one passes its
+  # healthcheck, so the live site is not affected.
+  echo "[Migrate] FAILED with code $MIGRATE_EXIT; refusing to start on an incomplete schema"
+  exit "$MIGRATE_EXIT"
 fi
 
 echo "[Migrate] Finished at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"

@@ -39,6 +39,10 @@ pnpm build      # production build
 
 Configuration is read from environment variables; see `.env.example`. Never commit tokens or keys.
 
+## Database schema
+
+All schema changes go in a new `drizzle/NNNN_*.sql` migration (registered in `drizzle/meta/_journal.json`). `start.sh` runs them before the app starts, and a failed migration stops the deploy. The app itself never alters tables. Write MySQL syntax (no `ADD COLUMN IF NOT EXISTS`), separate statements with `--> statement-breakpoint`, and make changes safe to re-run (see `0027` for the guarded pattern). `server/migrations-integrity.test.ts` checks these rules.
+
 ## Documentation
 
 - `docs/guides/`: developer, deployment and setup guides

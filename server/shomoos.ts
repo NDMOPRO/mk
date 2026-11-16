@@ -127,38 +127,7 @@ interface ShomoosApiResponse {
 
 // ─── Database Operations ────────────────────────────────────────────
 
-/**
- * Ensure shomoos_submissions table exists (auto-migration).
- */
-export async function ensureShomoosTable(): Promise<void> {
-  const pool = getPool();
-  if (!pool) return;
-
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS shomoos_submissions (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      bookingId INT NULL,
-      tenantId INT NULL,
-      propertyId INT NULL,
-      submissionType ENUM('check_in','check_out','companion','update') NOT NULL DEFAULT 'check_in',
-      status ENUM('pending','submitted','accepted','rejected','failed') NOT NULL DEFAULT 'pending',
-      shomoosRefId VARCHAR(100) NULL,
-      requestPayload JSON NOT NULL,
-      responsePayload JSON NULL,
-      errorMessage TEXT NULL,
-      retryCount INT NOT NULL DEFAULT 0,
-      submittedBy INT NULL COMMENT 'User ID who triggered submission',
-      submittedByName VARCHAR(100) NULL,
-      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_booking (bookingId),
-      INDEX idx_tenant (tenantId),
-      INDEX idx_property (propertyId),
-      INDEX idx_status (status),
-      INDEX idx_type_status (submissionType, status)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-}
+// shomoos_submissions is created by migration 0027 (drizzle/).
 
 /**
  * Log a Shomoos submission to the database.
@@ -805,7 +774,3 @@ export function buildGuestDataFromBooking(params: {
   };
 }
 
-// ─── Auto-migration on import ───────────────────────────────────────
-ensureShomoosTable().catch((err) => {
-  console.warn("[Shomoos] Auto-migration warning:", err.message);
-});
