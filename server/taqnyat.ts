@@ -13,6 +13,7 @@
  * API Docs: https://dev.taqnyat.sa/
  */
 import type { Request, Response } from "express";
+import { timingSafeEqual } from "crypto";
 import { isFlagOn } from "./feature-flags";
 
 // ─── Constants ──────────────────────────────────────────────────────
@@ -517,6 +518,10 @@ export class TaqnyatSmsProvider {
  */
 export async function handleTaqnyatSmsWebhook(req: Request, res: Response) {
   try {
+    if (!taqnyatTokenOk(req)) {
+      console.warn("[Taqnyat SMS Webhook] Missing or wrong token — rejecting");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     const config = await getTaqnyatSmsConfig();
 
     if (!config) {
@@ -570,8 +575,27 @@ export async function handleTaqnyatSmsWebhook(req: Request, res: Response) {
  * Handles incoming WhatsApp messages and status updates from Taqnyat.
  * Payload format depends on webhook mode (chatbot+livechat, livechat only, other).
  */
+/**
+ * Taqnyat webhooks carry no signature. When TAQNYAT_WEBHOOK_TOKEN is set,
+ * the webhook URL configured at Taqnyat must end with ?token=<that value>,
+ * and requests without it are refused (otherwise anyone could post fake
+ * customer messages into the admin inbox).
+ */
+function taqnyatTokenOk(req: Request): boolean {
+  const expected = process.env.TAQNYAT_WEBHOOK_TOKEN;
+  if (!expected) return true;
+  const given = String(req.query.token ?? req.headers["x-webhook-token"] ?? "");
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export async function handleTaqnyatWhatsAppWebhook(req: Request, res: Response) {
   try {
+    if (!taqnyatTokenOk(req)) {
+      console.warn("[Taqnyat WhatsApp Webhook] Missing or wrong token — rejecting");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     const config = await getTaqnyatWhatsAppConfig();
 
     if (!config) {
@@ -641,7 +665,9 @@ export async function handleTaqnyatWhatsAppWebhook(req: Request, res: Response) 
             const { id: conversationId, isNew } = await getOrCreateWaConversation(normalizedPhone, senderName);
 
             // Determine media URL if present
-            const mediaUrl = data.mediaUrl || data.media?.url || data.image?.url || data.document?.url || data.audio?.url || data.video?.url || msg.url || undefined;
+            const rawMediaUrl = data.mediaUrl || data.media?.url || data.image?.url || data.document?.url || data.audio?.url || data.video?.url || msg.url || undefined;
+            // Only plain https links are kept (no javascript:/data: links in the inbox).
+            const mediaUrl = typeof rawMediaUrl === "string" && /^https:\/\//i.test(rawMediaUrl) ? rawMediaUrl : undefined;
 
             // Map Taqnyat message type to our enum
             let mappedType: string = "text";

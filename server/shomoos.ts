@@ -577,7 +577,9 @@ export async function getSubmissions(params?: {
   }
 
   query += " ORDER BY createdAt DESC";
-  query += ` LIMIT ${params?.limit || 50} OFFSET ${params?.offset || 0}`;
+  const limit = Math.min(Math.max(Math.trunc(Number(params?.limit) || 50), 1), 500);
+  const offset = Math.max(Math.trunc(Number(params?.offset) || 0), 0);
+  query += ` LIMIT ${limit} OFFSET ${offset}`;
 
   try {
     const [rows] = await pool.query<any[]>(query, values);

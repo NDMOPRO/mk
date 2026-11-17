@@ -241,8 +241,11 @@ export const aiRouterDefs = {
   knowledge: router({
     list: protectedProcedure
       .input(z.object({ category: z.string().optional() }).optional())
-      .query(async ({ input }) => {
-        return db.getKnowledgeArticles(input?.category);
+      .query(async ({ ctx, input }) => {
+        const articles = await db.getKnowledgeArticles(input?.category);
+        // Admin guides are for staff only.
+        if (ctx.user.role === "admin") return articles;
+        return articles.filter((a: { category?: string | null }) => a.category !== "admin_guide");
       }),
 
     all: adminWithPermission(PERMISSIONS.MANAGE_KNOWLEDGE).query(async () => {

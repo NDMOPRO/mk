@@ -22,8 +22,8 @@ export async function seedAdminUser() {
       // Use ADMIN_INITIAL_PASSWORD env var or generate a random one-time password
       const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || crypto.randomBytes(16).toString('base64url');
       if (!process.env.ADMIN_INITIAL_PASSWORD) {
-        console.log(`[Seed] Generated random admin password (change immediately): ${adminPassword}`);
-        console.log(`[Seed] Set ADMIN_INITIAL_PASSWORD env var to control this.`);
+        // The password is never written to the logs; set it with "Forgot password".
+        console.log(`[Seed] Admin created with a random password. Use "Forgot password" or set ADMIN_INITIAL_PASSWORD.`);
       }
       const salt = await bcrypt.genSalt(12);
       const passwordHash = await bcrypt.hash(adminPassword, salt);
@@ -119,7 +119,8 @@ async function seedAdminTeamMember(data: {
     }
 
     const password = process.env[`${data.userId.toUpperCase()}_INITIAL_PASSWORD`] || crypto.randomBytes(12).toString('base64url');
-    console.log(`[Seed] Generated password for '${data.userId}': ${password}`);
+    // The password is never written to the logs; the user sets one with "Forgot password".
+    console.log(`[Seed] Created '${data.userId}' with a random password (use "Forgot password").`);
 
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);

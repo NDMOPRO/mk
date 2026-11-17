@@ -46,7 +46,8 @@ export const paymentRouterDefs = {
       .input(z.object({
         bookingId: z.number(),
         type: z.enum(["rent", "deposit", "service_fee"]),
-        amount: z.string(),
+        /** Ignored: the amount comes from the booking. Kept for API compatibility. */
+        amount: z.string().optional(),
         description: z.string().max(500).optional(),
         descriptionAr: z.string().max(500).optional(),
       }))
@@ -54,12 +55,19 @@ export const paymentRouterDefs = {
         const booking = await db.getBookingById(input.bookingId);
         if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Booking not found' });
         if (booking.tenantId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the tenant can create payments for this booking' });
+        // The client used to choose the amount, and an admin confirming the
+        // booking then marked that record completed as-is.
+        let amount: number;
+        if (input.type === "rent") amount = bookingAmountDue(booking);
+        else if (input.type === "deposit") amount = Number(booking.securityDeposit ?? 0);
+        else throw new TRPCError({ code: 'BAD_REQUEST', message: 'Service fees are included in the booking total' });
+        if (!(amount > 0)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nothing is due for this booking' });
         const id = await db.createPayment({
           bookingId: input.bookingId,
           tenantId: ctx.user.id,
           landlordId: booking.landlordId,
           type: input.type,
-          amount: input.amount,
+          amount: amount.toFixed(2),
           status: "pending",
           description: input.description,
           descriptionAr: input.descriptionAr,

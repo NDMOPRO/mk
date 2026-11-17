@@ -12,6 +12,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { ENV } from "./_core/env";
+import { TRPCError } from "@trpc/server";
 import {
   S3Client,
   PutObjectCommand,
@@ -241,13 +242,55 @@ function getPublicBaseUrl(): string {
 /**
  * Store a file and return its public URL
  */
+// ─── Upload safety ───────────────────────────────────────────────────
+// Every stored file goes through storagePut, so the checks live here:
+// the type must be on the allow-list, the bytes must match the declared type
+// (a renamed HTML or script file is refused), and the stored file always
+// gets the extension of its real type, never one taken from the client.
+const SAFE_TYPES: Record<string, { ext: string; magic?: (b: Buffer) => boolean }> = {
+  "image/jpeg": { ext: "jpg", magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  "image/jpg": { ext: "jpg", magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  "image/png": { ext: "png", magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  "image/gif": { ext: "gif", magic: (b) => b.subarray(0, 4).toString("latin1") === "GIF8" },
+  "image/x-icon": { ext: "ico", magic: (b) => b.subarray(0, 4).equals(Buffer.from([0x00, 0x00, 0x01, 0x00])) },
+  "image/vnd.microsoft.icon": { ext: "ico", magic: (b) => b.subarray(0, 4).equals(Buffer.from([0x00, 0x00, 0x01, 0x00])) },
+  "image/webp": { ext: "webp", magic: (b) => b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP" },
+  "application/pdf": { ext: "pdf", magic: (b) => b.subarray(0, 5).toString("latin1") === "%PDF-" },
+  "application/msword": { ext: "doc", magic: (b) => b.subarray(0, 4).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0])) },
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { ext: "docx", magic: (b) => b.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])) },
+  "text/plain": { ext: "txt", magic: (b) => !/<\s*(script|html|svg|iframe|body|!doctype)/i.test(b.subarray(0, 4096).toString("utf8")) },
+  "video/mp4": { ext: "mp4", magic: (b) => b.subarray(4, 8).toString("latin1") === "ftyp" },
+  "video/quicktime": { ext: "mov", magic: (b) => b.subarray(4, 8).toString("latin1") === "ftyp" || b.subarray(4, 8).toString("latin1") === "moov" },
+  "video/webm": { ext: "webm", magic: (b) => b.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3])) },
+};
+
+/** A refused upload is the caller's fault: tRPC reports it as 400. */
+export class UnsafeUploadError extends TRPCError {
+  constructor(message: string) {
+    super({ code: "BAD_REQUEST", message });
+    this.name = "UnsafeUploadError";
+  }
+}
+
+/** Returns the safe storage key for this upload, or throws UnsafeUploadError. */
+export function checkUpload(key: string, buffer: Buffer, contentType: string): string {
+  const type = (contentType || "").toLowerCase().split(";")[0].trim();
+  const rule = SAFE_TYPES[type];
+  if (!rule) throw new UnsafeUploadError(`File type not allowed: ${type || "unknown"}`);
+  if (rule.magic && !rule.magic(buffer)) throw new UnsafeUploadError(`File content does not match its type (${type})`);
+  const slash = key.lastIndexOf("/");
+  const dir = key.slice(0, slash + 1);
+  const base = key.slice(slash + 1).replace(/\.[^.]*$/, "") || "file";
+  return `${dir}${base}.${rule.ext}`;
+}
+
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const key = normalizeKey(relKey);
   const buffer = typeof data === "string" ? Buffer.from(data) : Buffer.from(data);
+  const key = checkUpload(normalizeKey(relKey), buffer, contentType);
 
   const s3 = getS3Client();
 

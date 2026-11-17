@@ -6,6 +6,22 @@ import { hasPermission, type PermissionKey } from "../permissions";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  // An unexpected error (database, network, bug) is wrapped by tRPC with its
+  // original message, which can contain SQL or internal details. In
+  // production clients get a generic message; the details stay in the logs.
+  errorFormatter({ shape, error }) {
+    if (
+      process.env.NODE_ENV === "production" &&
+      error.code === "INTERNAL_SERVER_ERROR" &&
+      error.cause !== undefined &&
+      !(error.cause instanceof TRPCError) &&
+      // Refused uploads explain themselves (wrong file type).
+      (error.cause as Error).name !== "UnsafeUploadError"
+    ) {
+      return { ...shape, message: "Internal server error" };
+    }
+    return shape;
+  },
 });
 
 export const router = t.router;

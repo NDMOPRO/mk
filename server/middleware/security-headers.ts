@@ -23,14 +23,19 @@ const ALLOWED_ORIGINS = new Set([
 function isAllowedOrigin(origin: string | undefined): boolean {
   if (!origin) return false;
   if (ALLOWED_ORIGINS.has(origin)) return true;
-  // Allow Railway preview deployments
-  if (origin.endsWith(".up.railway.app")) return true;
+  // Any *.up.railway.app origin used to be allowed with credentials; anyone
+  // can host a site there, so only exact origins are trusted. Extra origins
+  // (e.g. a preview URL) can be listed in CORS_EXTRA_ORIGINS.
+  const extra = (process.env.CORS_EXTRA_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
+  if (extra.includes(origin)) return true;
   // Allow localhost in development
   if (process.env.NODE_ENV !== "production") {
     if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) return true;
   }
   return false;
 }
+
+export { isAllowedOrigin };
 
 export function securityHeaders(req: Request, res: Response, next: NextFunction): void {
   // ─── CORS ─────────────────────────────────────────────────────────

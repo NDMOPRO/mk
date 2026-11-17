@@ -44,6 +44,14 @@ function logAuthEvent(event: string, details: Record<string, unknown>) {
   console.log(`[Auth Event] ${timestamp} | ${event} |`, JSON.stringify(details));
 }
 
+// Passwords that were committed to this repository (and so are public).
+// They are refused at login and as new passwords; affected accounts must
+// use "forgot password" to set a new one.
+const LEAKED_PASSWORDS = new Set(["83686571KoKo$", "15001500"]);
+export function isLeakedPassword(password: string): boolean {
+  return LEAKED_PASSWORDS.has(password);
+}
+
 // ─── Password Validation ──────────────────────────────────────────
 export interface PasswordValidationResult {
   valid: boolean;
@@ -52,6 +60,13 @@ export interface PasswordValidationResult {
 }
 
 export function validatePassword(password: string): PasswordValidationResult {
+  if (isLeakedPassword(password)) {
+    return {
+      valid: false,
+      error: "This password has been exposed publicly. Please choose a different one.",
+      errorAr: "كلمة المرور هذه مكشوفة علنياً. يرجى اختيار كلمة مرور أخرى.",
+    };
+  }
   // SEC-7: Minimum 8 characters (raised from 7)
   if (password.length < 8) {
     return {
@@ -175,6 +190,18 @@ export function registerAuthRoutes(app: Express) {
         res.status(401).json({
           error: "Invalid credentials",
           errorAr: "بيانات الدخول غير صحيحة",
+        });
+        return;
+      }
+
+      // A correct but publicly leaked password is not accepted: the account
+      // owner must reset it through the emailed code.
+      if (isLeakedPassword(password)) {
+        logAuthEvent("LOGIN_BLOCKED_LEAKED_PASSWORD", { userId, userDbId: user.id, ip });
+        res.status(403).json({
+          error: "This password has been exposed publicly and can no longer be used. Use \"Forgot password\" to set a new one.",
+          errorAr: "كلمة المرور هذه أصبحت مكشوفة ولا يمكن استخدامها. استخدم «نسيت كلمة المرور» لتعيين كلمة جديدة.",
+          code: "PASSWORD_RESET_REQUIRED",
         });
         return;
       }
@@ -346,6 +373,11 @@ export function registerAuthRoutes(app: Express) {
   // ─── Change Password ─────────────────────────────────────────────
   app.post("/api/auth/change-password", async (req: Request, res: Response) => {
     const ip = getClientIP(req);
+    const rl = await Promise.resolve(rateLimiter.check(`auth:change-password:${ip}`, RATE_LIMITS.AUTH.maxRequests, RATE_LIMITS.AUTH.windowMs));
+    if (!rl.allowed) {
+      res.status(429).json({ error: "Too many attempts. Please try again later.", errorAr: "محاولات كثيرة. يرجى المحاولة لاحقاً.", retryAfterMs: rl.resetIn });
+      return;
+    }
 
     try {
       const cookies = req.headers.cookie;
@@ -410,6 +442,11 @@ export function registerAuthRoutes(app: Express) {
   // ─── Reset Password (via OTP) ───────────────────────────────────
   app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
     const ip = getClientIP(req);
+    const rl = await Promise.resolve(rateLimiter.check(`auth:reset:${ip}`, RATE_LIMITS.PASSWORD_RESET.maxRequests, RATE_LIMITS.PASSWORD_RESET.windowMs));
+    if (!rl.allowed) {
+      res.status(429).json({ error: "Too many attempts. Please try again later.", errorAr: "محاولات كثيرة. يرجى المحاولة لاحقاً.", retryAfterMs: rl.resetIn });
+      return;
+    }
     try {
       const { email, code, newPassword } = req.body;
 
@@ -787,54 +824,9 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // ─── Seed System Owner ──────────────────────────────────────────
-  app.post("/api/auth/seed-owner", async (req: Request, res: Response) => {
-    const ip = getClientIP(req);
-    try {
-      // Check if an owner already exists
-      const existingOwner = await db.getUserByUserId("Hobart");
-      if (existingOwner && existingOwner.isOwner) {
-        logAuthEvent("SEED_OWNER_SKIPPED", { ip, reason: "owner_already_exists", userId: existingOwner.id });
-        res.json({ success: true, message: "Owner already exists", userId: existingOwner.id });
-        return;
-      }
-
-      // If user exists but isOwner is not set, update it
-      if (existingOwner && !existingOwner.isOwner) {
-        await db.updateUserProfile(existingOwner.id, { isOwner: true, role: "admin" } as any);
-        logAuthEvent("SEED_OWNER_UPGRADED", { ip, userId: existingOwner.id });
-        res.json({ success: true, message: "Existing user upgraded to owner", userId: existingOwner.id });
-        return;
-      }
-
-      // Create new owner user
-      const salt = await bcrypt.genSalt(12);
-      const passwordHash = await bcrypt.hash("83686571KoKo$", salt);
-      const newUserId = await db.createLocalUser({
-        userId: "Hobart",
-        passwordHash,
-        displayName: "Hobart",
-        name: "Hobart",
-        nameAr: "هوبارت",
-        email: "hobarti@protonmail.com",
-        phone: "+966504466528",
-        role: "admin",
-      });
-
-      if (newUserId) {
-        // Set isOwner flag
-        await db.updateUserProfile(newUserId, { isOwner: true } as any);
-        logAuthEvent("SEED_OWNER_CREATED", { ip, userId: newUserId });
-        res.json({ success: true, message: "Owner created", userId: newUserId });
-      } else {
-        res.status(500).json({ success: false, error: "Failed to create owner" });
-      }
-    } catch (error) {
-      console.error("[Auth] Seed owner failed:", error);
-      logAuthEvent("SEED_OWNER_ERROR", { ip, error: String(error) });
-      res.status(500).json({ success: false, error: "Failed to seed owner" });
-    }
-  });
+  // The public /api/auth/seed-owner endpoint was removed: anyone could call
+  // it, and it created or upgraded the owner account with a password written
+  // in this file. The owner is created by seed-admin.ts at startup.
 
   // ─── Protect Owner Middleware (applied to admin user management) ──
   app.use("/api/admin/users/:id", async (req: Request, res: Response, next) => {

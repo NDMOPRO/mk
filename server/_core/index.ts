@@ -13,6 +13,7 @@ import { seedAdminUser } from "../seed-admin";
 import { seedCitiesAndDistricts } from "../seed-cities";
 import { seedDefaultSettings } from "../seed-settings";
 import { securityHeaders } from "../middleware/security-headers";
+import { csrfOriginCheck } from "../middleware/csrf-origin";
 import { compressionMiddleware } from "../middleware/compression";
 import { sanitizeInputMiddleware } from "../middleware/sanitize-input"; // SEC-2
 import { wwwRedirectMiddleware } from "../middleware/www-redirect"; // SEC-8
@@ -128,6 +129,20 @@ async function startServer() {
   // ─── Security Headers (must be first) ──────────────────────────────
   app.use(securityHeaders);
 
+  // CSRF: refuse state-changing /api requests sent by another site's pages.
+  app.use(csrfOriginCheck);
+
+  // Dotfiles, source and backup paths are never served (they used to fall
+  // through to the app's HTML page, which hides nothing but confuses scanners).
+  app.use((req, res, next) => {
+    // (Production only: the dev server serves .ts modules.)
+    if (process.env.NODE_ENV === "production" && /(^|\/)\.(?!well-known)|\.(sql|bak|env|log|ts|map)$/i.test(req.path)) {
+      res.status(404).end();
+      return;
+    }
+    next();
+  });
+
   // ─── Compression (Gzip/Brotli) ──────────────────────────────────
   app.use(compressionMiddleware);
 
@@ -159,6 +174,12 @@ async function startServer() {
     maxAge: "7d",
     etag: true,
     lastModified: true,
+    // Uploaded files are user content: never sniffed, and any HTML or script
+    // that slipped in cannot run on this site's origin.
+    setHeaders: (res) => {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+    },
   }));
   // Fallback: if local file not found and S3 is configured, redirect to R2 public URL
   app.use("/uploads", (req, res, next) => {
@@ -658,6 +679,11 @@ async function startServer() {
       },
     })
   );
+  // Unknown API paths get a JSON 404 instead of the app's HTML page.
+  app.all("/api/*", (_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
